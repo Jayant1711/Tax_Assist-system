@@ -23,10 +23,28 @@ Tax filing in India is complex, with two distinct regimes and numerous sections 
 
 ## 🛠️ Technology Stack
 
-- **Frontend**: Next.js 16 (App Router), TypeScript, Vanilla CSS.
-- **Backend**: FastAPI (Python), Uvicorn.
-- **Design System**: Premium Dark Mode with Glassmorphism and responsive UI.
-- **NLP Engine**: Custom state-machine based NLP for high-reliability financial entity extraction.
+### **Frontend (Core UI)**
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router Architecture)
+- **Language**: [TypeScript](https://www.typescriptlang.org/) for robust type safety
+- **Styling**: [Vanilla CSS](https://developer.mozilla.org/en-US/docs/Web/CSS) (Custom implementation of **Glassmorphism** and **Dark Mode**)
+- **State Management**: React Hooks (`useState`, `useEffect`, `useRef`)
+
+### **Backend (Intelligence Layer)**
+- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (High-performance Python API)
+- **Runtime**: [Python 3.10+](https://www.python.org/)
+- **Data Validation**: [Pydantic](https://docs.pydantic.dev/) for strict schema enforcement
+- **Server**: [Uvicorn](https://www.uvicorn.org/) (ASGI server)
+
+### **AI & Logic Engine**
+- **NLP Strategy**: Custom **Smarter Entity Extraction** using Regex and proximity-based keyword mapping.
+- **Conversation Flow**: Dynamic **State Machine** (Profiling → Income → Expenditure → Recall → Final).
+- **Tax Engine**: Deterministic **Rule-Based Engine** covering Sections 80C, 80D, 80E, 80G, 24(a), 112A, and 111A.
+- **Compliance Guard**: Automated validation against **Indian Income Tax Rules (FY 2024-25)**.
+
+### **Development & Deployment**
+- **Version Control**: [Git](https://git-scm.com/)
+- **Package Managers**: [npm](https://www.npmjs.com/) (Frontend) and [pip](https://pip.pypa.io/) (Backend)
+- **Environment**: [Node.js](https://nodejs.org/)
 
 ## 📁 Project Structure
 
