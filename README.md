@@ -52,6 +52,27 @@ Tax filing in India is complex, with two distinct regimes and numerous sections 
 - **Package Managers**: [npm](https://www.npmjs.com/) (Frontend) and [pip](https://pip.pypa.io/) (Backend)
 - **Environment**: [Node.js](https://nodejs.org/)
 
+## 🧠 AI Architecture & Models
+
+This system employs a **Hybrid AI Strategy** to balance conversational flexibility with the deterministic accuracy required for financial compliance.
+
+### **1. NLP Entity Extraction Model**
+- **Architecture**: Rule-based **Named Entity Recognition (NER)** optimized for financial linguistics.
+- **Capability**: Processes natural language strings (e.g., "earning 18 LPA as a dev") to extract professional profiles and numerical financial values.
+- **Logic**: Implements proximity-based mapping to link extracted values to specific tax categories (Salary, Rental, 80C, etc.).
+
+### **2. Dynamic State Machine (DSM)**
+- **Role**: Orchestrates the multi-phase tax consultation pipeline.
+- **Phases**: `PROFILING` → `INCOME` → `EXPENDITURE` → `RECALL` → `FINAL`.
+- **Behavior**: Enables non-linear conversation transitions based on intent detection (e.g., moving to the next phase when "nothing else" is detected).
+
+### **3. Deterministic Rule Engine (RBE)**
+- **Authority**: Acts as the "Source of Truth" for all Indian Tax Law computations.
+- **Compliance**: Hardcoded logic for **Section 112A** (LTCG), **Section 111A** (STCG), and **Section 24(a)** (Standard Deduction), ensuring zero "AI hallucination" in financial results.
+
+### **4. Recall & Suggestion Model**
+- **Logic**: A profile-aware inference layer that analyzes the user's profession and income bracket to suggest often-overlooked legal deductions (e.g., child tuition fees for salaried users or depreciation for business owners).
+
 ## 📁 Project Structure
 
 ```text
