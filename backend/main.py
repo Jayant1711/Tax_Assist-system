@@ -34,6 +34,13 @@ async def calculate_endpoint(data: Dict[str, Any]):
         cg_list.append({"type": "equity_ltcg", "amount": data["equity_ltcg"]})
     if "equity_stcg" in data:
         cg_list.append({"type": "equity_stcg", "amount": data["equity_stcg"]})
+    if "property_cg" in data:
+        cg_list.append({
+            "type": "property_cg", 
+            "amount": data["property_cg"],
+            "holding": data.get("cg_holding", "unknown"),
+            "prop_type": data.get("cg_prop_type", "unknown")
+        })
     
     calc_data = {
         "salary": data.get("salary", 0),
@@ -47,7 +54,10 @@ async def calculate_endpoint(data: Dict[str, Any]):
         "80d_parents": data.get("80d_parents", 0),
         "80e": data.get("80e", 0),
         "80g": data.get("80g", 0),
-        "hra": data.get("hra", 0)
+        "hra": data.get("hra", 0),
+        "24b": data.get("24b", 0),
+        "80eea": data.get("80eea", 0),
+        "nps": data.get("nps", 0)
     }
     
     results = engine.calculate_tax_advanced(calc_data)
