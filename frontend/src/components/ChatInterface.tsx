@@ -14,7 +14,7 @@ interface ChatInterfaceProps {
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ onUpdateSession, onShowReport }) => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'ai', text: "Namaste! I am your Deep AI Tax Consultant. I don't just calculate - I analyze and discover. To begin, what was your total income last year, and what do you do for a living?" }
+    { role: 'ai', text: "Namaste! I am Blostem, your personal AI tax companion. To help you save the most on your taxes, could you tell me a bit about what you do? For instance, are you in a job, running a business, or perhaps a farmer?" }
   ]);
   const [input, setInput] = useState('');
   const [session, setSession] = useState<any>({ phase: "PROFILING" });
@@ -83,7 +83,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onUpdateSession, onShowRe
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
         />
-        <button onClick={sendMessage}>Consult AI</button>
+        <button onClick={sendMessage}>Chat with Blostem</button>
       </div>
     </div>
   );

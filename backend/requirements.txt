@@ -3,3 +3,7 @@ uvicorn
 pydantic
 python-multipart
 cors
+numpy
+xgboost
+scikit-learn
+pandas
