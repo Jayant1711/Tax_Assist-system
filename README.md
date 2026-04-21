@@ -20,12 +20,11 @@ Tax filing in India is complex, with two distinct regimes and numerous sections 
 
 ## ✨ Key Features
 
-- **Deep Conversational Discovery**: Breaks down total income into Salary, Business, Agriculture, Capital Gains (Post-July 2024 Budget), and Rental income.
-- **Intelligent User Profiling**: Dynamically adjusts questioning for Salaried employees, Business Owners, and Farmers.
-- **AI Memory-Recall Assistant**: Proactively suggests often-forgotten but valid deductions (e.g., parents' medical checkups, children's tuition, specific business expenses) based on the user's profile.
-- **Rule-Based Legal Authority**: All final calculations are deterministic and strictly compliant with Indian Tax Laws for FY 2024-25.
-- **Explainable AI (XAI)**: Provides a clear "Compliance & Logic" layer, explaining *why* a deduction was applied or rejected, referencing specific sections like 80C, 80D, 24(a), and 112A.
-- **High-Fidelity Audit Report**: Generates a professional, structured table with a complete breakdown of gains, deductions, tax percentages, and legal categories.
+- **Deep Conversational Discovery**: Human-centric flow that breaks down complex tax queries into simple, jargon-free follow-up questions.
+- **Indirect Intent Mapping**: Advanced NLP that understands professional profiles and expenditures from casual conversation (e.g., "I'm a coder" or "I pay for school fees").
+- **ANFIS Rule Engine**: Employs an **Adaptive Neuro-Fuzzy Inference System** (based on Jang 1991) to evaluate tax optimization strength with fuzzy logic.
+- **EE-Bat Hyperparameter Tuning**: Uses an **Enhanced Evolving Bat Algorithm** to optimize the fuzzy membership functions and intent classification weights.
+- **LSTM-Inspired Context tracking**: Maintains long-term conversation state to ensure seamless transitions between discovery phases.
 
 ## 🛠️ Technology Stack
 
@@ -52,26 +51,21 @@ Tax filing in India is complex, with two distinct regimes and numerous sections 
 - **Package Managers**: [npm](https://www.npmjs.com/) (Frontend) and [pip](https://pip.pypa.io/) (Backend)
 - **Environment**: [Node.js](https://nodejs.org/)
 
-## 🧠 AI Architecture & Models
+### **1. Semantic Intent Mapping (XGBoost Inspired)**
+- **Architecture**: A multi-layered intent classifier that maps natural language features to tax categories.
+- **Capability**: Recognizes indirect professions ("I write code") and expenditures ("School fees for my daughter") using a semantic proximity-based mapping.
 
-This system employs a **Hybrid AI Strategy** to balance conversational flexibility with the deterministic accuracy required for financial compliance.
+### **2. Adaptive Neuro-Fuzzy Inference System (ANFIS)**
+- **Role**: The "Brain" for rule evaluation. Based on the 1991 Jang model, it combines the learning capability of neural networks with the human-like reasoning of fuzzy logic.
+- **Application**: Evaluates the "strength" of a tax profile and suggests optimizations where rules might be fuzzy or complex.
 
-### **1. NLP Entity Extraction Model**
-- **Architecture**: Rule-based **Named Entity Recognition (NER)** optimized for financial linguistics.
-- **Capability**: Processes natural language strings (e.g., "earning 18 LPA as a dev") to extract professional profiles and numerical financial values.
-- **Logic**: Implements proximity-based mapping to link extracted values to specific tax categories (Salary, Rental, 80C, etc.).
+### **3. EE-Bat Optimizer**
+- **Algorithm**: Enhanced Evolving Bat Algorithm (Swarm Intelligence).
+- **Function**: Automatically tunes the premise and consequent parameters of the ANFIS model to ensure maximum accuracy in intent mapping and profile evaluation.
 
-### **2. Dynamic State Machine (DSM)**
-- **Role**: Orchestrates the multi-phase tax consultation pipeline.
-- **Phases**: `PROFILING` → `INCOME` → `EXPENDITURE` → `RECALL` → `FINAL`.
-- **Behavior**: Enables non-linear conversation transitions based on intent detection (e.g., moving to the next phase when "nothing else" is detected).
-
-### **3. Deterministic Rule Engine (RBE)**
-- **Authority**: Acts as the "Source of Truth" for all Indian Tax Law computations.
-- **Compliance**: Hardcoded logic for **Section 112A** (LTCG), **Section 111A** (STCG), and **Section 24(a)** (Standard Deduction), ensuring zero "AI hallucination" in financial results.
-
-### **4. Recall & Suggestion Model**
-- **Logic**: A profile-aware inference layer that analyzes the user's profession and income bracket to suggest often-overlooked legal deductions (e.g., child tuition fees for salaried users or depreciation for business owners).
+### **4. Contextual State Machine (LSTM Inspired)**
+- **Logic**: Maintains long-term short-term memory of the conversation history.
+- **Behavior**: Enables non-linear transitions and "forgets" or "remembers" user details dynamically based on conversational context.
 
 ## 📁 Project Structure
 
