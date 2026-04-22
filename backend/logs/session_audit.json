@@ -1,0 +1,1239 @@
+[
+  {
+    "timestamp": "2026-04-22T21:59:16.703187",
+    "session_id": "default",
+    "user_input": "I earn 50 Lakhs. /end",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: SALARY: \u20b95,000,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "salary": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:00:00.752029",
+    "session_id": "default",
+    "user_input": "hi",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:00:11.326133",
+    "session_id": "default",
+    "user_input": "Salaried",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:00:21.731221",
+    "session_id": "default",
+    "user_input": "i am salaried",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:00:31.564513",
+    "session_id": "default",
+    "user_input": "I earn 50 Lakhs. /end",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: SALARY: \u20b95,000,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "phase": "PROFILING",
+      "salary": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:04:57.380254",
+    "session_id": "test_1776875692835",
+    "user_input": "hello",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776875692835",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:05:03.097071",
+    "session_id": "test_1776875692835",
+    "user_input": "i am salaried",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776875692835",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:05:20.406517",
+    "session_id": "test_1776875692835",
+    "user_input": "my slalry is 50 lakhs",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: OTHER INCOME: \u20b95,000,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875692835",
+      "phase": "PROFILING",
+      "other_income": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:05:38.247800",
+    "session_id": "test_1776875692835",
+    "user_input": "no my salary is 50 lakhs",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: SALARY: \u20b95,000,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875692835",
+      "phase": "PROFILING",
+      "other_income": 5000000,
+      "salary": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:05:51.318177",
+    "session_id": "test_1776875692835",
+    "user_input": "50k in LIC",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: 80C: \u20b950,000. What about health insurance for yourself and your family? (Section 80D).",
+    "internal_state": {
+      "id": "test_1776875692835",
+      "phase": "PROFILING",
+      "other_income": 5000000,
+      "salary": 5000000,
+      "80c": 50000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:08:25.487295",
+    "session_id": "test_1776875897244",
+    "user_input": "i am shopkeeper",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776875897244",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:08:32.516874",
+    "session_id": "test_1776875897244",
+    "user_input": "i am shopkeeper",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776875897244",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:08:39.797869",
+    "session_id": "test_1776875897244",
+    "user_input": "business",
+    "ai_response": "To build a legally compliant audit, I need your annual income details. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776875897244",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:08:55.321071",
+    "session_id": "test_1776875897244",
+    "user_input": "my Bussiness income 48lakhs",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: SALARY: \u20b94,800,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875897244",
+      "phase": "PROFILING",
+      "salary": 4800000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:09:09.931093",
+    "session_id": "test_1776875897244",
+    "user_input": "lic of 49K",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: 80C: \u20b949,000. What about health insurance for yourself and your family? (Section 80D).",
+    "internal_state": {
+      "id": "test_1776875897244",
+      "phase": "PROFILING",
+      "salary": 4800000,
+      "80c": 49000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:10:09.117927",
+    "session_id": "test_1776875973906",
+    "user_input": "i earned 30 lakhs from salary, 14 lakhs from property sale and 5 lakhs from rental",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: OTHER INCOME: \u20b93,000,000, OTHER INCOME: \u20b91,400,000, OTHER INCOME: \u20b9500,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875973906",
+      "phase": "PROFILING",
+      "other_income": 4900000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:10:23.093986",
+    "session_id": "test_1776875973906",
+    "user_input": "i don't know",
+    "ai_response": "Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875973906",
+      "phase": "PROFILING",
+      "other_income": 4900000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:10:27.556447",
+    "session_id": "test_1776875973906",
+    "user_input": "no",
+    "ai_response": "Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875973906",
+      "phase": "PROFILING",
+      "other_income": 4900000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:10:44.468104",
+    "session_id": "test_1776875973906",
+    "user_input": "i got 5 lakhs gift",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: OTHER INCOME: \u20b9500,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875973906",
+      "phase": "PROFILING",
+      "other_income": 5400000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:10:55.520405",
+    "session_id": "test_1776875973906",
+    "user_input": "i pay 8 lakhs in alimony",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: SALARY: \u20b9800,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875973906",
+      "phase": "PROFILING",
+      "other_income": 5400000,
+      "salary": 800000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:11:09.004320",
+    "session_id": "test_1776875973906",
+    "user_input": "i give my parents 4 lakhs",
+    "ai_response": "Got it. I've successfully mapped the following to your profile: 80D PARENTS: \u20b9400,000. Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875973906",
+      "phase": "PROFILING",
+      "other_income": 5400000,
+      "salary": 800000,
+      "80d_parents": 400000.0,
+      "has_parents": true
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:11:15.396226",
+    "session_id": "test_1776875973906",
+    "user_input": "..",
+    "ai_response": "Now let's look at your 80C investments (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776875973906",
+      "phase": "PROFILING",
+      "other_income": 5400000,
+      "salary": 800000,
+      "80d_parents": 400000,
+      "has_parents": true
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:14:38.561061",
+    "session_id": "test_1776876224782",
+    "user_input": "I am salaried.",
+    "ai_response": "I've noted that you are Salaried. To proceed with the audit, could you tell me your annual Salaried income?",
+    "internal_state": {
+      "id": "test_1776876224782",
+      "phase": "PROFILING",
+      "profile": "Salaried"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:14:55.143131",
+    "session_id": "test_1776876224782",
+    "user_input": "my slalry is 50 lakhs.",
+    "ai_response": "Got it. I've updated your profile with SALARY: \u20b95,000,000. Next, let's optimize your 80C deductions (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776876224782",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:18:04.888029",
+    "session_id": "test_1776876480615",
+    "user_input": "hello",
+    "ai_response": "To build a legally compliant audit, I need your annual income. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:18:11.937897",
+    "session_id": "test_1776876480615",
+    "user_input": "i am a shopkepper",
+    "ai_response": "I've noted that you are Business Owner. To proceed with the audit, could you tell me your annual Business Owner income?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:18:20.729286",
+    "session_id": "test_1776876480615",
+    "user_input": "50 lakhs",
+    "ai_response": "Got it. I've updated your profile with OTHER INCOME: \u20b95,000,000. Next, let's optimize your 80C deductions (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "other_income": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:18:46.304871",
+    "session_id": "test_1776876480615",
+    "user_input": "50 lakhs was my business income",
+    "ai_response": "Got it. I've updated your profile with BUSINESS: \u20b95,000,000. Next, let's optimize your 80C deductions (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "other_income": 5000000,
+      "business": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:19:00.068079",
+    "session_id": "test_1776876480615",
+    "user_input": "what is my other income?",
+    "ai_response": "Next, let's optimize your 80C deductions (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "other_income": 5000000,
+      "business": 5000000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:19:06.574622",
+    "session_id": "test_1776876480615",
+    "user_input": "2 lakhs",
+    "ai_response": "Got it. I've updated your profile with OTHER INCOME: \u20b9200,000. Next, let's optimize your 80C deductions (LIC, PPF, ELSS). What was the total amount invested this year?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "other_income": 5200000.0,
+      "business": 5000000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:19:30.127456",
+    "session_id": "test_1776876480615",
+    "user_input": "2 lakhs in 80C i meant you dumb",
+    "ai_response": "Got it. I've updated your profile with 80C: \u20b9200,000. Is there anything else? Any education loans, donations, or other sources of income?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "other_income": 5200000,
+      "business": 5000000,
+      "80c": 200000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:19:49.613241",
+    "session_id": "test_1776876480615",
+    "user_input": "yes 5 lakhs from education Loan",
+    "ai_response": "Got it. I've updated your profile with OTHER INCOME: \u20b9500,000. Is there anything else? Any education loans, donations, or other sources of income?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "other_income": 5700000.0,
+      "business": 5000000,
+      "80c": 200000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:19:58.637768",
+    "session_id": "test_1776876480615",
+    "user_input": "you dumb ai ",
+    "ai_response": "Is there anything else? Any education loans, donations, or other sources of income?",
+    "internal_state": {
+      "id": "test_1776876480615",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "other_income": 5700000,
+      "business": 5000000,
+      "80c": 200000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:23:50.624273",
+    "session_id": "test_1776876827143",
+    "user_input": "hi",
+    "ai_response": "To build a legally compliant audit, I need your annual income. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:23:52.433211",
+    "session_id": "test_1776876821222",
+    "user_input": "I am a shopkeeper.",
+    "ai_response": "I've noted that you are a Business Owner. To build an accurate audit, what is your annual Business Owner income?",
+    "internal_state": {
+      "id": "test_1776876821222",
+      "phase": "PROFILING",
+      "profile": "Business Owner"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:23:56.905207",
+    "session_id": "test_1776876827143",
+    "user_input": "i am a pilot",
+    "ai_response": "To build a legally compliant audit, I need your annual income. Are you Salaried or a Business Owner?",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:24:04.850712",
+    "session_id": "test_1776876821222",
+    "user_input": "50 lakhs.",
+    "ai_response": "Got it. I've updated your profile with BUSINESS: \u20b95,000,000. Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776876821222",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "business": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:24:14.526077",
+    "session_id": "test_1776876827143",
+    "user_input": "i am salaried my income is of 36lpa",
+    "ai_response": "Got it. I've updated your profile with SALARY: \u20b93,600,000. Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 3600000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:24:37.188492",
+    "session_id": "test_1776876827143",
+    "user_input": "yes 5 lakhs of eductaion Loan",
+    "ai_response": "Got it. I've updated your profile with SALARY: \u20b9500,000. Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4100000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:24:56.961946",
+    "session_id": "test_1776876827143",
+    "user_input": "/why?",
+    "ai_response": "Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4100000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:25:17.013402",
+    "session_id": "test_1776876827143",
+    "user_input": "?",
+    "ai_response": "Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4100000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:25:19.331433",
+    "session_id": "test_1776876827143",
+    "user_input": "no",
+    "ai_response": "Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4100000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:25:25.198456",
+    "session_id": "test_1776876827143",
+    "user_input": "dumb ai",
+    "ai_response": "Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776876827143",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4100000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:27:55.534539",
+    "session_id": "test_1776877012494",
+    "user_input": "I am a shopkeeper.",
+    "ai_response": "I've noted that you are a Business Owner. To build an accurate audit, what is your annual Business Owner income?",
+    "internal_state": {
+      "id": "test_1776877012494",
+      "phase": "PROFILING",
+      "profile": "Business Owner"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:28:31.055611",
+    "session_id": "test_1776877012494",
+    "user_input": "50 lakhs.",
+    "ai_response": "Got it. I've updated your profile with BUSINESS: \u20b95,000,000. Is there anything else? (Education loans, property sales, or donations?)",
+    "internal_state": {
+      "id": "test_1776877012494",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "business": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:54:59.784584",
+    "session_id": "test_1776878680677",
+    "user_input": "hi",
+    "ai_response": "To start your tax audit, tell me your profession and annual income.",
+    "internal_state": {
+      "id": "test_1776878680677",
+      "phase": "PROFILING"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:56:54.717418",
+    "session_id": "test_1776878680677",
+    "user_input": "i am a teacher my income is 40 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b94,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "test_1776878680677",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:57:41.832451",
+    "session_id": "test_1776878680677",
+    "user_input": "ye my childs tution fees of 2 lakhs , LIC of 40k, and ppf of 3 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b9200,000, SALARY: \u20b940,000, 80C: \u20b9300,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "test_1776878680677",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4240000.0,
+      "80c": 300000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:58:15.163498",
+    "session_id": "test_1776878680677",
+    "user_input": "yes full family including parents of 40k ",
+    "ai_response": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "test_1776878680677",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4240000,
+      "80c": 300000,
+      "has_parents": true
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:58:29.159058",
+    "session_id": "test_1776878680677",
+    "user_input": "yes of 50k",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b950,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "test_1776878680677",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4290000.0,
+      "80c": 300000,
+      "has_parents": true
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:58:49.377555",
+    "session_id": "test_1776878680677",
+    "user_input": "family insurance of 50k",
+    "ai_response": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "test_1776878680677",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4290000,
+      "80c": 300000,
+      "has_parents": true
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-22T22:58:55.516284",
+    "session_id": "test_1776878680677",
+    "user_input": "/end",
+    "ai_response": "Override activated. Generating your Tax Report now...",
+    "internal_state": {
+      "id": "test_1776878680677",
+      "phase": "FINAL",
+      "profile": "Salaried",
+      "salary": 4290000,
+      "80c": 300000,
+      "has_parents": true
+    },
+    "tax_calculation": {
+      "old_regime": {
+        "total_tax": 1080300.0,
+        "taxable_income": 4087500.0,
+        "efficiency": 41.3
+      },
+      "new_regime": {
+        "total_tax": 992680.0,
+        "taxable_income": 4215000.0,
+        "efficiency": 41.3
+      },
+      "recommendation": "New Regime",
+      "savings": 87620.0,
+      "efficiency_score": 41.3
+    }
+  },
+  {
+    "timestamp": "2026-04-23T00:06:25.021750",
+    "session_id": "sid_1776882917857",
+    "user_input": "i am a teacher",
+    "ai_response": "I've noted you are a Salaried. What is your annual income from this?",
+    "internal_state": {
+      "id": "sid_1776882917857",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "I've noted you are a Salaried. What is your annual income from this?"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:06:34.258157",
+    "session_id": "sid_1776882917857",
+    "user_input": "50 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b95,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776882917857",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Got it! I've mapped: SALARY: \u20b95,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+      "salary": 5000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:07:02.244797",
+    "session_id": "sid_1776882918316",
+    "user_input": "I am a software engineer earning 45 lakhs per year.",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b94,500,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776882918316",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4500000.0,
+      "_last_question": "Got it! I've mapped: SALARY: \u20b94,500,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:07:24.048069",
+    "session_id": "sid_1776882917857",
+    "user_input": "yes 2 lakhs in child education , 1 lakh in ppf, and 40k in LIC",
+    "ai_response": "Got it! I've mapped: 80C: \u20b9200,000, 80C: \u20b9100,000, 80C: \u20b940,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776882917857",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Got it! I've mapped: 80C: \u20b9200,000, 80C: \u20b9100,000, 80C: \u20b940,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "salary": 5000000,
+      "80c": 340000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:08:45.100171",
+    "session_id": "sid_1776882918316",
+    "user_input": "I don't know",
+    "ai_response": "Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776882918316",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4500000,
+      "_last_question": "Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:09:49.740388",
+    "session_id": "sid_1776882918316",
+    "user_input": "no",
+    "ai_response": "Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776882918316",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4500000,
+      "_last_question": "Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:10:46.425261",
+    "session_id": "sid_1776883237368",
+    "user_input": "i am a teacher",
+    "ai_response": "I've noted you are a Salaried. What is your annual income from this?",
+    "internal_state": {
+      "id": "sid_1776883237368",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "I've noted you are a Salaried. What is your annual income from this?"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:10:54.359737",
+    "session_id": "sid_1776883237368",
+    "user_input": "23 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b92,300,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776883237368",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Got it! I've mapped: SALARY: \u20b92,300,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+      "salary": 2300000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:12:06.706784",
+    "session_id": "sid_1776883237368",
+    "user_input": "1.5 laks child tutuion fees",
+    "ai_response": "Got it! I've mapped: 80C: \u20b9150,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776883237368",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Got it! I've mapped: 80C: \u20b9150,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "salary": 2300000,
+      "80c": 150000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:12:42.648148",
+    "session_id": "sid_1776883357175",
+    "user_input": "hello",
+    "ai_response": "To start your tax audit, tell me your profession and annual income.",
+    "internal_state": {
+      "id": "sid_1776883357175",
+      "phase": "PROFILING",
+      "_last_question": "To start your tax audit, tell me your profession and annual income."
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:12:49.163052",
+    "session_id": "sid_1776883357175",
+    "user_input": "teacher",
+    "ai_response": "I've noted you are a Salaried. What is your annual income from this?",
+    "internal_state": {
+      "id": "sid_1776883357175",
+      "phase": "PROFILING",
+      "_last_question": "I've noted you are a Salaried. What is your annual income from this?",
+      "profile": "Salaried"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:12:54.631128",
+    "session_id": "sid_1776883357175",
+    "user_input": "40 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b94,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776883357175",
+      "phase": "PROFILING",
+      "_last_question": "Got it! I've mapped: SALARY: \u20b94,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+      "profile": "Salaried",
+      "salary": 4000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:18:50.575890",
+    "session_id": "sid_1776883718048",
+    "user_input": "I am a software engineer earning 30 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b93,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776883718048",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 3000000.0,
+      "_last_question": "Got it! I've mapped: SALARY: \u20b93,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:20:54.614034",
+    "session_id": "sid_1776883718048",
+    "user_input": "I pay rent of 25k per month in Bangalore",
+    "ai_response": "Got it! I've mapped: HRA: \u20b9300,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776883718048",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 3000000,
+      "_last_question": "Got it! I've mapped: HRA: \u20b9300,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+      "pays_rent": true,
+      "hra": 300000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:25:39.410772",
+    "session_id": "sid_1776883718048",
+    "user_input": "I invested 1.5L in PPF and 50k in health insurance",
+    "ai_response": "Got it! I've mapped: 80D: \u20b9150,000, 80D: \u20b950,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776883718048",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 3000000,
+      "_last_question": "Got it! I've mapped: 80D: \u20b9150,000, 80D: \u20b950,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+      "pays_rent": true,
+      "hra": 300000,
+      "80d": 200000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:29:28.878280",
+    "session_id": "sid_1776884290180",
+    "user_input": "This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior. This is a long message to test scrolling behavior.",
+    "ai_response": "To start your tax audit, tell me your profession and annual income.",
+    "internal_state": {
+      "id": "sid_1776884290180",
+      "phase": "PROFILING",
+      "_last_question": "To start your tax audit, tell me your profession and annual income."
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:30:51.636750",
+    "session_id": "sid_1776884290180",
+    "user_input": "This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior. This is another long message to test scrolling behavior.",
+    "ai_response": "To start your tax audit, tell me your profession and annual income.",
+    "internal_state": {
+      "id": "sid_1776884290180",
+      "phase": "PROFILING",
+      "_last_question": "To start your tax audit, tell me your profession and annual income."
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:31:09.141300",
+    "session_id": "sid_1776884290180",
+    "user_input": "This is a third long message to test scrolling behavior. This is a third long message to test scrolling behavior. This is a third long message to test scrolling behavior. This is a third long message to test scrolling behavior. This is a third long message to test scrolling behavior. This is a third long message to test scrolling behavior. This is a third long message to test scrolling behavior. This is a third long message to test scrolling beh",
+    "ai_response": "To start your tax audit, tell me your profession and annual income.",
+    "internal_state": {
+      "id": "sid_1776884290180",
+      "phase": "PROFILING",
+      "_last_question": "To start your tax audit, tell me your profession and annual income."
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:31:12.470190",
+    "session_id": "sid_1776884290180",
+    "user_input": "avior. This is a third long message to test scrolling behavior. This is a third long message to test scrol",
+    "ai_response": "To start your tax audit, tell me your profession and annual income.",
+    "internal_state": {
+      "id": "sid_1776884290180",
+      "phase": "PROFILING",
+      "_last_question": "To start your tax audit, tell me your profession and annual income."
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:31:12.785357",
+    "session_id": "sid_1776884290180",
+    "user_input": "ling behavior.",
+    "ai_response": "To start your tax audit, tell me your profession and annual income.",
+    "internal_state": {
+      "id": "sid_1776884290180",
+      "phase": "PROFILING",
+      "_last_question": "To start your tax audit, tell me your profession and annual income."
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:31:47.024556",
+    "session_id": "sid_1776884488974",
+    "user_input": "i am a teacher . annual income 45 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b94,500,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776884488974",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4500000.0,
+      "_last_question": "Got it! I've mapped: SALARY: \u20b94,500,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:31:59.768643",
+    "session_id": "sid_1776884488974",
+    "user_input": "yes 2 lakhs epf",
+    "ai_response": "Got it! I've mapped: 80C: \u20b9200,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884488974",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "salary": 4500000,
+      "_last_question": "Got it! I've mapped: 80C: \u20b9200,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "80c": 200000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:32:07.066921",
+    "session_id": "sid_1776884488974",
+    "user_input": "/end",
+    "ai_response": "Override activated. Generating your Tax Report now...",
+    "internal_state": {
+      "id": "sid_1776884488974",
+      "phase": "FINAL",
+      "profile": "Salaried",
+      "salary": 4500000,
+      "_last_question": "Got it! I've mapped: 80C: \u20b9200,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "80c": 200000
+    },
+    "tax_calculation": {
+      "old_regime": {
+        "total_tax": 1145820.0,
+        "taxable_income": 4297500.0,
+        "efficiency": 72.1
+      },
+      "new_regime": {
+        "total_tax": 1058200.0,
+        "taxable_income": 4425000.0,
+        "efficiency": 72.1
+      },
+      "recommendation": "New Regime",
+      "savings": 87620.0,
+      "efficiency_score": 72.1
+    }
+  },
+  {
+    "timestamp": "2026-04-23T00:32:51.246078",
+    "session_id": "sid_1776884562815",
+    "user_input": "i am farmer",
+    "ai_response": "I've noted you are a Business Owner. What is your annual income from this?",
+    "internal_state": {
+      "id": "sid_1776884562815",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "_last_question": "I've noted you are a Business Owner. What is your annual income from this?"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:32:57.436216",
+    "session_id": "sid_1776884562815",
+    "user_input": "45 lakhs",
+    "ai_response": "Got it! I've mapped: BUSINESS: \u20b94,500,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776884562815",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "_last_question": "Got it! I've mapped: BUSINESS: \u20b94,500,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+      "business": 4500000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:33:35.938153",
+    "session_id": "sid_1776884562815",
+    "user_input": "40k lic , 4 lakhs child education , 3 lakhs of rent paid",
+    "ai_response": "Got it! I've mapped: 80C: \u20b940,000, 80C: \u20b9400,000, HRA: \u20b9300,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884562815",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "_last_question": "Got it! I've mapped: 80C: \u20b940,000, 80C: \u20b9400,000, HRA: \u20b9300,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "business": 4500000,
+      "80c": 440000.0,
+      "hra": 300000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:38:52.880933",
+    "session_id": "sid_1776884562815",
+    "user_input": "yes health insurance of 40k",
+    "ai_response": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884562815",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "_last_question": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "business": 4500000,
+      "80c": 440000,
+      "hra": 300000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:38:59.010805",
+    "session_id": "sid_1776884562815",
+    "user_input": "no",
+    "ai_response": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884562815",
+      "phase": "PROFILING",
+      "profile": "Business Owner",
+      "_last_question": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "business": 4500000,
+      "80c": 440000,
+      "hra": 300000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:39:05.684908",
+    "session_id": "sid_1776884562815",
+    "user_input": "/end",
+    "ai_response": "Override activated. Generating your Tax Report now...",
+    "internal_state": {
+      "id": "sid_1776884562815",
+      "phase": "FINAL",
+      "profile": "Business Owner",
+      "_last_question": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "business": 4500000,
+      "80c": 440000,
+      "hra": 300000
+    },
+    "tax_calculation": {
+      "old_regime": {
+        "total_tax": 1162200.0,
+        "taxable_income": 4350000.0,
+        "efficiency": 71.8
+      },
+      "new_regime": {
+        "total_tax": 1081600.0,
+        "taxable_income": 4500000.0,
+        "efficiency": 71.8
+      },
+      "recommendation": "New Regime",
+      "savings": 80600.0,
+      "efficiency_score": 71.8
+    }
+  },
+  {
+    "timestamp": "2026-04-23T00:39:37.899549",
+    "session_id": "sid_1776884562815",
+    "user_input": "its wrong",
+    "ai_response": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884562815",
+      "phase": "FINAL",
+      "profile": "Business Owner",
+      "_last_question": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "business": 4500000,
+      "80c": 440000,
+      "hra": 300000
+    },
+    "tax_calculation": {
+      "old_regime": {
+        "total_tax": 1162200.0,
+        "taxable_income": 4350000.0,
+        "efficiency": 71.8
+      },
+      "new_regime": {
+        "total_tax": 1081600.0,
+        "taxable_income": 4500000.0,
+        "efficiency": 71.8
+      },
+      "recommendation": "New Regime",
+      "savings": 80600.0,
+      "efficiency_score": 71.8
+    }
+  },
+  {
+    "timestamp": "2026-04-23T00:39:51.834459",
+    "session_id": "sid_1776884986052",
+    "user_input": "teacher",
+    "ai_response": "I've noted you are a Salaried. What is your annual income from this?",
+    "internal_state": {
+      "id": "sid_1776884986052",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "I've noted you are a Salaried. What is your annual income from this?"
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:39:57.700785",
+    "session_id": "sid_1776884986052",
+    "user_input": "20 lakhs",
+    "ai_response": "Got it! I've mapped: SALARY: \u20b92,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+    "internal_state": {
+      "id": "sid_1776884986052",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Got it! I've mapped: SALARY: \u20b92,000,000. Great progress! Now, have you made any tax-saving investments this year? (PPF, LIC, ELSS, EPF, or child's tuition fees \u2014 Section 80C, up to \u20b91.5L)",
+      "salary": 2000000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:40:13.310591",
+    "session_id": "sid_1776884986052",
+    "user_input": "child tuition 2 lakhs , 1 lakh lic",
+    "ai_response": "Got it! I've mapped: 80C: \u20b9200,000, 80C: \u20b9100,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884986052",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Got it! I've mapped: 80C: \u20b9200,000, 80C: \u20b9100,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "salary": 2000000,
+      "80c": 300000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:40:33.331888",
+    "session_id": "sid_1776884986052",
+    "user_input": "25000 for self",
+    "ai_response": "Got it! I've mapped: 80C: \u20b925,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884986052",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Got it! I've mapped: 80C: \u20b925,000. Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "salary": 2000000,
+      "80c": 325000.0
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:40:46.738074",
+    "session_id": "sid_1776884986052",
+    "user_input": "no",
+    "ai_response": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+    "internal_state": {
+      "id": "sid_1776884986052",
+      "phase": "PROFILING",
+      "profile": "Salaried",
+      "_last_question": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "salary": 2000000,
+      "80c": 325000
+    },
+    "tax_calculation": "Pending"
+  },
+  {
+    "timestamp": "2026-04-23T00:40:51.233020",
+    "session_id": "sid_1776884986052",
+    "user_input": "/end",
+    "ai_response": "Override activated. Generating your Tax Report now...",
+    "internal_state": {
+      "id": "sid_1776884986052",
+      "phase": "FINAL",
+      "profile": "Salaried",
+      "_last_question": "Do you have health insurance for yourself or family? (Section 80D \u2014 \u20b925,000 for self, \u20b950,000 if senior)",
+      "salary": 2000000,
+      "80c": 325000
+    },
+    "tax_calculation": {
+      "old_regime": {
+        "total_tax": 365820.0,
+        "taxable_income": 1797500.0,
+        "efficiency": 76.3
+      },
+      "new_regime": {
+        "total_tax": 278200.0,
+        "taxable_income": 1925000.0,
+        "efficiency": 76.3
+      },
+      "recommendation": "New Regime",
+      "savings": 87620.0,
+      "efficiency_score": 76.3
+    }
+  }
+]
