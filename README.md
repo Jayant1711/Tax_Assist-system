@@ -18,27 +18,29 @@ An advanced, AI-powered tax filing assistance system specifically designed for I
 
 Tax filing in India is complex, with two distinct regimes and numerous sections for deductions and exemptions. **Tax Assist AI** simplifies this by guiding users through a deep financial discovery process, helping them identify legitimate tax-saving opportunities they might have missed.
 
-## ✨ Key Features
+## ✨ Key Features (Anfis v3 Upgrade)
 
 - **Deep Conversational Discovery**: Human-centric flow that breaks down complex tax queries into simple, jargon-free follow-up questions.
-- **Indirect Intent Mapping**: Advanced NLP that understands professional profiles and expenditures from casual conversation (e.g., "I'm a coder" or "I pay for school fees").
-- **ANFIS Rule Engine**: Employs an **Adaptive Neuro-Fuzzy Inference System** (based on Jang 1991) to evaluate tax optimization strength with fuzzy logic.
-- **EE-Bat Hyperparameter Tuning**: Uses an **Enhanced Evolving Bat Algorithm** to optimize the fuzzy membership functions and intent classification weights.
-- **LSTM-Inspired Context tracking**: Maintains long-term conversation state to ensure seamless transitions between discovery phases.
+- **ANFIS v3 Rule Engine**: Upgraded **Adaptive Neuro-Fuzzy Inference System** trained on 100,000+ Indian tax cases via EE-BAT + Adam (R2=0.83, MAE=3.71).
+- **AI Internal State Panel**: Real-time transparency with a debug toggle to inspect the "mental model" of the AI, its extracted parameters, and internal reasoning.
+- **Audit History Trail**: Comprehensive session logging with a `/history` endpoint for full traceability of all inputs, outputs, and intermediate states.
+- **Luxe UI/UX**: 
+    - **Floating Scroll Button**: One-tap return to latest messages.
+    - **Intelligent Input Lock**: Prevents race conditions and double-submissions.
+    - **Dynamic Phase Stepper**: Real-time visual progress tracking (Profiling → Income → Expenditure → Final).
+- **EE-Bat Hyperparameter Tuning**: Advanced swarm intelligence for optimizing fuzzy membership functions.
 
 ## 🛠️ Technology Stack
 
 ### **Frontend (Core UI)**
 - **Framework**: [Next.js 16](https://nextjs.org/) (App Router Architecture)
 - **Language**: [TypeScript](https://www.typescriptlang.org/) for robust type safety
-- **Styling**: [Vanilla CSS](https://developer.mozilla.org/en-US/docs/Web/CSS) (Custom implementation of **Glassmorphism** and **Dark Mode**)
-- **State Management**: React Hooks (`useState`, `useEffect`, `useRef`)
+- **Styling**: [Vanilla CSS](https://developer.mozilla.org/en-US/docs/Web/CSS) (Glassmorphism, Dark Mode, Premium Micro-animations)
 
 ### **Backend (Intelligence Layer)**
 - **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (High-performance Python API)
 - **Runtime**: [Python 3.10+](https://www.python.org/)
-- **Data Validation**: [Pydantic](https://docs.pydantic.dev/) for strict schema enforcement
-- **Server**: [Uvicorn](https://www.uvicorn.org/) (ASGI server)
+- **Auditing**: Built-in `AuditLogger` for session traceability.
 
 ### **AI & Logic Engine**
 - **NLP Strategy**: Custom **Smarter Entity Extraction** using Regex and proximity-based keyword mapping.
@@ -51,34 +53,21 @@ Tax filing in India is complex, with two distinct regimes and numerous sections 
 - **Package Managers**: [npm](https://www.npmjs.com/) (Frontend) and [pip](https://pip.pypa.io/) (Backend)
 - **Environment**: [Node.js](https://nodejs.org/)
 
-### **1. Semantic Intent Mapping (XGBoost Inspired)**
-- **Architecture**: A multi-layered intent classifier that maps natural language features to tax categories.
-- **Capability**: Recognizes indirect professions ("I write code") and expenditures ("School fees for my daughter") using a semantic proximity-based mapping.
-
-### **2. Adaptive Neuro-Fuzzy Inference System (ANFIS)**
-- **Role**: The "Brain" for rule evaluation. Based on the 1991 Jang model, it combines the learning capability of neural networks with the human-like reasoning of fuzzy logic.
-- **Application**: Evaluates the "strength" of a tax profile and suggests optimizations where rules might be fuzzy or complex.
-
-### **3. EE-Bat Optimizer**
-- **Algorithm**: Enhanced Evolving Bat Algorithm (Swarm Intelligence).
-- **Function**: Automatically tunes the premise and consequent parameters of the ANFIS model to ensure maximum accuracy in intent mapping and profile evaluation.
-
-### **4. Contextual State Machine (LSTM Inspired)**
-- **Logic**: Maintains long-term short-term memory of the conversation history.
-- **Behavior**: Enables non-linear transitions and "forgets" or "remembers" user details dynamically based on conversational context.
-
 ## 📁 Project Structure
 
 ```text
 .
 ├── backend/
-│   ├── main.py          # FastAPI API Endpoints
-│   ├── tax_engine.py    # Core Rule-Based Tax Logic (Slabs, Sections)
-│   ├── nlp_engine.py    # Conversational Logic & Entity Extraction
+│   ├── main.py             # FastAPI API Endpoints (with /history)
+│   ├── tax_engine.py       # Core Rule-Based Logic + ANFIS Scoring
+│   ├── nlp_engine.py       # Conversational Logic & Phase Management
+│   ├── ai_models.py        # ANFIS, UniversalParser, ReasoningAgent
+│   ├── audit_logger.py     # Session persistence & Audit trail
+│   ├── test_suite.py       # 97+ High-coverage test scenarios
 │   └── requirements.txt
 └── frontend/
-    ├── src/app/         # Next.js Pages & Styling
-    └── src/components/  # ChatInterface & TaxReport Components
+    ├── src/app/            # Next.js Pages & Global Styles
+    └── src/components/     # ChatInterface (with Debug) & TaxReport
 ```
 
 ## ⚙️ Installation & Setup

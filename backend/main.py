@@ -1,68 +1,73 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 from tax_engine import TaxEngine
 from nlp_engine import NLPEngine
+from audit_logger import AuditLogger
+import uvicorn
+import os
+import json
 
 app = FastAPI(title="Tax Assist AI - Deep Consultant")
 
+# Permissive CORS for Local Development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 nlp = NLPEngine()
 engine = TaxEngine()
+audit = AuditLogger()
 
 class ChatRequest(BaseModel):
     message: str
     session: Dict[str, Any]
 
 @app.post("/chat")
-async def chat_endpoint(request: ChatRequest):
-    return nlp.process_message(request.message, request.session)
+async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks):
+    # 1. Process Message
+    result = nlp.process_message(request.message, request.session)
+    
+    # 2. Prepare Audit Data (Calculate tax if needed)
+    tax_result = None
+    if result["session"].get("phase") == "FINAL":
+        tax_result = engine.calculate_tax_advanced(result["session"])
+    
+    # 3. Schedule Background Audit Log
+    background_tasks.add_task(
+        audit.log_interaction,
+        session_id=request.session.get("id", "default"),
+        input_text=request.message,
+        response=result["response"],
+        session_state=result["session"],
+        tax_results=tax_result
+    )
+    
+    return result
+
+@app.get("/history/{sid}")
+async def get_history(sid: str):
+    log_file = "logs/session_audit.json"
+    if not os.path.exists(log_file):
+        return []
+    try:
+        with open(log_file, "r") as f:
+            logs = json.load(f)
+        session_logs = [l for l in logs if l.get("session_id") == sid]
+        return session_logs
+    except:
+        return []
 
 @app.post("/calculate")
 async def calculate_endpoint(data: Dict[str, Any]):
-    # Pre-process capital gains if they exist in session
-    cg_list = []
-    if "equity_ltcg" in data:
-        cg_list.append({"type": "equity_ltcg", "amount": data["equity_ltcg"]})
-    if "equity_stcg" in data:
-        cg_list.append({"type": "equity_stcg", "amount": data["equity_stcg"]})
-    if "property_cg" in data:
-        cg_list.append({
-            "type": "property_cg", 
-            "amount": data["property_cg"],
-            "holding": data.get("cg_holding", "unknown"),
-            "prop_type": data.get("cg_prop_type", "unknown")
-        })
-    
-    calc_data = {
-        "salary": data.get("salary", 0),
-        "business": data.get("business", 0),
-        "agriculture": data.get("agriculture", 0),
-        "rental": data.get("rental", 0),
-        "other_income": data.get("other_income", 0),
-        "capital_gains": cg_list,
-        "80c": data.get("80c", 0),
-        "80d": data.get("80d", 0),
-        "80d_parents": data.get("80d_parents", 0),
-        "80e": data.get("80e", 0),
-        "80g": data.get("80g", 0),
-        "hra": data.get("hra", 0),
-        "24b": data.get("24b", 0),
-        "80eea": data.get("80eea", 0),
-        "nps": data.get("nps", 0)
-    }
-    
-    results = engine.calculate_tax_advanced(calc_data)
+    # Maintain existing calculator endpoint for the UI
+    results = engine.calculate_tax_advanced(data)
     return results
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

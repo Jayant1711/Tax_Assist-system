@@ -11,7 +11,7 @@ class NLPEngine:
         self.anfis = ANFIS(n_inputs=3, n_rules=5)
         
         self.semantic_map = {
-            "Salaried": ["job", "work", "office", "company", "software", "engineer", "corporate", "salary", "pay", "employee", "it", "developer", "lpa", "package", "earn", "teacher", "professor", "doctor", "nurse", "manager", "clerk", "accountant", "government", "railways", "army", "police", "service"],
+            "Salaried": ["chef","job", "work", "office", "company", "software", "engineer", "corporate", "salary", "pay", "employee", "it", "developer", "lpa", "package", "earn", "teacher", "professor", "doctor", "nurse", "manager", "clerk", "accountant", "government", "railways", "army", "police", "service"],
             "Business Owner": ["shop", "business", "freelance", "own", "agency", "consultancy", "startup", "trade", "gst", "turnover", "profit", "client", "shopkeeper", "merchant", "trader", "contractor", "freelancer", "consultant", "clinic", "lawyer", "ca", "architect", "store"],
             "Farmer": ["farm", "agri", "land", "crop", "wheat", "rice", "plantation", "agriculture", "farmer", "harvest", "tractor"],
             "80C": ["lic", "ppf", "elss", "school", "tuition", "child", "pension", "provident", "invest", "80c", "epf", "vpf", "life insurance", "tax saving fd", "mutual fund", "nsc", "sukanya"],
