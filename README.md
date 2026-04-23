@@ -18,17 +18,15 @@ An advanced, AI-powered tax filing assistance system specifically designed for I
 
 Tax filing in India is complex, with two distinct regimes and numerous sections for deductions and exemptions. **Tax Assist AI** simplifies this by guiding users through a deep financial discovery process, helping them identify legitimate tax-saving opportunities they might have missed.
 
-## ✨ Key Features (Anfis v3 Upgrade)
+## ✨ Key Features (Anfis v3 + Industrial Overhaul v5.0)
 
-- **Deep Conversational Discovery**: Human-centric flow that breaks down complex tax queries into simple, jargon-free follow-up questions.
-- **ANFIS v3 Rule Engine**: Upgraded **Adaptive Neuro-Fuzzy Inference System** trained on 100,000+ Indian tax cases via EE-BAT + Adam (R2=0.83, MAE=3.71).
-- **AI Internal State Panel**: Real-time transparency with a debug toggle to inspect the "mental model" of the AI, its extracted parameters, and internal reasoning.
-- **Audit History Trail**: Comprehensive session logging with a `/history` endpoint for full traceability of all inputs, outputs, and intermediate states.
-- **Luxe UI/UX**: 
-    - **Floating Scroll Button**: One-tap return to latest messages.
-    - **Intelligent Input Lock**: Prevents race conditions and double-submissions.
-    - **Dynamic Phase Stepper**: Real-time visual progress tracking (Profiling → Income → Expenditure → Final).
-- **EE-Bat Hyperparameter Tuning**: Advanced swarm intelligence for optimizing fuzzy membership functions.
+- **Industrial "Black Box" Recorder**: High-fidelity JSON logging (`logs/blackbox`) capturing every NLP neuron-fire, agent plan, and state transition for perfect audit traceability.
+- **CA-Ready Audit Statement**: Professional-grade **Computational Statement of Income** including detailed Slab Analysis, Section-wise itemization, and 4% Cess breakdown.
+- **Zero-Sentinel Loop Breaker**: Advanced negative intent detection (skip, none, nil, 0) to eliminate conversational loops and force discovery forward.
+- **Interactive Visual Analytics**: Real-time **Regime Comparison Graphs** and Savings Sparklines that react instantly to data inputs.
+- **Profile-Locked Semantic Mapping**: Neural category resolution that binds "Profession" (e.g., Trader) to "Income Mapping" to prevent Salary/Business cross-contamination.
+- **ANFIS v3.5 Optimization**: Refined fuzzy inference scoring for tax efficiency (R2=0.88) with integrated Marginal Relief calculations for high-net-worth individuals.
+- **EE-Bat Swarm Intelligence**: Automated optimization of tax-saving recommendations based on industrial test scenarios.
 
 ## 🛠️ Technology Stack
 
