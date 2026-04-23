@@ -1,8 +1,6 @@
 """
-Tax Engine v3.0 — FY 2024-25 (AY 2025-26)
-Fixes: Correct surcharge brackets (10/15/25/37%), 87A rebate in Old Regime,
-       Section 80G, 80EEA, 80TTA/B surfaced properly, agriculture exemption,
-       ANFIS v2 efficiency scoring, savings tips integration.
+Tax Engine v4.0 — Professional Grade Auditor
+FY 2024-25 (AY 2025-26) | Indian Tax Laws
 """
 
 from dataclasses import dataclass, field
@@ -23,6 +21,8 @@ class Explanation:
 class TaxResult:
     income_details: List[Dict] = field(default_factory=list)
     deduction_details: List[Dict] = field(default_factory=list)
+    gross_total_income: float = 0
+    total_deductions: float = 0
     taxable_income: float = 0
     total_tax: float = 0
     recommendation: str = ""
@@ -31,14 +31,15 @@ class TaxResult:
     slabs_breakdown: List[Dict] = field(default_factory=list)
     efficiency_score: float = 0.0
     savings_tips: List[str] = field(default_factory=list)
+    audit_observations: List[str] = field(default_factory=list)
+    risk_level: str = "Low"
 
 class TaxEngine:
     def __init__(self):
         self.anfis = ANFIS()
 
-    # ------------------------------------------------------------------
     def calculate_tax_advanced(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        # Income
+        # Basic Inputs
         salary       = float(data.get("salary", 0))
         business     = float(data.get("business", 0))
         agri         = float(data.get("agriculture", 0))
@@ -47,12 +48,12 @@ class TaxEngine:
         cg_data      = data.get("capital_gains", [])
         if not isinstance(cg_data, list): cg_data = []
 
-        # Deductions
+        # Deductions & Caps (FY 24-25)
         ded = {
             "80c":   min(float(data.get("80c", 0)), 150000),
             "80d":   float(data.get("80d", 0)),
             "80d_p": float(data.get("80d_parents", 0)),
-            "80e":   float(data.get("80e", 0)),   # No cap
+            "80e":   float(data.get("80e", 0)),
             "80g":   float(data.get("80g", 0)),
             "hra":   float(data.get("hra", 0)),
             "24b":   min(float(data.get("24b", 0)), 200000),
@@ -61,224 +62,192 @@ class TaxEngine:
             "80tta": min(float(data.get("80tta", 0)), 10000),
             "80ttb": min(float(data.get("80ttb", 0)), 50000),
             "80gg":  float(data.get("80gg", 0)),
+            "80u":   float(data.get("80u_80dd", 0)),
+            "80ddb": float(data.get("80ddb", 0)),
         }
         age       = int(data.get("age", 30))
         prof_tax  = float(data.get("professional_tax", 2500 if salary > 0 else 0))
         is_senior = age >= 60
-        is_vsr    = age >= 80  # Very Senior Resident
+        is_vsr    = age >= 80
 
-        old_result = self._calc_old(salary, business, agri, rental_gross,
-                                    other_income, cg_data, ded, prof_tax, is_senior, is_vsr)
-        new_result = self._calc_new(salary, business, agri, rental_gross,
-                                    other_income, cg_data, is_senior)
+        old_res = self._calc_old(salary, business, agri, rental_gross, other_income, cg_data, ded, prof_tax, is_senior, is_vsr)
+        new_res = self._calc_new(salary, business, agri, rental_gross, other_income, cg_data, is_senior)
 
-        recommendation = "New Regime" if new_result.total_tax <= old_result.total_tax else "Old Regime"
-        savings        = abs(old_result.total_tax - new_result.total_tax)
+        # Optimizer Logic
+        rec     = "New Regime" if new_res.total_tax <= old_res.total_tax else "Old Regime"
+        savings = abs(old_res.total_tax - new_res.total_tax)
 
-        # ANFIS v3 Efficiency Score (pre-trained on 100k cases via EE-BAT + Adam)
-        total_income = salary + business + rental_gross + other_income
-        cg_total     = sum(c.get("amount", 0) for c in cg_data) if cg_data else 0
-        min_tax      = min(old_result.total_tax, new_result.total_tax)
-        n_sources    = sum(1 for x in [salary, business, rental_gross, other_income, agri, cg_total] if x > 0)
-        efficiency_score = self.anfis.score_efficiency(
-            income         = total_income,
-            ded_80c        = ded["80c"],
-            ded_80d        = ded["80d"] + ded["80d_p"],
-            ded_nps        = ded["nps"],
-            ded_other      = ded["80e"] + ded["80g"] + ded["80eea"],
-            n_sources      = n_sources,
-            regime_savings = savings,
-            cg_income      = cg_total,
-            min_tax        = min_tax,
-        )
+        # ANFIS Industrial Audit Score
+        final_res = old_res if rec == "Old Regime" else new_res
+        eff_score = self.anfis.score_efficiency(data, final_res.__dict__)
 
-        old_result.efficiency_score = efficiency_score
-        new_result.efficiency_score = efficiency_score
+        old_res.efficiency_score = eff_score
+        new_res.efficiency_score = eff_score
+        old_res.recommendation = rec
+        new_res.recommendation = rec
+        old_res.savings = savings
+        new_res.savings = savings
+        
+        # Risk Analysis
+        total_inc = salary + business + rental_gross + other_income
+        cg_total  = sum(c.get("amount", 0) for c in cg_data)
+        risk = "Low"
+        observations = []
+        if ded["hra"] > 0.5 * salary:
+            risk = "Medium"; observations.append("HRA Claim vs Salary ratio is unusually high (>50%).")
+        if ded["80g"] > 0.1 * total_inc:
+            risk = "High"; observations.append("Significant 80G donations detected. Ensure 100% deduction receipts are available.")
+        if cg_total > 1000000:
+            observations.append("Large Capital Gains detected. Verify holding periods for STCG/LTCG classification.")
 
-        # Savings Tips (from ReasoningAgent)
+        old_res.risk_level = risk; old_res.audit_observations = observations
+        new_res.risk_level = risk; new_res.audit_observations = observations
+
         try:
             from ai_models import ReasoningAgent
             tips = ReasoningAgent().get_savings_tips(data)
-        except Exception:
-            tips = []
-        old_result.savings_tips = tips
+            old_res.savings_tips = tips; new_res.savings_tips = tips
+        except: pass
 
         return {
-            "old_regime":       old_result,
-            "new_regime":       new_result,
-            "recommendation":   recommendation,
-            "savings":          savings,
-            "efficiency_score": efficiency_score,
+            "old_regime": old_res, "new_regime": new_res,
+            "recommendation": rec, 
+            "savings": round(savings, 2), 
+            "efficiency_score": round(eff_score, 1)
         }
 
-    # ------------------------------------------------------------------
-    def _calc_old(self, salary, business, agri, rental_gross, other_income,
-                  cg_data, ded, prof_tax, is_senior, is_vsr) -> TaxResult:
+    def _calc_old(self, salary, business, agri, rental, other, cg_data, ded, prof_tax, is_senior, is_vsr) -> TaxResult:
         res = TaxResult()
-
-        # 1. Salary income
-        std_ded    = 50000 if salary > 0 else 0
-        net_salary = max(0, salary - std_ded - prof_tax)
-
-        # 2. House property
-        home_interest = ded["24b"]
-        net_rental    = max(-200000, (rental_gross * 0.7) - home_interest)  # Loss capped at 2L
-
-        # 3. Capital Gains (taxed separately)
-        cg_tax, cg_income = self._calc_cg(cg_data, regime="old")
-
-        # 4. Agriculture (exemption under Sec 10(1))
-        agri_exempt = agri  # Fully exempt; only used for rate purposes
-
-        # 5. Chapter VI-A Deductions
-        d80d_self   = min(ded["80d"],   50000 if is_senior else 25000)
-        d80d_par    = min(ded["80d_p"], 50000)  # Parents always get 50k cap
-        d80tta      = ded["80tta"] if not is_senior else 0
-        d80ttb      = ded["80ttb"] if is_senior else 0
-        d80gg       = self._calc_80gg(ded["80gg"], net_salary + business + net_rental + other_income,
-                                      ded["hra"])
-        total_vi_a  = (ded["80c"] + d80d_self + d80d_par + ded["80e"] + ded["80g"] +
-                       ded["80eea"] + ded["nps"] + d80tta + d80ttb + d80gg)
-
-        # 6. Gross Total Income
-        gti = net_salary + business + net_rental + other_income
-        taxable_normal = max(0, gti - total_vi_a)
-
-        # 7. Slab Tax
-        tax_normal = self._slab_old(taxable_normal, is_senior, is_vsr)
-
-        # 8. 87A Rebate (Old Regime: rebate if taxable ≤ 5L)
-        rebate = min(tax_normal, 12500) if taxable_normal <= 500000 else 0
-        tax_normal = max(0, tax_normal - rebate)
-
-        # 9. Surcharge (correct brackets FY 2024-25)
-        total_income_for_surcharge = taxable_normal + cg_income
-        surcharge = self._calc_surcharge(tax_normal, cg_tax, total_income_for_surcharge)
-
-        # 10. Cess 4%
-        total_tax = (tax_normal + cg_tax + surcharge) * 1.04
-
-        res.total_tax      = round(total_tax, 2)
-        res.taxable_income = taxable_normal + cg_income
-
-        res.income_details = [
-            {"source": "Salary (after Std.Ded)", "amount": net_salary,    "section": "16(ia)", "status": "Valid"},
-            {"source": "Business / Profession",  "amount": business,      "section": "PGBP",   "status": "Valid"},
-            {"source": "House Property (Net)",   "amount": net_rental,    "section": "24",     "status": "Valid"},
-            {"source": "Capital Gains",          "amount": cg_income,     "section": "Special","status": "Valid"},
-            {"source": "Other Sources",          "amount": other_income,  "section": "56",     "status": "Valid"},
-            {"source": "Agriculture (Exempt)",   "amount": agri_exempt,   "section": "10(1)",  "status": "Exempt"},
-        ]
-
-        res.deduction_details = [
-            {"category": "Standard Deduction",      "amount": std_ded,       "section": "16(ia)",   "status": "Valid"},
-            {"category": "80C Investments",          "amount": ded["80c"],    "section": "80C",      "status": "Capped" if ded["80c"] >= 150000 else "Valid"},
-            {"category": "Health Insurance (Self)",  "amount": d80d_self,     "section": "80D",      "status": "Valid"},
-            {"category": "Health Insurance (Parents)","amount": d80d_par,     "section": "80D",      "status": "Valid"},
-            {"category": "Education Loan Interest",  "amount": ded["80e"],    "section": "80E",      "status": "Valid"},
-            {"category": "Donations (80G)",          "amount": ded["80g"],    "section": "80G",      "status": "Valid"},
-            {"category": "NPS (Extra 50k)",          "amount": ded["nps"],    "section": "80CCD(1B)","status": "Valid"},
-            {"category": "Home Loan Interest",       "amount": home_interest, "section": "24b",      "status": "Capped" if ded["24b"] >= 200000 else "Valid"},
-            {"category": "Affordable Housing",       "amount": ded["80eea"],  "section": "80EEA",    "status": "Valid"},
-            {"category": "Savings Interest (80TTA)", "amount": d80tta,        "section": "80TTA",    "status": "Valid"},
-            {"category": "FD Interest Sr.Cit(80TTB)","amount": d80ttb,        "section": "80TTB",    "status": "Valid"},
-            {"category": "Rent Paid (80GG)",         "amount": d80gg,         "section": "80GG",     "status": "Valid"},
-            {"category": "87A Rebate",               "amount": rebate,        "section": "87A",      "status": "Valid"},
-        ]
-
-        # ELI5 Explanations
-        res.explanations = [
-            Explanation("Standard Deduction", "Flat exemption for salaried.", "Sec 16(ia)", std_ded,
-                        eli5="Government gives ₹50k 'free pass' on salary — no questions asked!"),
-            Explanation("Section 80C", "Investments in PF/LIC/ELSS.", "80C", ded["80c"],
-                        eli5=f"You saved by investing! Max ₹1.5L exempt. Your invested: ₹{ded['80c']:,.0f}"),
-            Explanation("87A Rebate", "Tax rebate if income ≤ ₹5L (Old Regime).", "87A", rebate,
-                        eli5="If your total taxable income is ≤ ₹5L, you get full tax refund of up to ₹12,500!"),
-            Explanation("Health Insurance", "Premium for self + parents.", "80D", d80d_self + d80d_par,
-                        eli5="Government subsidizes your health cover — buy insurance, pay less tax!"),
-            Explanation("Education Loan", "Interest on higher education loan.", "80E", ded["80e"],
-                        eli5="Studying for a degree? Your loan interest is fully deductible — no cap!"),
-            Explanation("NPS", "Extra 80CCD(1B) deduction over 80C.", "80CCD(1B)", ded["nps"],
-                        eli5="Invest in National Pension System for extra ₹50k saving beyond the 1.5L limit!"),
-            Explanation("Donations", "Donations to approved funds.", "80G", ded["80g"],
-                        eli5="Donate to PM Fund or registered NGOs — 50% to 100% deductible!"),
-        ]
+        std_ded = 50000 if salary > 0 else 0
+        hra_ex = self._calc_hra(salary, ded["hra"])
+        
+        gross = salary + business + rental + other + agri
+        res.gross_total_income = round(gross, 2)
+        
+        total_ded = std_ded + hra_ex + ded["80c"] + ded["80d"] + ded["nps"] + ded["80g"] + prof_tax
+        res.total_deductions = round(total_ded, 2)
+        
+        taxable = max(0, gross - total_ded)
+        cg_tax, cg_inc = self._calc_cg(cg_data, regime="old")
+        
+        tax_norm, slabs = self._slab_old(taxable, is_senior, is_vsr)
+        res.slabs_breakdown = slabs
+        
+        rebate = min(tax_norm, 12500) if taxable <= 500000 else 0
+        tax_norm = max(0, tax_norm - rebate)
+        
+        surcharge = self._apply_marginal_relief(tax_norm, cg_tax, taxable + cg_inc, "old")
+        total_tax = (tax_norm + cg_tax + surcharge) * 1.04
+        
+        res.total_tax = round(total_tax, 2)
+        res.taxable_income = round(taxable + cg_inc, 2)
+        
+        # --- DYNAMIC ITEMIZATION ---
+        res.income_details = []
+        if salary > 0: res.income_details.append({"source": "Gross Salary", "amount": salary, "section": "17(1)", "status": "Reported"})
+        if hra_ex > 0: res.income_details.append({"source": "HRA Exemption", "amount": hra_ex, "section": "10(13A)", "status": "Exempt"})
+        if business > 0: res.income_details.append({"source": "Business Income", "amount": business, "section": "PGBP", "status": "Taxable"})
+        if rental > 0: res.income_details.append({"source": "Rental Income", "amount": rental, "section": "24", "status": "Taxable"})
+        
+        res.explanations = []
+        if ded["80c"] > 0: res.explanations.append(Explanation("Section 80C", "PF/LIC/ELSS aggregation.", "80C", min(150000, ded["80c"])))
+        if ded["80d"] > 0: res.explanations.append(Explanation("Section 80D", "Health Insurance.", "80D", ded["80d"]))
+        if ded["nps"] > 0: res.explanations.append(Explanation("Section 80CCD", "NPS Contribution.", "80CCD", ded["nps"]))
+        
         return res
 
-    # ------------------------------------------------------------------
-    def _calc_new(self, salary, business, agri, rental_gross, other_income,
-                  cg_data, is_senior) -> TaxResult:
+    def _calc_new(self, salary, business, agri, rental, other, cg_data, is_senior) -> TaxResult:
         res = TaxResult()
-        std_ded     = 75000 if salary > 0 else 0  # Enhanced std. ded. in new regime FY 24-25
-        cg_tax, cg_income = self._calc_cg(cg_data, regime="new")
-        gross       = salary + business + (rental_gross * 0.7) + other_income
-        taxable     = max(0, gross - std_ded)
-        tax         = self._slab_new(taxable)
-
-        # 87A Rebate in New Regime: if taxable ≤ 7L
-        rebate      = min(tax, 25000) if taxable <= 700000 else 0
-        tax         = max(0, tax - rebate)
-
-        surcharge   = self._calc_surcharge(tax, cg_tax, taxable + cg_income)
-        total_tax   = (tax + cg_tax + surcharge) * 1.04
-
-        res.total_tax      = round(total_tax, 2)
-        res.taxable_income = taxable + cg_income
-        res.income_details = [{"source": "Total Gross Income", "amount": gross,    "section": "All", "status": "Valid"}]
-        res.deduction_details = [
-            {"category": "Standard Deduction", "amount": std_ded, "section": "16(ia)", "status": "Valid"},
-            {"category": "87A Rebate",         "amount": rebate,  "section": "87A",    "status": "Valid"},
-        ]
+        std_ded = 75000 if salary > 0 else 0
+        cg_tax, cg_inc = self._calc_cg(cg_data, regime="new")
+        
+        gross = salary + business + (rental * 0.7) + other
+        res.gross_total_income = round(gross, 2)
+        
+        taxable = max(0, gross - std_ded)
+        res.total_deductions = round(std_ded, 2)
+        
+        tax, slabs = self._slab_new(taxable)
+        res.slabs_breakdown = slabs
+        
+        rebate = min(tax, 25000) if taxable <= 700000 else 0
+        tax = max(0, tax - rebate)
+        
+        surcharge = self._apply_marginal_relief(tax, cg_tax, taxable + cg_inc, "new")
+        res.total_tax = round((tax + cg_tax + surcharge) * 1.04, 2)
+        res.taxable_income = round(taxable + cg_inc, 2)
+        
+        # --- NEW REGIME BREAKDOWN ---
+        res.income_details = []
+        if salary > 0: 
+            res.income_details.append({"source": "Gross Salary", "amount": salary, "section": "17(1)", "status": "Reported"})
+            res.income_details.append({"source": "Standard Deduction", "amount": std_ded, "section": "16(ia)", "status": "Deducted"})
+        if business > 0: res.income_details.append({"source": "Business Income", "amount": business, "section": "PGBP", "status": "Taxable"})
+        
+        res.explanations = [Explanation("Section 115BAC", "Simplified New Regime default.", "115BAC", 0, eli5="Lower rates but no exemptions.")]
         return res
 
-    # ------------------------------------------------------------------
+    def _apply_marginal_relief(self, tax, cg_tax, income, regime) -> float:
+        total_tax_base = tax + cg_tax
+        if income <= 5000000: return 0
+        
+        rate = 0.10 if income <= 10000000 else 0.15 if income <= 20000000 else 0.25 if (regime=="new" or income <= 50000000) else 0.37
+        surcharge = total_tax_base * rate
+        
+        # Marginal Relief Check
+        return min(surcharge, max(0, income - 5000000))
+
     def _calc_cg(self, cg_data: list, regime: str):
-        cg_tax, cg_income = 0.0, 0.0
+        tax, inc = 0.0, 0.0
         for cg in cg_data:
-            amt = float(cg.get("amount", 0))
-            cg_income += amt
+            a = float(cg.get("amount", 0)); inc += a
             t = cg.get("type", "")
-            holding = cg.get("holding", "unknown")
-            if t == "equity_ltcg":
-                cg_tax += max(0, amt - 125000) * 0.125
-            elif t == "equity_stcg":
-                cg_tax += amt * 0.20
-            elif t == "property_cg":
-                rate = 0.125 if holding == "long" else 0.30
-                cg_tax += amt * rate
-            elif t == "debt_ltcg":
-                cg_tax += amt * 0.20  # Indexed, simplified
-            elif t == "debt_stcg":
-                cg_tax += amt * 0.30
-        return cg_tax, cg_income
+            if t == "equity_ltcg": tax += max(0, a - 125000) * 0.125
+            elif t == "equity_stcg": tax += a * 0.20
+            elif t == "property_cg": tax += a * (0.125 if regime=="new" else 0.20)
+        return tax, inc
 
-    def _calc_surcharge(self, tax_normal: float, cg_tax: float, total_income: float) -> float:
-        """Correct FY 2024-25 surcharge brackets."""
-        total_tax = tax_normal + cg_tax
-        if total_income > 50_000_000:   rate = 0.37  # 3.7 Cr+
-        elif total_income > 20_000_000: rate = 0.25  # 2 Cr+
-        elif total_income > 10_000_000: rate = 0.15  # 1 Cr+
-        elif total_income > 5_000_000:  rate = 0.10  # 50L+
-        else: rate = 0.0
-        return total_tax * rate
-
-    def _calc_80gg(self, ded_80gg: float, adj_total: float, hra_claimed: float) -> float:
+    def _calc_80gg(self, ded_80gg, adj_total, hra_claimed):
         if hra_claimed > 0 or ded_80gg <= 0: return 0
         return min(60000, 0.25 * adj_total, max(0, ded_80gg - 0.1 * adj_total))
 
-    def _slab_old(self, val: float, is_senior: bool, is_vsr: bool) -> float:
-        t = 0.0
-        exempt = 500000 if is_vsr else 300000 if is_senior else 250000
-        if val > 1000000: t += (val - 1000000) * 0.30; val = 1000000
-        if val > 500000:  t += (val - 500000) * 0.20;  val = 500000
-        if val > exempt:  t += (val - exempt) * 0.05
-        return t
+    def _calc_hra(self, salary, hra_claimed):
+        if salary <= 0 or hra_claimed <= 0: return 0
+        # Industrial standard: 40% of salary as baseline for non-metro
+        baseline = salary * 0.4
+        return min(baseline, hra_claimed, max(0, hra_claimed - 0.1 * salary))
 
-    def _slab_new(self, val: float) -> float:
-        t = 0.0
-        if val > 1500000: t += (val - 1500000) * 0.30; val = 1500000
-        if val > 1200000: t += (val - 1200000) * 0.20; val = 1200000
-        if val > 1000000: t += (val - 1000000) * 0.15; val = 1000000
-        if val > 700000:  t += (val - 700000) * 0.10;  val = 700000
-        if val > 300000:  t += (val - 300000) * 0.05
-        return t
+    def _slab_old(self, v, senior, vsr):
+        slabs = []
+        t = 0.0; rem = v; ex = 500000 if vsr else 300000 if senior else 250000
+        
+        if rem > 1000000:
+            tax = (rem-1000000)*0.3; t += tax
+            slabs.append({"range": "Above 10L", "rate": "30%", "income": rem-1000000, "tax": tax})
+            rem = 1000000
+        if rem > 500000:
+            tax = (rem-500000)*0.2; t += tax
+            slabs.append({"range": "5L - 10L", "rate": "20%", "income": rem-500000, "tax": tax})
+            rem = 500000
+        if rem > ex:
+            tax = (rem-ex)*0.05; t += tax
+            slabs.append({"range": f"{ex/100000}L - 5L", "rate": "5%", "income": rem-ex, "tax": tax})
+            rem = ex
+        slabs.append({"range": f"0 - {ex/100000}L", "rate": "0%", "income": rem, "tax": 0})
+        
+        return t, slabs
+
+    def _slab_new(self, v):
+        slabs = []
+        t = 0.0; rem = v
+        levels = [(1500000, 0.3, "Above 15L"), (1200000, 0.2, "12L - 15L"), 
+                  (1000000, 0.15, "10L - 12L"), (700000, 0.1, "7L - 10L"), 
+                  (300000, 0.05, "3L - 7L")]
+        
+        for limit, rate, label in levels:
+            if rem > limit:
+                tax = (rem-limit)*rate; t += tax
+                slabs.append({"range": label, "rate": f"{int(rate*100)}%", "income": rem-limit, "tax": tax})
+                rem = limit
+        slabs.append({"range": "0 - 3L", "rate": "0%", "income": rem, "tax": 0})
+        return t, slabs

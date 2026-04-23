@@ -7,6 +7,7 @@ import TaxReport from '@/components/TaxReport';
 export default function Home() {
   const [session, setSession] = useState<any>({});
   const [showReport, setShowReport] = useState(false);
+  const [activeView, setActiveView] = useState<'chat' | 'summary' | 'graph'>('chat');
 
   return (
     <main className="app-shell">
@@ -33,7 +34,11 @@ export default function Home() {
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div className="badge-luxe" style={{ marginBottom: '1rem', textAlign: 'center' }}>FY 2024-25</div>
           
-          <button className="premium-card" style={{ padding: '1rem', textAlign: 'left', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--primary)' }}>
+          <button 
+            className={`premium-card ${activeView === 'chat' ? 'active' : ''}`} 
+            style={{ padding: '1rem', textAlign: 'left', cursor: 'pointer', background: activeView === 'chat' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255,255,255,0.05)', border: activeView === 'chat' ? '1px solid var(--primary)' : '1px solid transparent' }}
+            onClick={() => setActiveView('chat')}
+          >
             <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600 }}>Active Session</span>
             <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-dim)' }}>Consulting now...</span>
           </button>
@@ -41,10 +46,16 @@ export default function Home() {
           <div style={{ marginTop: '2rem' }}>
             <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1rem' }}>Tools</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div 
+                style={{ fontSize: '0.85rem', color: activeView === 'summary' ? 'var(--primary)' : 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}
+                onClick={() => { setActiveView('summary'); setShowReport(true); }}
+              >
                 <span style={{ fontSize: '1.1rem' }}>📋</span> Tax Summary
               </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div 
+                style={{ fontSize: '0.85rem', color: activeView === 'graph' ? 'var(--primary)' : 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}
+                onClick={() => { setActiveView('graph'); setShowReport(true); }}
+              >
                 <span style={{ fontSize: '1.1rem' }}>📈</span> Savings Graph
               </div>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

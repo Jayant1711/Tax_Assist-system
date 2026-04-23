@@ -5,13 +5,13 @@ from typing import Dict, Any, List, Optional
 from tax_engine import TaxEngine
 from nlp_engine import NLPEngine
 from audit_logger import AuditLogger
+from session_lab import SessionLab
 import uvicorn
 import os
 import json
 
 app = FastAPI(title="Tax Assist AI - Deep Consultant")
 
-# Permissive CORS for Local Development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,32 +23,55 @@ app.add_middleware(
 nlp = NLPEngine()
 engine = TaxEngine()
 audit = AuditLogger()
+lab = SessionLab()
 
 class ChatRequest(BaseModel):
     message: str
     session: Dict[str, Any]
+
+def clean_json(obj):
+    if hasattr(obj, "__dict__"): return clean_json(obj.__dict__)
+    if isinstance(obj, dict): return {k: clean_json(v) for k, v in obj.items()}
+    if isinstance(obj, list): return [clean_json(i) for i in obj]
+    if hasattr(obj, "item"): return obj.item() # numpy handle
+    return obj
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks):
     # 1. Process Message
     result = nlp.process_message(request.message, request.session)
     
-    # 2. Prepare Audit Data (Calculate tax if needed)
+    # 2. Real-time Calculation (Insights)
     tax_result = None
-    if result["session"].get("phase") == "FINAL":
-        tax_result = engine.calculate_tax_advanced(result["session"])
-    
+    if result["session"].get("salary", 0) > 0 or result["session"].get("business", 0) > 0:
+        try:
+            tax_result = engine.calculate_tax_advanced(result["session"])
+        except Exception as e:
+            print(f"Calculation Error: {e}")
+
     # 3. Schedule Background Audit Log
+    sid = request.session.get("id", "default")
     background_tasks.add_task(
         audit.log_interaction,
-        session_id=request.session.get("id", "default"),
+        session_id=sid,
         input_text=request.message,
         response=result["response"],
         session_state=result["session"],
         tax_results=tax_result
     )
     
-    return result
+    # 4. Record to Industrial Black Box for Regression Auditing
+    lab.record_turn(sid, {
+        "input": request.message,
+        "response": result["response"],
+        "extracted": result.get("extracted"),
+        "plan": result.get("plan"),
+        "state": result["session"],
+        "audit": tax_result
+    })
+    
+    # Return everything for the frontend to render real-time
+    return clean_json({**result, "tax_report": tax_result})
 
 @app.get("/history/{sid}")
 async def get_history(sid: str):
