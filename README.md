@@ -96,39 +96,38 @@ For future engineering reference, the following optimized constants and hyper-pa
     └── src/components/     # ChatInterface (with Debug) & TaxReport
 ```
 
-## ⚙️ Installation & Setup
+## ⚙️ First-Time Setup & ANFIS Training
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
+Follow these steps to replicate the exact production environment and train the neuro-fuzzy engine on a new machine:
 
-### Backend Setup
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Start the server:
-   ```bash
-   python main.py
-   ```
+### **1. Clone & Environment Setup**
+```bash
+git clone https://github.com/Jayant1711/Tax_Assist-system.git
+cd Tax_Assist-system
+```
 
-### Frontend Setup
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+### **2. Backend: Install & Train ANFIS**
+The **ANFIS v3.5** engine requires a one-time training pass to calibrate its fuzzy membership functions:
+```bash
+cd backend
+pip install -r requirements.txt
+# Run the training suite (Optimized via EE-Bat + Adam)
+python anfis_trainer.py
+```
+*Note: This will generate `anfis_weights.json`, which is required for the audit engine to score efficiency.*
+
+### **3. Frontend: Install UI Dependencies**
+```bash
+cd ../frontend
+npm install
+```
+
+### **4. Launch the Industrial Stack**
+To start the full consulting dashboard:
+1. **Start Backend**: `cd backend && python main.py` (Port 8000)
+2. **Start Frontend**: `cd frontend && npm run dev` (Port 3000)
+
+---
 
 ## ⚖️ Disclaimer
 
