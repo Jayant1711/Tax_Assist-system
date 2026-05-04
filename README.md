@@ -113,13 +113,16 @@ cd backend
 pip install -r requirements.txt
 # Run the training suite (Optimized via EE-Bat + Adam)
 python anfis_trainer.py
+
+python main.py
 ```
 *Note: This will generate `anfis_weights.json`, which is required for the audit engine to score efficiency.*
 
-### **3. Frontend: Install UI Dependencies**
+### **3. Frontend: Install UI Dependencies(in new terminal)**
 ```bash
-cd ../frontend
+cd frontend
 npm install
+npm run dev
 ```
 
 ### **4. Launch the Industrial Stack**
