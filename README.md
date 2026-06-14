@@ -1,5 +1,4 @@
-> [!NOTE]
-> This entire project was engineered using AI assistance for **Blostem**.
+
 
 
 # Tax Assist AI (India) - Deep Consultant 🇮🇳
