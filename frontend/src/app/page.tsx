@@ -1,4 +1,5 @@
 'use client';
+// Summer internship project
 
 import React, { useState } from 'react';
 import ChatInterface from '@/components/ChatInterface';

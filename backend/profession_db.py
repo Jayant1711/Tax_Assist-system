@@ -1,3 +1,4 @@
+# Summer internship project
 """
 Profession Intelligence Engine
 Covers ~20,000+ professions via root-taxonomy + fuzzy matching.

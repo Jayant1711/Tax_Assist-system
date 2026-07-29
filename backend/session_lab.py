@@ -1,3 +1,4 @@
+# Summer internship project
 import json
 import os
 from datetime import datetime

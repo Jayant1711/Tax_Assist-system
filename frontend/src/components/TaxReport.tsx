@@ -1,4 +1,5 @@
 'use client';
+// Summer internship project
 
 import React, { useState, useEffect } from 'react';
 import SavingsGraph from './SavingsGraph';

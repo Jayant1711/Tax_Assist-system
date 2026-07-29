@@ -1,3 +1,4 @@
+# Summer internship project
 """
 Phase 2: Adam Gradient Refinement on best EE-BAT solution.
 Runs after anfis_trainer.py — loads weights, refines with numerical gradients.

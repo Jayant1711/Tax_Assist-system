@@ -1,3 +1,4 @@
+# Summer internship project
 """
 AI Models v10.0 — Massive Upgrade
 Fixes: Word-form numbers, expanded semantic categories, calibrated ANFIS,

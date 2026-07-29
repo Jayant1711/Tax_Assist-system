@@ -1,3 +1,4 @@
+# Summer internship project
 """
 NLP Engine v8.0
 Fixes: Word-form number support, 19-category attention, session deduplication,

@@ -193,3 +193,6 @@ Current production parameters:
   - Standard Deduction: ₹75,000 (New) | ₹50,000 (Old).
   - Rebate (87A): ₹7L (New) | ₹5L (Old).
   - Marginal Relief Threshold: ₹50,00,000.
+
+
+<!-- Summer internship project -->

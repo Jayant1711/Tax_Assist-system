@@ -1,3 +1,4 @@
+# Summer internship project
 from fastapi import FastAPI, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

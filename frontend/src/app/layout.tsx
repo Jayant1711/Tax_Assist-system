@@ -1,3 +1,4 @@
+// Summer internship project
 import type { Metadata } from "next";
 import "./globals.css";
 

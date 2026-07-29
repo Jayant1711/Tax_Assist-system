@@ -1,3 +1,4 @@
+// Summer internship project
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

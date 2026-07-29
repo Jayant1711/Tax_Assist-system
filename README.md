@@ -136,3 +136,8 @@ To start the full consulting dashboard:
 This tool is designed for assistance and informational purposes only. It is based on publicly available Indian tax rules for FY 2024-25 and does not constitute professional tax advice.
 
 ---
+
+---
+
+## 🎓 Project Origin
+This repository represents my **Summer Internship Project**, designed and developed to streamline tax analysis and compliance.

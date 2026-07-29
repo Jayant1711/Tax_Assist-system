@@ -1,3 +1,4 @@
+# Summer internship project
 import sys
 import os
 from nlp_engine import NLPEngine
