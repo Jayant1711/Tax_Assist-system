@@ -1,15 +1,22 @@
 # Summer internship project
-from fastapi import FastAPI, BackgroundTasks, Request, Response
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Dict, Any, List, Optional
 from tax_engine import TaxEngine
 from nlp_engine import NLPEngine
 from audit_logger import AuditLogger
 from session_lab import SessionLab
+from validation import is_valid_session_id
+import logging
+import math
 import uvicorn
 import os
 import json
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Tax Assist AI - Deep Consultant")
 
@@ -26,9 +33,110 @@ engine = TaxEngine()
 audit = AuditLogger()
 lab = SessionLab()
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # N1: never leak stack traces / exception details in the response body.
+    # The full traceback still goes to the server log (auditability).
+    logger.exception(
+        "Unhandled error on %s %s", request.method, request.url.path
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    # Reflection-amplification fix: the default handler echoes each error's
+    # 'input' field verbatim (a 100KB padded session came back as a ~100KB
+    # body), and it 500s outright when 'input' is inf/nan because
+    # JSONResponse refuses non-finite floats. Respond with loc/msg/type
+    # only, loc flattened to strings, capped at 20 entries.
+    errors = [
+        {
+            "loc": [str(part) for part in err.get("loc", ())],
+            "msg": err.get("msg", ""),
+            "type": err.get("type", ""),
+        }
+        for err in exc.errors()[:20]
+    ]
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Validation error", "errors": errors},
+    )
+
+# Income/deduction keys the engine reads numerically (N1): a client-supplied
+# non-numeric value here used to 500 inside float() before the try block.
+_SESSION_NUMERIC_KEYS = (
+    "salary", "business", "rental", "other_income", "agriculture",
+    "80c", "80d", "80d_parents", "80e", "80g", "80eea", "nps",
+    "80tta", "80ttb", "80gg", "80u_80dd", "80ddb", "24b", "hra",
+    "professional_tax",
+)
+
+_MAX_SESSION_BYTES = 100_000  # serialized session payload cap
+
+
+def _validate_session_payload(session: Dict[str, Any]) -> None:
+    """Hardening for client-supplied session state (H5/N1); raises ValueError."""
+    try:
+        payload_size = len(json.dumps(session, default=str))
+    except (TypeError, ValueError) as ser_err:
+        raise ValueError("session payload is not serializable") from ser_err
+    if payload_size > _MAX_SESSION_BYTES:
+        raise ValueError("session payload too large")
+
+    sid = session.get("id")
+    if sid is not None and not is_valid_session_id(sid):
+        raise ValueError("session.id must match [A-Za-z0-9_-]{4,64}")
+
+    for key in _SESSION_NUMERIC_KEYS:
+        if key in session:
+            value = session[key]
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"session.{key} must be numeric")
+            # Non-finite floats (inf/nan) would poison engine results and
+            # get persisted to the blackbox while the background audit write
+            # is skipped — reject them here so the state stays auditable.
+            # ints are always finite (math.isfinite would overflow on huge
+            # ints, so only floats are checked).
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"session.{key} must be a finite number")
+
+    if "capital_gains" in session:
+        cg = session["capital_gains"]
+        if not isinstance(cg, list):
+            raise ValueError("session.capital_gains must be a list")
+        for entry in cg:
+            if not isinstance(entry, dict):
+                raise ValueError("session.capital_gains entries must be objects")
+            amount = entry.get("amount", 0)
+            if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+                raise ValueError("session.capital_gains amounts must be numeric")
+            if isinstance(amount, float) and not math.isfinite(amount):
+                raise ValueError("session.capital_gains amounts must be finite")
+
+    if "age" in session:
+        age = session["age"]
+        if isinstance(age, bool) or not isinstance(age, int) or not (0 <= age <= 120):
+            raise ValueError("session.age must be an integer between 0 and 120")
+
+
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=4000)
     session: Dict[str, Any]
+
+    @field_validator("session", mode="after")
+    @classmethod
+    def _validate_session(cls, session: Dict[str, Any]) -> Dict[str, Any]:
+        # C6: reject traversal/absolute/non-ASCII ids at the API boundary
+        # (→ 422). session_lab still sanitizes as defense-in-depth, and the
+        # audit logger records the (sanitized) id either way.
+        _validate_session_payload(session)
+        return session
 
 def clean_json(obj):
     if hasattr(obj, "__dict__"): return clean_json(obj.__dict__)
@@ -44,7 +152,11 @@ async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks)
     
     # 2. Real-time Calculation (Insights)
     tax_result = None
-    if result["session"].get("salary", 0) > 0 or result["session"].get("business", 0) > 0:
+    has_income = any(
+        float(result["session"].get(k, 0) or 0) > 0
+        for k in ["salary", "business", "rental", "other_income", "agriculture"]
+    )
+    if has_income:
         try:
             tax_result = engine.calculate_tax_advanced(result["session"])
         except Exception as e:
@@ -76,6 +188,12 @@ async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks)
 
 @app.get("/history/{sid}")
 async def get_history(sid: str):
+    # C5 interim: history browsing is disabled by default (the audit log
+    # itself keeps being written regardless). Opt in explicitly by setting
+    # TAX_ENABLE_HISTORY to 1 / true / True. Read at request time so the
+    # flag can be flipped without a restart.
+    if os.environ.get("TAX_ENABLE_HISTORY") not in {"1", "true", "True"}:
+        raise HTTPException(status_code=404, detail="Not found")
     log_file = "logs/session_audit.json"
     if not os.path.exists(log_file):
         return []
@@ -87,11 +205,85 @@ async def get_history(sid: str):
     except:
         return []
 
+class CapitalGainItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: str = Field("", max_length=32)
+    amount: float = Field(0.0, ge=0, le=1e11)
+    holding: str = Field("unknown", max_length=32)
+
+    @field_validator("amount")
+    @classmethod
+    def _validate_amount_finite(cls, value: float) -> float:
+        # The ge/le constraints already reject inf/nan; this keeps the
+        # guarantee if the bounds are ever relaxed (non-finite engine input
+        # must never pass validation).
+        if not math.isfinite(value):
+            raise ValueError("amount must be a finite number")
+        return value
+
+
+class CalculateRequest(BaseModel):
+    """Validated /calculate payload (H5).
+
+    Aliases mirror the engine's raw dict keys ("80c", "24b", ...) so
+    model_dump(by_alias=True) hands TaxEngine exactly the key names it reads.
+    All fields are optional with neutral defaults so partial payloads keep
+    working as they did before validation existed.
+    """
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    salary: float = Field(0.0, ge=0, le=1e11)
+    business: float = Field(0.0, ge=0, le=1e11)
+    rental: float = Field(0.0, ge=0, le=1e11)
+    other_income: float = Field(0.0, ge=0, le=1e11)
+    agriculture: float = Field(0.0, ge=0, le=1e11)
+    age: Optional[int] = Field(None, ge=0, le=120)
+    capital_gains: List[CapitalGainItem] = Field(default_factory=list)
+
+    # Deduction fields — dumped back under the engine's original key names.
+    c80: float = Field(0.0, ge=0, le=1e11, alias="80c")
+    d80: float = Field(0.0, ge=0, le=1e11, alias="80d")
+    d80_parents: float = Field(0.0, ge=0, le=1e11, alias="80d_parents")
+    e80: float = Field(0.0, ge=0, le=1e11, alias="80e")
+    g80: float = Field(0.0, ge=0, le=1e11, alias="80g")
+    eea80: float = Field(0.0, ge=0, le=1e11, alias="80eea")
+    nps: float = Field(0.0, ge=0, le=1e11)
+    tta80: float = Field(0.0, ge=0, le=1e11, alias="80tta")
+    ttb80: float = Field(0.0, ge=0, le=1e11, alias="80ttb")
+    gg80: float = Field(0.0, ge=0, le=1e11, alias="80gg")
+    u80_dd80: float = Field(0.0, ge=0, le=1e11, alias="80u_80dd")
+    ddb80: float = Field(0.0, ge=0, le=1e11, alias="80ddb")
+    b24: float = Field(0.0, ge=0, le=1e11, alias="24b")
+    hra: float = Field(0.0, ge=0, le=1e11)
+    professional_tax: float = Field(0.0, ge=0, le=1e11)
+
+    profile: Optional[str] = Field(None, max_length=64)
+    has_parents: Optional[bool] = None
+    has_home_loan: Optional[bool] = None
+    pays_rent: Optional[bool] = None
+    id: Optional[str] = None
+
+    @field_validator("id")
+    @classmethod
+    def _validate_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not is_valid_session_id(value):
+            raise ValueError("id must match [A-Za-z0-9_-]{4,64}")
+        return value
+
+
 @app.post("/calculate")
-async def calculate_endpoint(data: Dict[str, Any]):
-    # Maintain existing calculator endpoint for the UI
-    results = engine.calculate_tax_advanced(data)
-    return results
+async def calculate_endpoint(req: CalculateRequest):
+    # Maintain existing calculator endpoint for the UI.
+    # by_alias → the engine sees its original keys ("80c", "24b", ...).
+    # exclude_unset → keys the client never sent stay absent, so the engine's
+    # own defaults keep applying exactly as before validation existed (e.g.
+    # the engine's internal professional_tax default of 2500 for salaries);
+    # injecting model defaults instead would silently change results.
+    results = engine.calculate_tax_advanced(
+        req.model_dump(by_alias=True, exclude_unset=True)
+    )
+    return clean_json(results)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
