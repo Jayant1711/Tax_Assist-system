@@ -54,3 +54,9 @@ def test_calculate_happy_path(client) -> None:
     assert "old_regime" in body
     assert "new_regime" in body
     assert "recommendation" in body
+    # Sprint 2 (ADR-008): results report the resolved rule-set identity.
+    # Step A3 flipped the registry default — an unpinned call now resolves
+    # FY 2025-26 (the matrix file pins both years explicitly).
+    assert body["tax_year"] == "2025-26"
+    assert body["assessment_year"] == "2026-27"
+    assert body["fy_label"] == "FY 2025-26 (AY 2026-27)"

@@ -31,7 +31,7 @@ def run_backend_benchmarks(n_cases=50000):
                 {"type": "equity_ltcg", "amount": random.randint(0, 500000)}
             ]
         }
-        res = engine.calculate_tax_advanced(data)
+        res = engine.calculate_tax_advanced(data, tax_year="fy_2024_25")  # FY 2024-25 pinned (Step A3)
         
         if i % 10000 == 0:
             print(f"Processed {i} cases...")

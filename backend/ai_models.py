@@ -270,14 +270,33 @@ class SemanticAttention:
                 ],
                 "neg": ["tier 2"]
             },
-            "hra": {
+            # Sprint 2 Step B: the legacy "hra" attention category is SPLIT
+            # into its two statutory legs — HRA RECEIVED (Rule 2A leg (a))
+            # and RENT PAID (leg (b) input). The rent-paid keyword family
+            # moves to rent_paid verbatim; the HRA-specific keywords form
+            # hra_received. Neither is an OVERWRITE category (both
+            # accumulate), so one sentence books both legs clause-locally
+            # ("I receive 3L HRA and pay 2L rent").
+            # neg families: "no hra"/"no rent" negations stay on both new
+            # categories as appropriate; "rent received" marks landlord
+            # income (the rental category), not an HRA/rent-paid amount;
+            # "rent" itself must NEVER enter hra_received.neg (it would
+            # kill "house rent allowance" via substring matching).
+            "hra_received": {
                 "pos": [
-                    "hra", "house rent allowance", "rent paid", "paying rent",
-                    "monthly rent paid", "rent to landlord", "house rent paid",
-                    "i pay rent", "i am paying rent", "paying house rent",
+                    "hra", "house rent allowance", "hra received",
+                    "hra from employer",
+                ],
+                "neg": ["no hra", "rent received"]
+            },
+            "rent_paid": {
+                "pos": [
+                    "rent paid", "paying rent", "monthly rent paid",
+                    "rent to landlord", "house rent paid", "i pay rent",
+                    "i am paying rent", "paying house rent",
                     "rented accommodation", "rent for house", "pay rent of",
-                    "rent per month", "monthly rent is", "rent is", "rent",
-                    "house rent", "flat rent", "apartment rent"
+                    "rent per month", "monthly rent is", "rent is",
+                    "house rent", "flat rent", "apartment rent", "rent"
                 ],
                 "neg": ["rent received", "own house", "no rent", "tenant"]
             },
@@ -417,7 +436,11 @@ class ReasoningAgent:
         ("80c",    "Ask about Section 80C investments (PPF, ELSS, PF, Life Insurance up to 1.5L)."),
         ("80d",    "Ask about health insurance (Section 80D)."),
         ("nps",    "Ask about NPS contribution (80CCD(1B) — extra 50k deduction)."),
-        ("hra",    "Ask if user pays rent (HRA exemption or 80GG)."),
+        # Sprint 2 Step B: the HRA slot needs the THREE statutory Rule 2A
+        # inputs — monthly rent, monthly HRA received, metro city. The step
+        # key stays "hra" (a step identifier); decide_next_step gates it on
+        # the three session keys.
+        ("hra",    "Ask about monthly rent paid, monthly HRA received and metro city (HRA exemption / 80GG)."),
         ("24b",    "Ask about home loan interest (Section 24b up to 2L)."),
         ("80g",    "Ask about donations/charity (Section 80G)."),
     ]
@@ -439,7 +462,15 @@ class ReasoningAgent:
         for key, desc in self.DISCOVERY_STEPS[1:]:
             if key == "24b" and not session.get("has_home_loan"):
                 continue
-            if key == "hra" and session.get("profile") == "Business Owner":
+            if key == "hra":
+                # Step B: the HRA step stays open until all three statutory
+                # inputs are collected (rent paid, HRA received, metro
+                # status). Business Owners skip it (no HRA exemption; the
+                # legacy skip rule is preserved).
+                if session.get("profile") == "Business Owner":
+                    continue
+                if any(session.get(k) is None for k in ("rent_paid", "hra_received", "is_metro")):
+                    return f"plan: {desc}"
                 continue
             if session.get(key) is None:
                 return f"plan: {desc}"

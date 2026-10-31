@@ -108,7 +108,7 @@ export default function TaxReport({ session, activeView }: Props) {
               TaxAssist AI · Computational Statement of Income
             </h1>
             <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '2px' }}>
-              Assessment Year: <strong>2025-26</strong> | Financial Year: <strong>2024-25</strong> | Direct Tax Advisory
+              {data?.fy_label ?? 'FY 2025-26 (AY 2026-27)'} | Direct Tax Advisory
             </div>
           </div>
           <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#64748b' }}>
@@ -122,7 +122,7 @@ export default function TaxReport({ session, activeView }: Props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', fontWeight: 700 }}>
-            Audit Output · AY 2025-26
+            Audit Output · {data?.fy_label ?? 'FY 2025-26 (AY 2026-27)'}
           </span>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
             Tax Assessment & Optimization Report

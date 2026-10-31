@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'TaxAssist AI — Smart Tax Consultant (India FY 2024-25)',
+  title: 'TaxAssist AI — Smart Tax Consultant (India FY 2025-26)',
   description: 'AI-powered Indian tax filing assistant with real-time ANFIS optimization and regime comparison',
 };
 

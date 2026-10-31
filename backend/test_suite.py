@@ -2,6 +2,11 @@
 """
 Comprehensive AI Model Test Suite
 Tests: NLP extraction, category mapping, tax calculation, conversation flow
+
+FY 2024-25 pinned; backend/tests/ is the authoritative suite (ADR-011).
+Block 5's data dicts carry "tax_year": "fy_2024_25" so the exact ground-
+truth figures below keep their pre-Sprint-2 meaning after Step A3 flipped
+the registry default to FY 2025-26.
 """
 import sys, json
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -123,7 +128,10 @@ attn_tests = [
     ("A13", "parents health insurance 30k",        0, 0,          None,             "80d_parents"),
     ("A14", "savings account interest 8k",         0, 0,          None,             "80tta"),
     ("A15", "agricultural income 5 lakhs",         0, 0,          None,             "agriculture"),
-    ("A16", "I pay rent of 20k per month",         0, 0,          None,             "hra"),
+    # Sprint 2 Step B (mechanical rename, documented): the legacy "hra"
+    # attention category was split into hra_received + rent_paid; the
+    # rent-paid keyword family moved to rent_paid, so A16 pins rent_paid.
+    ("A16", "I pay rent of 20k per month",         0, 0,          None,             "rent_paid"),
     ("A17", "tution fees for children 1.5 lakhs",  0, 0,          "Salaried",       "80c"),  # typo
     ("A18", "mediclaim premium 25k",               0, 0,          None,             "80d"),
     ("A19", "ELSS investment 80k",                 0, 0,          None,             "80c"),
@@ -252,33 +260,35 @@ check("C10a", sess.get("phase") == "FINAL", "/end triggers FINAL phase", got=ses
 # =====================================================================
 print("\n=== BLOCK 5: TAX ENGINE ACCURACY ===")
 
-# Ground truth calculated manually for FY 2024-25
+# Ground truth calculated manually for FY 2024-25 (pinned via the
+# "tax_year" key each dict carries; the call site passes it through).
 tax_tests = [
     # (test_id, data, expected_old, expected_new, tolerance)
-    ("T01", {"salary": 500_000},
+    ("T01", {"salary": 500_000, "tax_year": "fy_2024_25"},
      0, 0, 100),  # Below 5L: 0 tax (87A rebate)
 
     # T02: 7L salary — New regime: 87A rebate = 0 tax. Old: taxable ~6.47L (after std.ded 50k + prof.tax 2.5k)
     # Old: (6.47L - 2.5L exempt) = 0, 2.5-5L = 12.5k, 5-6.47L = 1.47L*20% = 29.4k
     # Total old = (6.47L-5L)*20% + (5L-2.5L)*5% = 29400 + 12500 = 41900 + cess
-    ("T02", {"salary": 700_000},
+    ("T02", {"salary": 700_000, "tax_year": "fy_2024_25"},
      41900 * 1.04, 0, 2000),  # allow tolerance for exact prof.tax
 
-    ("T03", {"salary": 1_200_000, "80c": 150_000},
+    ("T03", {"salary": 1_200_000, "80c": 150_000, "tax_year": "fy_2024_25"},
      # Old: (12L - 50k std - 1.5L 80c) = 10L taxable
      # 10L: 2.5L*0 + 2.5L*5% + 5L*20% = 12500+100000 = 112500 + cess
      112_500 * 1.04, None, 5000),
 
-    ("T04", {"salary": 5_000_000, "80c": 150_000, "80d": 25_000, "nps": 50_000},
+    ("T04", {"salary": 5_000_000, "80c": 150_000, "80d": 25_000, "nps": 50_000,
+             "tax_year": "fy_2024_25"},
      None, None, None),  # Just check no crash and old > 0
 
-    ("T05", {"salary": 10_000_000},
+    ("T05", {"salary": 10_000_000, "tax_year": "fy_2024_25"},
      None, None, None),  # Surcharge bracket test
 ]
 
 for tid, data, exp_old, exp_new, tol in tax_tests:
     try:
-        r = eng.calculate_tax_advanced(data)
+        r = eng.calculate_tax_advanced(data, data.get("tax_year"))
         old_t = r["old_regime"].total_tax
         new_t = r["new_regime"].total_tax
         if exp_old is not None and tol is not None:

@@ -97,7 +97,16 @@ class TestCalculateEndpointValidation:
             assert key in body
 
     def test_frontend_payload_shape_and_numbers_unchanged(self, client) -> None:
-        payload = {"id": "sid_x", "salary": 1800000, "80c": 150000, "profile": "Salaried"}
+        # Sprint 2 (ADR-008): pinned to fy_2024_25 (both here and in the
+        # reference below) so the numeric-parity check survives the Step A3
+        # default flip to fy_2025_26.
+        payload = {
+            "id": "sid_x",
+            "salary": 1800000,
+            "80c": 150000,
+            "profile": "Salaried",
+            "tax_year": "fy_2024_25",
+        }
         response = client.post("/calculate", json=payload)
         assert response.status_code == 200
         body = response.json()
@@ -105,10 +114,12 @@ class TestCalculateEndpointValidation:
             assert key in body
         # Numeric parity: the endpoint must compute exactly what the engine
         # computes on the raw payload (guards the engine-default handling,
-        # e.g. the internal professional_tax default for salaried users).
+        # e.g. the registry professional-tax default for salaried users).
         from main import engine
 
-        reference = engine.calculate_tax_advanced(dict(payload))
+        reference = engine.calculate_tax_advanced(
+            dict(payload), tax_year="fy_2024_25"
+        )
         assert body["old_regime"]["total_tax"] == reference["old_regime"].total_tax
         assert body["new_regime"]["total_tax"] == reference["new_regime"].total_tax
         assert body["recommendation"] == reference["recommendation"]
@@ -375,8 +386,65 @@ class TestCalculateRequestModel:
             CalculateRequest(id="../evil")
 
 
+class TestTaxYearValidation:
+    """Sprint 2 (ADR-008): the optional tax_year pin must reject unknown
+    registry keys with a clean 422 (no silent fallback) and round-trip a
+    valid key into the response's rule-set identity fields."""
+
+    def test_calculate_rejects_unknown_tax_year(self, client) -> None:
+        response = client.post(
+            "/calculate",
+            json={"salary": 500000, "tax_year": "fy_1999_00"},
+        )
+        assert response.status_code == 422
+        body = response.json()
+        assert any("fy_2024_25" in err["msg"] for err in body["errors"])
+
+    def test_calculate_accepts_registered_tax_year(self, client) -> None:
+        response = client.post(
+            "/calculate",
+            json={"salary": 500000, "tax_year": "fy_2024_25"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["tax_year"] == "2024-25"
+        assert body["fy_label"] == "FY 2024-25 (AY 2025-26)"
+
+    def test_calculate_without_tax_year_keeps_default(self, client) -> None:
+        # Step A3 flipped the registry default; an unpinned call resolves
+        # FY 2025-26 (fy_2024_25 remains available via an explicit pin).
+        response = client.post("/calculate", json={"salary": 500000})
+        assert response.status_code == 200
+        assert response.json()["tax_year"] == "2025-26"
+
+    def test_chat_rejects_unknown_tax_year_in_session(self, client) -> None:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "hi",
+                "session": {"id": "sid_ok", "tax_year": "fy_1999_00"},
+            },
+        )
+        assert response.status_code == 422
+
+    def test_chat_accepts_null_tax_year_in_session(self, client) -> None:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "hi",
+                "session": {"id": "sid_ok", "tax_year": None},
+            },
+        )
+        assert response.status_code == 200
+
+
 class TestHistoryEndpointGate:
-    """C5 interim: /history is 404 unless TAX_ENABLE_HISTORY opts in."""
+    """C5 interim: /history is 404 unless TAX_ENABLE_HISTORY opts in.
+
+    Sprint 2 Step F (mechanical adaptation): the enabled response is now
+    the documented {entries, corrupt_lines_skipped, has_more} envelope
+    instead of a bare list.
+    """
 
     def test_history_disabled_by_default(self, client, monkeypatch) -> None:
         monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
@@ -386,17 +454,25 @@ class TestHistoryEndpointGate:
 
     def test_history_enabled_with_env(self, client, monkeypatch) -> None:
         monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
-        # The endpoint filters by sid; an unknown sid yields [] whether or
-        # not the log file exists in cwd.
+        # The endpoint filters by sid; an unknown sid yields an empty page
+        # whether or not a log file exists in cwd.
         response = client.get("/history/history_probe_1")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "entries": [],
+            "corrupt_lines_skipped": 0,
+            "has_more": False,
+        }
 
     def test_history_enabled_with_true(self, client, monkeypatch) -> None:
         monkeypatch.setenv("TAX_ENABLE_HISTORY", "True")
         response = client.get("/history/history_probe_1")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "entries": [],
+            "corrupt_lines_skipped": 0,
+            "has_more": False,
+        }
 
     def test_history_stays_disabled_for_other_values(self, client, monkeypatch) -> None:
         monkeypatch.setenv("TAX_ENABLE_HISTORY", "yes")

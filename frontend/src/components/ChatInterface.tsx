@@ -95,7 +95,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
     {
       id: 'welcome',
       role: 'ai',
-      text: "Namaste! 🙏 I am your **AI Tax Consultant** for Indian Tax Laws (FY 2024-25 / AY 2025-26).\n\nLet's calculate your exact tax, optimize deductions, and choose between the **Old and New Regimes**.\n\nTo begin, what is your **profession or source of livelihood**?",
+      text: "Namaste! 🙏 I am your **AI Tax Consultant** for Indian Tax Laws (FY 2025-26 / AY 2026-27).\n\nLet's calculate your exact tax, optimize deductions, and choose between the **Old and New Regimes**.\n\nTo begin, what is your **profession or source of livelihood**?",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);

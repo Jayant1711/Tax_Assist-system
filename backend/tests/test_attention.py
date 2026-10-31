@@ -27,7 +27,10 @@ SCENARIOS = [
     ("A13", "parents health insurance 30k",        None,             "80d_parents"),
     ("A14", "savings account interest 8k",         None,             "80tta"),
     ("A15", "agricultural income 5 lakhs",         None,             "agriculture"),
-    ("A16", "I pay rent of 20k per month",         None,             "hra"),
+    # Sprint 2 Step B (mechanical rename, documented): the legacy "hra"
+    # attention category was split into hra_received + rent_paid; the
+    # rent-paid keyword family moved to rent_paid, so A16 pins rent_paid.
+    ("A16", "I pay rent of 20k per month",         None,             "rent_paid"),
     ("A17", "tution fees for children 1.5 lakhs",  "Salaried",       "80c"),  # typo
     ("A18", "mediclaim premium 25k",               None,             "80d"),
     ("A19", "ELSS investment 80k",                 None,             "80c"),

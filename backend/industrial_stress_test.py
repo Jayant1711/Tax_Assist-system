@@ -28,7 +28,7 @@ def stress_test():
             print(f"{k.upper()}: {v}")
             
     # Calculate
-    tax_report = engine.calculate_tax_advanced(session)
+    tax_report = engine.calculate_tax_advanced(session, tax_year="fy_2024_25")  # FY 2024-25 pinned (Step A3)
     print("\n[TAX AUDIT REPORT]")
     print(f"Taxable Income: INR {tax_report['old_regime'].taxable_income:,.0f}")
     print(f"Final Tax (Min): INR {min(tax_report['old_regime'].total_tax, tax_report['new_regime'].total_tax):,.0f}")

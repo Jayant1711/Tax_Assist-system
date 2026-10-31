@@ -237,9 +237,11 @@ def test_property_sale_noun_form_books_capital_gains() -> None:
 def test_capital_gains_gross_value_advisory() -> None:
     """C4c: the engine discloses the honest limitation that the declared
     amount is treated as the GAIN, on both regimes, whenever capital gains
-    exist."""
+    exist. (Sprint 2: tax_year pinned to the pre-Sprint-2 default
+    "fy_2024_25"; the advisory strings are year-invariant.)"""
     result = engine.calculate_tax_advanced(
-        {"capital_gains": [{"type": "equity_ltcg", "amount": 200_000}]}
+        {"capital_gains": [{"type": "equity_ltcg", "amount": 200_000}]},
+        tax_year="fy_2024_25",
     )
     for regime in ("old_regime", "new_regime"):
         assert any(
