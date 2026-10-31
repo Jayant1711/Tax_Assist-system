@@ -4,7 +4,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Dict, Any, List, Optional
 from tax_engine import TaxEngine
 from tax_rules import REGISTRY
@@ -70,14 +70,27 @@ async def validation_exception_handler(
 
 # Income/deduction keys the engine reads numerically (N1): a client-supplied
 # non-numeric value here used to 500 inside float() before the try block.
+# Sprint 2 Step D: "80eea" was REMOVED (the section is discontinued — the
+# key is rejected outright below, never silently ignored).
 _SESSION_NUMERIC_KEYS = (
     "salary", "business", "rental", "other_income", "agriculture",
-    "80c", "80d", "80d_parents", "80e", "80g", "80eea", "nps",
+    "80c", "80d", "80d_parents", "80e", "80g", "nps",
     "80tta", "80ttb", "80gg", "80u_80dd", "80ddb", "24b", "hra",
     "professional_tax",
 )
 
 _MAX_SESSION_BYTES = 100_000  # serialized session payload cap
+
+# Sprint 2 Step D: enum-strict session keys (security table). The 80U/80DD
+# disability category and the 80G donation category are string enums — any
+# other value (including numerics) is a 422, never a guess.
+_80U_80DD_CATEGORIES = ("none", "40_79", "80_plus")
+_80G_CATEGORIES = (
+    "cat_100_no_limit",
+    "cat_50_no_limit",
+    "cat_100_qualifying_limit",
+    "cat_50_qualifying_limit",
+)
 
 
 def _validate_session_payload(session: Dict[str, Any]) -> None:
@@ -108,10 +121,35 @@ def _validate_session_payload(session: Dict[str, Any]) -> None:
             if isinstance(value, float) and not math.isfinite(value):
                 raise ValueError(f"session.{key} must be a finite number")
 
+    if "80eea" in session:
+        # Sprint 2 Step D: the section is DISCONTINUED (only loans
+        # sanctioned before 1 April 2022 qualified) — the key is rejected
+        # outright on any presence (even null), never silently ignored.
+        raise ValueError(
+            "session.80eea is no longer accepted: Section 80EEA was "
+            "discontinued — only loans sanctioned before 1 April 2022 "
+            "qualified."
+        )
+
+    for key, allowed in (
+        ("80u_80dd_category", _80U_80DD_CATEGORIES),
+        ("80g_category", _80G_CATEGORIES),
+    ):
+        if key in session:
+            value = session[key]
+            if value is None:
+                continue  # explicit null = not yet collected (engine default)
+            if not isinstance(value, str) or value not in allowed:
+                raise ValueError(
+                    f"session.{key} must be one of: {', '.join(allowed)}"
+                )
+
     # Sprint 2 Step B (security table): the split HRA legs are numeric
     # 0..1e11 non-finite-reject rows; the legacy "hra" key keeps its
-    # unbounded numeric row above.
-    for key in ("hra_received", "rent_paid"):
+    # unbounded numeric row above. Sprint 2 Step D adds the 80DDB
+    # expenditure input to the same bounded row (it feeds a capped
+    # deduction, so it needs the same 0..1e11 + finite guarantees).
+    for key in ("hra_received", "rent_paid", "80ddb_expenditure"):
         if key in session:
             value = session[key]
             if value is None:
@@ -301,12 +339,14 @@ class CalculateRequest(BaseModel):
     capital_gains: List[CapitalGainItem] = Field(default_factory=list)
 
     # Deduction fields — dumped back under the engine's original key names.
+    # Sprint 2 Step D: the "80eea" alias is REMOVED (the section is
+    # discontinued); a client-supplied 80eea key is rejected outright by
+    # the mode="before" model validator below instead of being ignored.
     c80: float = Field(0.0, ge=0, le=1e11, alias="80c")
     d80: float = Field(0.0, ge=0, le=1e11, alias="80d")
     d80_parents: float = Field(0.0, ge=0, le=1e11, alias="80d_parents")
     e80: float = Field(0.0, ge=0, le=1e11, alias="80e")
     g80: float = Field(0.0, ge=0, le=1e11, alias="80g")
-    eea80: float = Field(0.0, ge=0, le=1e11, alias="80eea")
     nps: float = Field(0.0, ge=0, le=1e11)
     tta80: float = Field(0.0, ge=0, le=1e11, alias="80tta")
     ttb80: float = Field(0.0, ge=0, le=1e11, alias="80ttb")
@@ -324,6 +364,12 @@ class CalculateRequest(BaseModel):
     rent_paid: float = Field(0.0, ge=0, le=1e11)
     is_metro: Optional[bool] = None
     professional_tax: float = Field(0.0, ge=0, le=1e11)
+    # Sprint 2 Step D mirrors: the 80DDB expenditure input (bounded like
+    # the other numerics) and the two enum-strict category keys (None =
+    # not yet collected; the engine applies its disclosed defaults).
+    ddb_expenditure: float = Field(0.0, ge=0, le=1e11, alias="80ddb_expenditure")
+    u80_dd_category: Optional[str] = Field(None, alias="80u_80dd_category")
+    g80_category: Optional[str] = Field(None, alias="80g_category")
 
     profile: Optional[str] = Field(None, max_length=64)
     has_parents: Optional[bool] = None
@@ -341,6 +387,43 @@ class CalculateRequest(BaseModel):
     # fy_2025_26 — validate via REGISTRY, which is also the 422 message's
     # single source for the supported list.
     tax_year: Optional[str] = Field(None, max_length=32)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_removed_80eea(cls, data: Any) -> Any:
+        # Sprint 2 Step D: the 80eea field was REMOVED from this model —
+        # but extra="ignore" would silently swallow the key, so its
+        # presence is rejected outright (any value, even null) with the
+        # discontinuation message, mirroring the session validator.
+        if isinstance(data, dict) and "80eea" in data:
+            raise ValueError(
+                "80eea is no longer accepted: Section 80EEA was discontinued "
+                "— only loans sanctioned before 1 April 2022 qualified."
+            )
+        return data
+
+    @field_validator("u80_dd_category")
+    @classmethod
+    def _validate_u80_dd_category(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        if value not in _80U_80DD_CATEGORIES:
+            raise ValueError(
+                "80u_80dd_category must be one of: "
+                f"{', '.join(_80U_80DD_CATEGORIES)}"
+            )
+        return value
+
+    @field_validator("g80_category")
+    @classmethod
+    def _validate_g80_category(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        if value not in _80G_CATEGORIES:
+            raise ValueError(
+                "80g_category must be one of: " + ", ".join(_80G_CATEGORIES)
+            )
+        return value
 
     @field_validator("id")
     @classmethod

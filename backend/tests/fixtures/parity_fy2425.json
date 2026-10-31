@@ -61,6 +61,10 @@
       "commit": "91c7ea0",
       "description": "Step C (tax-expert rulings R-e/R-f, 2026-10-31): only the annotated cells were re-pinned \u2014 the Section 112A \u20b91,25,000 exemption is now deducted ONCE across the AGGREGATE of all equity_ltcg entries (12.5% on the excess) instead of per entry. STCG/property cells and every CG-income-derived pin are byte-identical to the A2 snapshot; verify with git diff."
     },
+    "s2d_update": {
+      "commit": "3a5d4dd",
+      "description": "Step D (tax-expert ruling R-g, 2026-10-31): only the annotated cells were re-pinned \u2014 Section 80G is category-driven, and an uncategorized donation defaults to category 4 (50% subject to the 10% adjusted-GTI qualifying limit) instead of booking the full declared amount. Every changed cell donates 1,00,000 uncategorized; the new-regime pins and all non-80G cells are byte-identical; verify with git diff."
+    },
     "scenario_count": 300,
     "seed": 24252025
   },
@@ -296,8 +300,8 @@
               "0%"
             ]
           ],
-          "taxable_income": 450000.0,
-          "total_deductions": 100000.0,
+          "taxable_income": 537500.0,
+          "total_deductions": 12500.0,
           "total_tax": 62400.0
         },
         "recommendation": "New Regime",
@@ -314,7 +318,8 @@
           }
         ],
         "other_income": 250000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -668,8 +673,8 @@
               "0%"
             ]
           ],
-          "taxable_income": 550000.0,
-          "total_deductions": 100000.0,
+          "taxable_income": 637500.0,
+          "total_deductions": 12500.0,
           "total_tax": 35750.0
         },
         "recommendation": "New Regime",
@@ -686,7 +691,8 @@
           }
         ],
         "other_income": 250000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -894,12 +900,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1597500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 300820.0
+          "taxable_income": 1647500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 316420.0
         },
         "recommendation": "New Regime",
-        "savings": 100620.0
+        "savings": 116220.0
       },
       "id": "oi250000_a65_sal1500k_cgNone_ded80g",
       "input": {
@@ -907,7 +913,8 @@
         "age": 65,
         "other_income": 250000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -1819,12 +1826,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1200000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 166400.0
+          "taxable_income": 1250000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 182000.0
         },
         "recommendation": "New Regime",
-        "savings": 62400.0
+        "savings": 78000.0
       },
       "id": "oi300000_a82_biz1000k_cgNone_ded80g",
       "input": {
@@ -1832,7 +1839,8 @@
         "age": 82,
         "business": 1000000,
         "other_income": 300000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -2088,12 +2096,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1700000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 233350.0
+          "taxable_income": 1750000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 248950.0
         },
         "recommendation": "New Regime",
-        "savings": 72800.0
+        "savings": 88400.0
       },
       "id": "oi400000_a82_biz1000k_cgEL400k_ded80g",
       "input": {
@@ -2107,7 +2115,8 @@
           }
         ],
         "other_income": 400000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -2229,8 +2238,8 @@
               "0%"
             ]
           ],
-          "taxable_income": 700000.0,
-          "total_deductions": 100000.0,
+          "taxable_income": 780000.0,
+          "total_deductions": 20000.0,
           "total_tax": 35750.0
         },
         "recommendation": "Old Regime",
@@ -2248,7 +2257,7 @@
         ],
         "other_income": 400000
       },
-      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT)"
+      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -2452,12 +2461,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 747500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 64480.0
+          "taxable_income": 802500.0,
+          "total_deductions": 97500.0,
+          "total_tax": 75920.0
         },
         "recommendation": "New Regime",
-        "savings": 30680.0
+        "savings": 42120.0
       },
       "id": "oi400000_a30_sal500k_cgNone_ded80g",
       "input": {
@@ -2465,7 +2474,8 @@
         "age": 30,
         "other_income": 400000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -3120,12 +3130,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 700000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 70200.0
+          "taxable_income": 775000.0,
+          "total_deductions": 25000.0,
+          "total_tax": 74100.0
         },
-        "recommendation": "Old Regime",
-        "savings": 2600.0
+        "recommendation": "New Regime",
+        "savings": 1300.0
       },
       "id": "oi500000_a30_none_cgES300k_ded80g",
       "input": {
@@ -3139,7 +3149,7 @@
         ],
         "other_income": 500000
       },
-      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT)"
+      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -3541,12 +3551,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1220000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 115310.0
+          "taxable_income": 1274000.0,
+          "total_deductions": 46000.0,
+          "total_tax": 126542.0
         },
         "recommendation": "New Regime",
-        "savings": 35880.0
+        "savings": 47112.0
       },
       "id": "oi500000_a30_rent600k_cgEL200k_x2_ded80g",
       "input": {
@@ -3565,7 +3575,7 @@
         "other_income": 500000,
         "rental": 600000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -3998,6 +4008,10 @@
           "gross_total_income": 1070000.0,
           "slab_shape": [
             [
+              "Above 10L",
+              "30%"
+            ],
+            [
               "5L - 10L",
               "20%"
             ],
@@ -4010,12 +4024,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1970000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 316160.0
+          "taxable_income": 2020000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 328640.0
         },
         "recommendation": "New Regime",
-        "savings": 123240.0
+        "savings": 135720.0
       },
       "id": "oi650000_a65_rent600k_cgProp1000k_ded80g",
       "input": {
@@ -4029,7 +4043,8 @@
         ],
         "other_income": 650000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -5300,12 +5315,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1347500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 181220.0
+          "taxable_income": 1397500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 196820.0
         },
         "recommendation": "New Regime",
-        "savings": 47320.0
+        "savings": 62920.0
       },
       "id": "oi700000_a82_sal500k_cgES300k_ded80g",
       "input": {
@@ -5319,7 +5334,8 @@
         ],
         "other_income": 700000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -5373,12 +5389,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1420000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 158990.0
+          "taxable_income": 1470000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 174590.0
         },
         "recommendation": "New Regime",
-        "savings": 52520.0
+        "savings": 68120.0
       },
       "id": "oi700000_a30_rent600k_cgEL200k_x2_ded80g",
       "input": {
@@ -5397,7 +5413,7 @@
         "other_income": 700000,
         "rental": 600000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -5508,12 +5524,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1047500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 118820.0
+          "taxable_income": 1097500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 134420.0
         },
         "recommendation": "New Regime",
-        "savings": 47320.0
+        "savings": 62920.0
       },
       "id": "oi700000_a82_sal500k_cgNone_ded80g",
       "input": {
@@ -5521,7 +5537,8 @@
         "age": 82,
         "other_income": 700000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -6115,12 +6132,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1042222.0,
-          "total_deductions": 100000.0,
-          "total_tax": 130173.26
+          "taxable_income": 1092222.0,
+          "total_deductions": 50000.0,
+          "total_tax": 145773.26
         },
         "recommendation": "New Regime",
-        "savings": 55986.63
+        "savings": 71586.63
       },
       "id": "oi722222_a30_rent600k_cgNone_ded80g",
       "input": {
@@ -6128,7 +6145,8 @@
         "age": 30,
         "other_income": 722222,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -7183,12 +7201,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2027777.0,
-          "total_deductions": 100000.0,
-          "total_tax": 348616.42
+          "taxable_income": 2077777.0,
+          "total_deductions": 50000.0,
+          "total_tax": 364216.42
         },
         "recommendation": "New Regime",
-        "savings": 96200.0
+        "savings": 111800.0
       },
       "id": "oi727777_a30_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -7207,7 +7225,7 @@
         ],
         "other_income": 727777
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -7339,12 +7357,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2627777.0,
-          "total_deductions": 100000.0,
-          "total_tax": 520866.42
+          "taxable_income": 2677777.0,
+          "total_deductions": 50000.0,
+          "total_tax": 536466.42
         },
         "recommendation": "New Regime",
-        "savings": 174200.0
+        "savings": 189800.0
       },
       "id": "oi727777_a30_biz1000k_cgProp1000k_ded80g",
       "input": {
@@ -7358,7 +7376,8 @@
           }
         ],
         "other_income": 727777
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -7642,12 +7661,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2475277.0,
-          "total_deductions": 152500.0,
-          "total_tax": 475236.42
+          "taxable_income": 2525277.0,
+          "total_deductions": 102500.0,
+          "total_tax": 490836.42
         },
         "recommendation": "New Regime",
-        "savings": 90220.0
+        "savings": 105820.0
       },
       "id": "oi727777_a82_sal1500k_cgEL400k_ded80g",
       "input": {
@@ -7661,7 +7680,8 @@
         ],
         "other_income": 727777,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -7816,12 +7836,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2075277.0,
-          "total_deductions": 152500.0,
-          "total_tax": 449886.42
+          "taxable_income": 2125277.0,
+          "total_deductions": 102500.0,
+          "total_tax": 465486.42
         },
         "recommendation": "New Regime",
-        "savings": 100620.0
+        "savings": 116220.0
       },
       "id": "oi727777_a65_sal1500k_cgNone_ded80g",
       "input": {
@@ -7829,7 +7849,8 @@
         "age": 65,
         "other_income": 727777,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -8040,12 +8061,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1147500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 160420.0
+          "taxable_income": 1197500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 176020.0
         },
         "recommendation": "New Regime",
-        "savings": 72020.0
+        "savings": 87620.0
       },
       "id": "oi800000_a65_sal500k_cgNone_ded80g",
       "input": {
@@ -8053,7 +8074,8 @@
         "age": 65,
         "other_income": 800000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -9323,12 +9345,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2747500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 573170.0
+          "taxable_income": 2797500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 588770.0
         },
         "recommendation": "New Regime",
-        "savings": 103220.0
+        "savings": 118820.0
       },
       "id": "oi1000000_a30_sal1500k_cgEL400k_ded80g",
       "input": {
@@ -9342,7 +9364,8 @@
         ],
         "other_income": 1000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -9614,12 +9637,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1200000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 145600.0
+          "taxable_income": 1250000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 156000.0
         },
         "recommendation": "New Regime",
-        "savings": 31200.0
+        "savings": 41600.0
       },
       "id": "oi1000000_a82_none_cgES300k_ded80g",
       "input": {
@@ -9632,7 +9655,8 @@
           }
         ],
         "other_income": 1000000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -10078,12 +10102,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2100000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 460200.0
+          "taxable_income": 2150000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 475800.0
         },
         "recommendation": "New Regime",
-        "savings": 96200.0
+        "savings": 111800.0
       },
       "id": "oi1200000_a30_biz1000k_cgNone_ded80g",
       "input": {
@@ -10091,7 +10115,8 @@
         "age": 30,
         "business": 1000000,
         "other_income": 1200000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -10315,12 +10340,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 1400000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 210600.0
+          "taxable_income": 1450000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 226200.0
         },
         "recommendation": "New Regime",
-        "savings": 65000.0
+        "savings": 80600.0
       },
       "id": "oi1200000_a30_none_cgES300k_ded80g",
       "input": {
@@ -10333,7 +10358,8 @@
           }
         ],
         "other_income": 1200000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -10551,12 +10577,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2847500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 649220.0
+          "taxable_income": 2897500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 664820.0
         },
         "recommendation": "New Regime",
-        "savings": 90220.0
+        "savings": 105820.0
       },
       "id": "oi1200000_a82_sal1500k_cgES300k_ded80g",
       "input": {
@@ -10570,7 +10596,8 @@
         ],
         "other_income": 1200000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -10771,19 +10798,20 @@
               "0%"
             ]
           ],
-          "taxable_income": 1100000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 145600.0
+          "taxable_income": 1150000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 161200.0
         },
         "recommendation": "New Regime",
-        "savings": 62400.0
+        "savings": 78000.0
       },
       "id": "oi1200000_a65_none_cgNone_ded80g",
       "input": {
         "80g": 100000,
         "age": 65,
         "other_income": 1200000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -11246,12 +11274,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2400000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 436800.0
+          "taxable_income": 2450000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 452400.0
         },
         "recommendation": "New Regime",
-        "savings": 161200.0
+        "savings": 176800.0
       },
       "id": "oi1500000_a82_none_cgProp1000k_ded80g",
       "input": {
@@ -11264,7 +11292,8 @@
           }
         ],
         "other_income": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -12120,12 +12149,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2800000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 586950.0
+          "taxable_income": 2850000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 602550.0
         },
         "recommendation": "New Regime",
-        "savings": 93600.0
+        "savings": 109200.0
       },
       "id": "oi1500000_a65_biz1000k_cgEL400k_ded80g",
       "input": {
@@ -12139,7 +12168,8 @@
           }
         ],
         "other_income": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -12275,12 +12305,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 3320000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 734240.0
+          "taxable_income": 3370000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 749840.0
         },
         "recommendation": "New Regime",
-        "savings": 171600.0
+        "savings": 187200.0
       },
       "id": "oi2000000_a65_rent600k_cgProp1000k_ded80g",
       "input": {
@@ -12294,7 +12324,8 @@
         ],
         "other_income": 2000000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -12609,12 +12640,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2647500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 597220.0
+          "taxable_income": 2697500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 612820.0
         },
         "recommendation": "New Regime",
-        "savings": 100620.0
+        "savings": 116220.0
       },
       "id": "oi2000000_a65_sal500k_cgES300k_ded80g",
       "input": {
@@ -12628,7 +12659,8 @@
         ],
         "other_income": 2000000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -12693,12 +12725,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 2347500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 537420.0
+          "taxable_income": 2397500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 553020.0
         },
         "recommendation": "New Regime",
-        "savings": 103220.0
+        "savings": 118820.0
       },
       "id": "oi2000000_a30_sal500k_cgNone_ded80g",
       "input": {
@@ -12706,7 +12738,8 @@
         "age": 30,
         "other_income": 2000000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -12768,19 +12801,20 @@
               "0%"
             ]
           ],
-          "taxable_income": 1900000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 397800.0
+          "taxable_income": 1950000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 413400.0
         },
         "recommendation": "New Regime",
-        "savings": 96200.0
+        "savings": 111800.0
       },
       "id": "oi2000000_a30_none_cgNone_ded80g",
       "input": {
         "80g": 100000,
         "age": 30,
         "other_income": 2000000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -13080,12 +13114,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 4347500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 1054820.0
+          "taxable_income": 4397500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 1070420.0
         },
         "recommendation": "New Regime",
-        "savings": 178620.0
+        "savings": 194220.0
       },
       "id": "oi2000000_a65_sal1500k_cgProp1000k_ded80g",
       "input": {
@@ -13099,7 +13133,8 @@
         ],
         "other_income": 2000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -13714,12 +13749,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 3700000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 867750.0
+          "taxable_income": 3750000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 883350.0
         },
         "recommendation": "New Regime",
-        "savings": 93600.0
+        "savings": 109200.0
       },
       "id": "oi2400000_a65_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -13738,7 +13773,7 @@
         ],
         "other_income": 2400000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -14132,12 +14167,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 4300000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 1040000.0
+          "taxable_income": 4350000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 1055600.0
         },
         "recommendation": "New Regime",
-        "savings": 171600.0
+        "savings": 187200.0
       },
       "id": "oi2400000_a65_biz1000k_cgProp1000k_ded80g",
       "input": {
@@ -14151,7 +14186,8 @@
           }
         ],
         "other_income": 2400000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -14213,12 +14249,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 4300000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 1042600.0
+          "taxable_income": 4350000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 1058200.0
         },
         "recommendation": "New Regime",
-        "savings": 174200.0
+        "savings": 189800.0
       },
       "id": "oi2400000_a30_biz1000k_cgProp1000k_ded80g",
       "input": {
@@ -14232,7 +14268,8 @@
           }
         ],
         "other_income": 2400000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -14795,12 +14832,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 5300000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 1503645.0
+          "taxable_income": 5350000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 1520805.0
         },
         "recommendation": "New Regime",
-        "savings": 102960.0
+        "savings": 120120.0
       },
       "id": "oi5000000_a65_none_cgEL400k_ded80g",
       "input": {
@@ -14813,7 +14850,8 @@
           }
         ],
         "other_income": 5000000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -14958,12 +14996,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 5647500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 1675102.0
+          "taxable_income": 5697500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 1692262.0
         },
         "recommendation": "New Regime",
-        "savings": 99242.0
+        "savings": 116402.0
       },
       "id": "oi5000000_a82_sal500k_cgES300k_ded80g",
       "input": {
@@ -14977,7 +15015,8 @@
         ],
         "other_income": 5000000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -15113,12 +15152,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 5720000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 1636349.0
+          "taxable_income": 5770000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 1653509.0
         },
         "recommendation": "New Regime",
-        "savings": 91520.0
+        "savings": 108680.0
       },
       "id": "oi5000000_a82_rent600k_cgEL200k_x2_ded80g",
       "input": {
@@ -15137,7 +15176,7 @@
         "other_income": 5000000,
         "rental": 600000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -15198,12 +15237,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 7347500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 2178462.0
+          "taxable_income": 7397500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 2195622.0
         },
         "recommendation": "New Regime",
-        "savings": 185042.0
+        "savings": 202202.0
       },
       "id": "oi5000000_a82_sal1500k_cgProp1000k_ded80g",
       "input": {
@@ -15217,7 +15256,8 @@
         ],
         "other_income": 5000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -15369,12 +15409,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 6347500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 1849562.0
+          "taxable_income": 6397500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 1866722.0
         },
         "recommendation": "New Regime",
-        "savings": 199342.0
+        "savings": 216502.0
       },
       "id": "oi5000000_a30_sal500k_cgProp1000k_ded80g",
       "input": {
@@ -15388,7 +15428,8 @@
         ],
         "other_income": 5000000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -15450,12 +15491,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 6300000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 1849705.0
+          "taxable_income": 6350000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 1866865.0
         },
         "recommendation": "New Regime",
-        "savings": 105820.0
+        "savings": 122980.0
       },
       "id": "oi5000000_a30_biz1000k_cgEL400k_ded80g",
       "input": {
@@ -15469,7 +15510,8 @@
           }
         ],
         "other_income": 5000000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -15923,12 +15965,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 5900001.0,
-          "total_deductions": 100000.0,
-          "total_tax": 1693120.34
+          "taxable_income": 5950001.0,
+          "total_deductions": 50000.0,
+          "total_tax": 1710280.34
         },
         "recommendation": "New Regime",
-        "savings": 188760.0
+        "savings": 205920.0
       },
       "id": "oi5000001_a65_none_cgProp1000k_ded80g",
       "input": {
@@ -15941,7 +15983,8 @@
           }
         ],
         "other_income": 5000001
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -16006,12 +16049,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 6347501.0,
-          "total_deductions": 152500.0,
-          "total_tax": 1961102.34
+          "taxable_income": 6397501.0,
+          "total_deductions": 102500.0,
+          "total_tax": 1978262.34
         },
         "recommendation": "New Regime",
-        "savings": 110682.0
+        "savings": 127842.0
       },
       "id": "oi5000001_a65_sal1500k_cgNone_ded80g",
       "input": {
@@ -16019,7 +16062,8 @@
         "age": 65,
         "other_income": 5000001,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -16340,12 +16384,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 5747501.0,
-          "total_deductions": 152500.0,
-          "total_tax": 1660087.34
+          "taxable_income": 5797501.0,
+          "total_deductions": 102500.0,
+          "total_tax": 1677247.34
         },
         "recommendation": "New Regime",
-        "savings": 113542.0
+        "savings": 130702.0
       },
       "id": "oi5000001_a30_sal500k_cgEL200k_x2_ded80g",
       "input": {
@@ -16364,7 +16408,7 @@
         "other_income": 5000001,
         "salary": 500000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -16508,12 +16552,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 6300001.0,
-          "total_deductions": 100000.0,
-          "total_tax": 1846845.34
+          "taxable_income": 6350001.0,
+          "total_deductions": 50000.0,
+          "total_tax": 1864005.34
         },
         "recommendation": "New Regime",
-        "savings": 102960.0
+        "savings": 120120.0
       },
       "id": "oi5000001_a65_biz1000k_cgEL400k_ded80g",
       "input": {
@@ -16527,7 +16571,8 @@
           }
         ],
         "other_income": 5000001
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -17167,19 +17212,20 @@
               "0%"
             ]
           ],
-          "taxable_income": 9900000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 3168880.0
+          "taxable_income": 9950000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 3186040.0
         },
         "recommendation": "New Regime",
-        "savings": 91520.0
+        "savings": 108680.0
       },
       "id": "oi10000000_a82_none_cgNone_ded80g",
       "input": {
         "80g": 100000,
         "age": 82,
         "other_income": 10000000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -17559,12 +17605,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 11747500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 3873395.5
+          "taxable_income": 11797500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 3891335.5
         },
         "recommendation": "New Regime",
-        "savings": 103753.0
+        "savings": 121693.0
       },
       "id": "oi10000000_a82_sal1500k_cgEL200k_x2_ded80g",
       "input": {
@@ -17583,7 +17629,7 @@
         "other_income": 10000000,
         "salary": 1500000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -17815,12 +17861,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 11900000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 3910920.0
+          "taxable_income": 11950000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 3928860.0
         },
         "recommendation": "New Regime",
-        "savings": 185380.0
+        "savings": 203320.0
       },
       "id": "oi10000000_a82_biz1000k_cgProp1000k_ded80g",
       "input": {
@@ -17834,7 +17880,8 @@
           }
         ],
         "other_income": 10000000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -17892,12 +17939,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 11300000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 3712832.5
+          "taxable_income": 11350000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 3730772.5
         },
         "recommendation": "New Regime",
-        "savings": 95680.0
+        "savings": 113620.0
       },
       "id": "oi10000000_a82_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -17916,7 +17963,7 @@
         ],
         "other_income": 10000000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -18203,12 +18250,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 10647501.0,
-          "total_deductions": 152500.0,
-          "total_tax": 3557203.36
+          "taxable_income": 10697501.0,
+          "total_deductions": 102500.0,
+          "total_tax": 3575143.36
         },
         "recommendation": "New Regime",
-        "savings": 115713.0
+        "savings": 133653.0
       },
       "id": "oi10000001_a65_sal500k_cgES300k_ded80g",
       "input": {
@@ -18222,7 +18269,8 @@
         ],
         "other_income": 10000001,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -18284,12 +18332,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 10720001.0,
-          "total_deductions": 100000.0,
-          "total_tax": 3516688.86
+          "taxable_income": 10770001.0,
+          "total_deductions": 50000.0,
+          "total_tax": 3534628.86
         },
         "recommendation": "New Regime",
-        "savings": 107640.0
+        "savings": 125580.0
       },
       "id": "oi10000001_a65_rent600k_cgEL200k_x2_ded80g",
       "input": {
@@ -18308,7 +18356,7 @@
         "other_income": 10000001,
         "rental": 600000
       },
-      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -18863,12 +18911,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 10720001.0,
-          "total_deductions": 100000.0,
-          "total_tax": 3516688.86
+          "taxable_income": 10770001.0,
+          "total_deductions": 50000.0,
+          "total_tax": 3534628.86
         },
         "recommendation": "New Regime",
-        "savings": 107640.0
+        "savings": 125580.0
       },
       "id": "oi10000001_a65_rent600k_cgEL400k_ded80g",
       "input": {
@@ -18882,7 +18930,8 @@
         ],
         "other_income": 10000001,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -19200,12 +19249,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 21347500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 8078525.0
+          "taxable_income": 21397500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 8098025.0
         },
         "recommendation": "New Regime",
-        "savings": 125775.0
+        "savings": 145275.0
       },
       "id": "oi20000000_a65_sal1500k_cgNone_ded80g",
       "input": {
@@ -19213,7 +19262,8 @@
         "age": 65,
         "other_income": 20000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -19523,12 +19573,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 20320000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 7269600.0
+          "taxable_income": 20370000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 7321600.0
         },
         "recommendation": "New Regime",
-        "savings": 27560.0
+        "savings": 79560.0
       },
       "id": "oi20000000_a82_rent600k_cgNone_ded80g",
       "input": {
@@ -19537,7 +19587,7 @@
         "other_income": 20000000,
         "rental": 600000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -20029,12 +20079,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 20900000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 7884760.0
+          "taxable_income": 20950000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 7923500.0
         },
         "recommendation": "New Regime",
-        "savings": 97760.0
+        "savings": 136500.0
       },
       "id": "oi20000000_a65_biz1000k_cgNone_ded80g",
       "input": {
@@ -20043,7 +20093,7 @@
         "business": 1000000,
         "other_income": 20000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -20101,19 +20151,20 @@
               "0%"
             ]
           ],
-          "taxable_income": 19900000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 6900920.0
+          "taxable_income": 19950000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 6918860.0
         },
         "recommendation": "New Regime",
-        "savings": 95680.0
+        "savings": 113620.0
       },
       "id": "oi20000000_a82_none_cgNone_ded80g",
       "input": {
         "80g": 100000,
         "age": 82,
         "other_income": 20000000
-      }
+      },
+      "note": "changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -20982,12 +21033,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 50747500.0,
-          "total_deductions": 152500.0,
-          "total_tax": 19922337.5
+          "taxable_income": 50797500.0,
+          "total_deductions": 102500.0,
+          "total_tax": 19974337.5
         },
         "recommendation": "New Regime",
-        "savings": 618475.0
+        "savings": 670475.0
       },
       "id": "oi50000000_a30_sal500k_cgEL200k_x2_ded80g",
       "input": {
@@ -21006,7 +21057,7 @@
         "other_income": 50000000,
         "salary": 500000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -21139,12 +21190,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 51300000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 20480687.5
+          "taxable_income": 51350000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 20532687.5
         },
         "recommendation": "New Regime",
-        "savings": 952575.0
+        "savings": 1004575.0
       },
       "id": "oi50000000_a82_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -21163,7 +21214,7 @@
         ],
         "other_income": 50000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -21953,12 +22004,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 51747501.0,
-          "total_deductions": 152500.0,
-          "total_tax": 20946088.54
+          "taxable_income": 51797501.0,
+          "total_deductions": 102500.0,
+          "total_tax": 20998088.54
         },
         "recommendation": "New Regime",
-        "savings": 1252225.65
+        "savings": 1304225.65
       },
       "id": "oi50000001_a82_sal1500k_cgEL400k_ded80g",
       "input": {
@@ -21973,7 +22024,7 @@
         "other_income": 50000001,
         "salary": 1500000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -22121,12 +22172,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 52347501.0,
-          "total_deductions": 152500.0,
-          "total_tax": 21551401.04
+          "taxable_income": 52397501.0,
+          "total_deductions": 102500.0,
+          "total_tax": 21603401.04
         },
         "recommendation": "New Regime",
-        "savings": 1749150.65
+        "savings": 1801150.65
       },
       "id": "oi50000001_a82_sal1500k_cgProp1000k_ded80g",
       "input": {
@@ -22141,7 +22192,7 @@
         "other_income": 50000001,
         "salary": 1500000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -22203,12 +22254,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 51300001.0,
-          "total_deductions": 100000.0,
-          "total_tax": 20493688.54
+          "taxable_income": 51350001.0,
+          "total_deductions": 50000.0,
+          "total_tax": 20545688.54
         },
         "recommendation": "New Regime",
-        "savings": 965575.65
+        "savings": 1017575.65
       },
       "id": "oi50000001_a65_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -22227,7 +22278,7 @@
         ],
         "other_income": 50000001
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -22288,12 +22339,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 50347501.0,
-          "total_deductions": 152500.0,
-          "total_tax": 19601401.04
+          "taxable_income": 50397501.0,
+          "total_deductions": 102500.0,
+          "total_tax": 19653401.04
         },
         "recommendation": "New Regime",
-        "savings": 338650.65
+        "savings": 390650.65
       },
       "id": "oi50000001_a82_sal500k_cgNone_ded80g",
       "input": {
@@ -22302,7 +22353,7 @@
         "other_income": 50000001,
         "salary": 500000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {
@@ -22522,12 +22573,12 @@
               "0%"
             ]
           ],
-          "taxable_income": 21300000.0,
-          "total_deductions": 100000.0,
-          "total_tax": 7948687.5
+          "taxable_income": 21350000.0,
+          "total_deductions": 50000.0,
+          "total_tax": 7968187.5
         },
         "recommendation": "New Regime",
-        "savings": 120575.0
+        "savings": 140075.0
       },
       "id": "oi20000000_a65_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -22546,7 +22597,7 @@
         ],
         "other_income": 20000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix); changed by S2-D: 80G category-driven default (R-g)"
     },
     {
       "expected": {

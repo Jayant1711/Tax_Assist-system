@@ -100,12 +100,20 @@ class DeductionCaps:
     still record their statutory caps for auditability; the engine's
     unchanged booking behavior is preserved in Step A1 and the caps become
     enforceable in a later step.
+
+    Sprint 2 Step D: sec_80eea is REMOVED from the schema (the section was
+    discontinued by its 31-Mar-2022 loan-sanction sunset — verification
+    record §6; the engine stops reading the key in the same step), and
+    sec_80d_parents splits into the base + senior pair (ruling i): the
+    engine books the 25,000 base until the parents_senior input lands in
+    Sprint 3, with the unverified seniority disclosed via an advisory.
     """
 
     sec_80c: float                          # 1,50,000
     sec_80d_self: float                     # 25,000 (below 60)
     sec_80d_self_senior: float              # 50,000 (60+)
-    sec_80d_parents: float                  # 50,000
+    sec_80d_parents: float                  # 25,000 base (parents below 60)
+    sec_80d_parents_senior: float           # 50,000 (either parent 60+)
     sec_80ccd_1b: float                     # 50,000 NPS extra
     sec_24b: float                          # 2,00,000 home-loan interest
     sec_80tta: float                        # 10,000 savings interest (below 60)
@@ -117,16 +125,12 @@ class DeductionCaps:
     sec_80gg_rent_excess_pct: float         # rent minus 10% of total income
     sec_80u_80dd_40_79: float               # 75,000 (disability 40%-79%)
     sec_80u_80dd_80_plus: float             # 1,25,000 (severe disability 80%+)
-    sec_80ddb: float                        # 40,000 medical treatment
+    sec_80ddb: float                        # 40,000 medical treatment (patient below 60)
     sec_80ddb_senior: float                 # 1,00,000 senior medical treatment
-    # 80EEA is omittable from a year module (defaults to 0.0): the
-    # deduction was discontinued by its 31-Mar-2022 loan-sanction sunset,
-    # so FY 2025-26 carries no cap and the engine's unchanged
-    # min(declared, cap) booking yields no deduction. FY 2024-25 pins
-    # 1,50,000 for parity; removal from the engine/validators lands in
-    # Step D.
-    sec_80eea: float = 0.0                  # 1,50,000 affordable housing (pre-sunset years)
-    sec_80g: Optional[float] = None         # placeholder — engine books declared amount
+    # sec_80eea deliberately ABSENT (removed in Step D): the deduction was
+    # discontinued by its 31-Mar-2022 loan-sanction sunset and validate_rules
+    # rejects any year module that re-introduces the field.
+    sec_80g: Optional[float] = None         # placeholder — category model is engine-side
 
 
 @dataclass(frozen=True)
@@ -268,3 +272,19 @@ def validate_rules(rules: FYRules) -> None:
         )
     if not 0.0 <= rules.cess_rate < 1.0:
         raise ValueError("cess_rate must be within [0, 1)")
+
+    # Sprint 2 Step D: deduction-cap consistency. sec_80eea must stay
+    # REMOVED (the section was discontinued — a re-introduced field is a
+    # registry corruption, never a silent revival), and the parents' 80D
+    # pair must be a sane base <= senior ladder.
+    if hasattr(rules.deduction_caps, "sec_80eea"):
+        raise ValueError(
+            "deduction_caps: sec_80eea was removed in Step D (the section "
+            "was discontinued) — it must not be re-introduced"
+        )
+    caps = rules.deduction_caps
+    if caps.sec_80d_parents < 0 or caps.sec_80d_parents_senior < caps.sec_80d_parents:
+        raise ValueError(
+            "deduction_caps: sec_80d_parents_senior must be >= "
+            "sec_80d_parents >= 0"
+        )

@@ -122,6 +122,7 @@ def test_old_regime_identical_to_fy_2024_25() -> None:
     a, b = FY_2024_25.deduction_caps, FY_2025_26.deduction_caps
     for field in (
         "sec_80c", "sec_80d_self", "sec_80d_self_senior", "sec_80d_parents",
+        "sec_80d_parents_senior",
         "sec_80ccd_1b", "sec_24b", "sec_80tta", "sec_80tta_senior",
         "sec_80ttb", "sec_80e", "sec_80gg_annual_max", "sec_80gg_income_pct",
         "sec_80gg_rent_excess_pct", "sec_80u_80dd_40_79", "sec_80u_80dd_80_plus",
@@ -163,11 +164,11 @@ def test_surcharge_cg_cess_prof_tax() -> None:
     assert FY_2025_26.professional_tax_default == 0
     assert FY_2024_25.professional_tax_default == 2_500
     assert FY_2025_26.new_regime_cg_surcharge_cap == 0.15
-    # 80EEA is ABSENT for FY 2025-26 (31-Mar-2022 sunset): the omittable
-    # schema field defaults to 0 so the engine's unchanged min() booking
-    # yields no deduction. Collection/engine removal lands in Step D.
-    assert FY_2025_26.deduction_caps.sec_80eea == 0.0
-    assert FY_2024_25.deduction_caps.sec_80eea == 150_000
+    # 80EEA is REMOVED from the schema in Step D (31-Mar-2022 sunset): the
+    # field must not exist on EITHER year's caps — validate_rules rejects
+    # any re-introduction, and the engine/main.py reject the session key.
+    assert not hasattr(FY_2025_26.deduction_caps, "sec_80eea")
+    assert not hasattr(FY_2024_25.deduction_caps, "sec_80eea")
 
 
 # ── 2. New-regime 87A band — salaried ground truths ──────────────────────

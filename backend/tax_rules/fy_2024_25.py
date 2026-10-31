@@ -126,14 +126,17 @@ FY_2024_25 = FYRules(
         special_rate_excludes_87a=True,
     ),
 
-    # _calc_old deduction caps. 80E/80G/80U-80DD/80DDB caps are recorded for
-    # completeness; the current engine books the declared amounts for those
-    # sections (unchanged in Step A1 — parity first).
+    # _calc_old deduction caps. Step D: sec_80eea is REMOVED (the section
+    # was discontinued by its 31-Mar-2022 loan-sanction sunset — the engine
+    # stops reading the key in the same step), and the parents' 80D cap
+    # splits into the base + senior pair (ruling i; the engine books the
+    # 25,000 base until the Sprint 3 parents_senior input lands).
     deduction_caps=DeductionCaps(
         sec_80c=150000,
         sec_80d_self=25000,
         sec_80d_self_senior=50000,
-        sec_80d_parents=50000,
+        sec_80d_parents=25000,
+        sec_80d_parents_senior=50000,
         sec_80ccd_1b=50000,
         sec_24b=200000,
         sec_80tta=10000,
@@ -147,9 +150,7 @@ FY_2024_25 = FYRules(
         sec_80u_80dd_80_plus=125000,
         sec_80ddb=40000,
         sec_80ddb_senior=100000,
-        # 80EEA stays at 1,50,000 for FY 2024-25; the deduction (and this
-        # cap) is REMOVED in Step A3 per docs/tax-verification.md.
-        sec_80eea=150000,
+        # sec_80eea deliberately ABSENT (removed in Step D).
         sec_80g=None,
     ),
 

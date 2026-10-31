@@ -145,6 +145,17 @@ class NLPEngine:
         newly_extracted: List[str] = []
         already_mapped_this_turn: set = set()
 
+        # Sprint 2 Step D: 80EEA advisory-keyword check. The section was
+        # DISCONTINUED (loans must have been sanctioned before April 2022),
+        # so a mention surfaces the advisory WITHOUT any state mutation —
+        # no session write happens here (the session key itself is rejected
+        # with a 422 by main.py, and the engine books nothing for it).
+        if "80eea" in text_lower:
+            newly_extracted.append(
+                "Section 80EEA was discontinued (loans must have been "
+                "sanctioned before April 2022) — no deduction available."
+            )
+
         for sentence in sentences:
             s = sentence.strip()
             if not s:

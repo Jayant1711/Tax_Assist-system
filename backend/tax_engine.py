@@ -69,6 +69,42 @@ exemption computes to 0), and an unstated metro status assumes non-metro
 with the disclosure "Metro status not provided — non-metro 40% assumption
 applied" appended to the audit observations whenever an HRA computation
 ran. The new regime continues to ignore all three inputs.
+
+Sprint 2 Step D (deduction correctness — tax-expert rulings R-g/R-h/R-i,
+2026-10-31, docs/tax-verification.md §6): the three collect-and-drop
+deductions are now booked and disclosed.
+  - 80U/80DD is FLAT and category-driven: the new session key
+    "80u_80dd_category" ("none" | "40_79" | "80_plus") books 0 /
+    rules.sec_80u_80dd_40_79 / rules.sec_80u_80dd_80_plus (75,000 /
+    1,25,000). The legacy numeric "80u_80dd" amount is NEVER guessed into
+    a deduction — it books nothing and emits the verbatim legacy-amount
+    advisory (H4 fix).
+  - 80DDB is min(expenditure, tier) with the tier keyed on the SELF's age
+    as the patient proxy (R-h): 60+ -> rules.sec_80ddb_senior (1,00,000)
+    else rules.sec_80ddb (40,000); the new key is "80ddb_expenditure".
+    The patient-age advisory fires whenever the deduction runs (the
+    patient's real age is not collected). The legacy numeric "80ddb"
+    amount books nothing + the legacy-amount advisory.
+  - 80G (R-g) books rate x amount per category —
+    "80g_category" in {cat_100_no_limit, cat_50_no_limit,
+    cat_100_qualifying_limit, cat_50_qualifying_limit} — where categories
+    3/4 count the donation only up to the qualifying limit: 10% of the
+    ADJUSTED gross total income (GTI before Ch VI-A minus the special-
+    rate CG entries; see _80g_qualifying_limit). An absent/unknown
+    category defaults to category 4 + the default-category advisory; the
+    cash-mode cap advisory fires whenever the donation exceeds ₹2,000
+    (mode not collectible this sprint). The new regime books generic 80G
+    at 0 with the PM-CARES-class advisory.
+  - 80EEA is REMOVED (discontinued — only loans sanctioned before
+    1 April 2022 qualified): the ded entry is gone, main.py 422s the key
+    on both endpoints, and direct engine calls ignore it.
+  - 80D parents books the 25,000 base cap (rules.sec_80d_parents); the
+    50,000 senior-parent cap is registered (sec_80d_parents_senior) for
+    the Sprint 3 parents_senior input (ruling i) and the assumption is
+    disclosed via the seniority advisory whenever 80d_parents > 0.
+Every new advisory lands in the shared audit observations (never silent);
+tests/test_deductions.py pins the matrix, the GT12 composite cell and the
+no-silent-collection meta-table.
 """
 
 import logging
@@ -115,6 +151,43 @@ HRA_METRO_ASSUMPTION_OBSERVATION = (
     "Metro status not provided — non-metro 40% assumption applied"
 )
 
+# Sprint 2 Step D advisories (verbatim wording pinned by
+# tests/test_deductions.py). None of the deduction corrections below is
+# ever silent: the legacy numeric amounts, the patient-age proxy, the
+# unverified seniority, the default donation category, the cash cap and
+# the new-regime 80G exclusion each surface in the shared audit
+# observations.
+DED_80U_LEGACY_AMOUNT_OBSERVATION = (
+    "80U/80DD is a flat deduction based on disability category "
+    "(₹75,000 / ₹1,25,000) — the amount entered was not used; provide the "
+    "disability category."
+)
+DED_80DDB_LEGACY_AMOUNT_OBSERVATION = (
+    "80DDB is a tier-capped deduction on actual treatment expenditure "
+    "(₹40,000 limit, ₹1,00,000 where the treated person is 60 or older) — "
+    "the amount entered was not used; provide the treatment expenditure."
+)
+DED_80DDB_PATIENT_AGE_OBSERVATION = (
+    "If the treated person (e.g., a dependent parent) is 60 or older, the "
+    "limit is ₹1,00,000 — verify."
+)
+DED_80G_DEFAULT_CATEGORY_OBSERVATION = (
+    "Donation category not specified — computed as 50% subject to the 10% "
+    "qualifying limit; verify the donee's 80G registration (Form 10BE) and "
+    "category."
+)
+DED_80G_CASH_CAP_OBSERVATION = (
+    "Cash donations qualify only up to ₹2,000 — verify your payment mode."
+)
+DED_80G_NEW_REGIME_OBSERVATION = (
+    "Most 80G donations are not deductible under the new regime (specified "
+    "funds like PM CARES remain eligible)."
+)
+DED_80D_PARENTS_SENIOR_OBSERVATION = (
+    "If either parent is a senior citizen (60+), the parents' "
+    "health-insurance limit is ₹50,000."
+)
+
 @dataclass
 class Explanation:
     particular: str
@@ -142,6 +215,23 @@ class TaxResult:
     risk_level: str = "Low"
 
 class TaxEngine:
+    # Sprint 2 Step D (ruling R-g): the four 80G donation categories —
+    # (rate, subject to the qualifying limit). The registry's sec_80g
+    # placeholder stays None; the category MODEL is engine-side until a
+    # donee-registry input layer exists.
+    _80G_CATEGORY_RATES = {
+        "cat_100_no_limit": (1.0, False),
+        "cat_50_no_limit": (0.5, False),
+        "cat_100_qualifying_limit": (1.0, True),
+        "cat_50_qualifying_limit": (0.5, True),
+    }
+    # R-g default when the category is absent/unknown: category 4 (50%
+    # subject to the qualifying limit) — always disclosed via the
+    # default-category advisory in calculate_tax_advanced.
+    _80G_DEFAULT_CATEGORY = "cat_50_qualifying_limit"
+    # Statutory qualifying limit: 10% of the adjusted gross total income.
+    _80G_QUALIFYING_LIMIT_PCT = 0.10
+
     def __init__(self):
         self.anfis = ANFIS()
 
@@ -196,26 +286,70 @@ class TaxEngine:
         # Deductions & Caps (FY 2024-25, from the registry rules)
         caps = rules.deduction_caps
         sec_80d_self_limit = caps.sec_80d_self_senior if is_senior else caps.sec_80d_self
+        # Step D (ruling i): the parents' 80D cap is gated on the PARENTS'
+        # seniority — the 25,000 base applies until the parents_senior
+        # input lands (Sprint 3); the 50,000 senior cap is registered as
+        # sec_80d_parents_senior and the unverified seniority is disclosed
+        # via the advisory below.
         sec_80d_parents_limit = caps.sec_80d_parents
+
+        # Sprint 2 Step D — deduction correctness (H4/M1 fixes; rulings
+        # R-g/R-h/R-i, docs/tax-verification.md §6). The 80U/80DD and
+        # 80DDB amounts are no longer collected-and-dropped:
+        #   - 80U/80DD is FLAT and category-driven ("none" | "40_79" |
+        #     "80_plus" -> 0 / sec_80u_80dd_40_79 / sec_80u_80dd_80_plus).
+        #     The legacy numeric amount is never guessed into a deduction.
+        #   - 80DDB is min(expenditure, tier), tier keyed on the SELF's
+        #     age as the patient proxy (the patient's real age is not
+        #     collected — disclosed via the advisory below).
+        #   - 80EEA is REMOVED (discontinued — only loans sanctioned
+        #     before 1 April 2022 qualified): the API boundary 422s the
+        #     key and direct engine calls simply ignore it.
+        u80_category_raw = data.get("80u_80dd_category")
+        u80_category = u80_category_raw if u80_category_raw in ("40_79", "80_plus") else None
+        ded_80u = (
+            float(caps.sec_80u_80dd_40_79)
+            if u80_category == "40_79"
+            else float(caps.sec_80u_80dd_80_plus)
+            if u80_category == "80_plus"
+            else 0.0
+        )
+        legacy_80u_amount = float(data.get("80u_80dd", 0) or 0)
+
+        ddb_expenditure = max(0.0, float(data.get("80ddb_expenditure", 0) or 0))
+        ddb_tier = float(caps.sec_80ddb_senior if is_senior else caps.sec_80ddb)
+        ded_80ddb = min(ddb_expenditure, ddb_tier)
+        legacy_80ddb_amount = float(data.get("80ddb", 0) or 0)
+
+        g80_amount = float(data.get("80g", 0) or 0)
+        g80_category = data.get("80g_category")
 
         ded = {
             "80c":   min(float(data.get("80c", 0) or 0), caps.sec_80c),
             "80d":   min(float(data.get("80d", 0) or 0), sec_80d_self_limit),
             "80d_p": min(float(data.get("80d_parents", 0) or 0), sec_80d_parents_limit),
             "80e":   float(data.get("80e", 0) or 0), # No upper limit on interest
-            "80g":   float(data.get("80g", 0) or 0),
+            "80g":   g80_amount,
             # Step B: the two Rule 2A legs (the legacy "hra" entry is gone —
             # it lives on only through the mapping above).
             "hra_received": hra_leg,
             "rent_paid":    rent_leg,
             "24b":   min(float(data.get("24b", 0) or 0), caps.sec_24b), # Max 2L for self-occupied
-            "80eea": min(float(data.get("80eea", 0) or 0), caps.sec_80eea),
+            # Step D: 80EEA removed (discontinued) — the key is 422'd at
+            # the API boundary and ignored here.
             "nps":   min(float(data.get("nps", 0) or 0), caps.sec_80ccd_1b), # 80CCD(1B) extra 50k
             "80tta": min(float(data.get("80tta", 0) or 0), caps.sec_80tta) if not is_senior else 0,
             "80ttb": min(float(data.get("80ttb", 0) or 0), caps.sec_80ttb) if is_senior else 0,
             "80gg":  float(data.get("80gg", 0) or 0),
-            "80u":   float(data.get("80u_80dd", 0) or 0),
-            "80ddb": float(data.get("80ddb", 0) or 0),
+            # Step D: category/expenditure-driven amounts — the legacy
+            # numeric keys never book (see the block above).
+            "80u":   ded_80u,
+            "80ddb": ded_80ddb,
+            # Step D carriers for the _calc_old explanations (not
+            # deductions themselves).
+            "80u_category":      u80_category,
+            "80ddb_expenditure": ddb_expenditure,
+            "80g_category":      g80_category if isinstance(g80_category, str) else None,
         }
 
         prof_tax = float(data.get("professional_tax", rules.professional_tax_default if salary > 0 else 0) or 0)
@@ -319,6 +453,27 @@ class TaxEngine:
         if hra_leg > 0 and is_metro is None:
             observations.append(HRA_METRO_ASSUMPTION_OBSERVATION)
 
+        # Sprint 2 Step D: the deduction corrections are never silent
+        # (shared with both regimes, like the HRA metro disclosure above).
+        if legacy_80u_amount > 0:
+            observations.append(DED_80U_LEGACY_AMOUNT_OBSERVATION)
+        if legacy_80ddb_amount > 0:
+            observations.append(DED_80DDB_LEGACY_AMOUNT_OBSERVATION)
+        if ded_80ddb > 0:
+            # R-h: the tier above keyed on the SELF's age as the patient
+            # proxy — the treated person's real age is not collected.
+            observations.append(DED_80DDB_PATIENT_AGE_OBSERVATION)
+        if float(data.get("80d_parents", 0) or 0) > 0:
+            # R-i: the 50,000 senior-parent cap needs the parents_senior
+            # input (Sprint 3); the 25,000 base assumption is disclosed.
+            observations.append(DED_80D_PARENTS_SENIOR_OBSERVATION)
+        if g80_amount > 0:
+            if not (isinstance(g80_category, str) and g80_category in self._80G_CATEGORY_RATES):
+                observations.append(DED_80G_DEFAULT_CATEGORY_OBSERVATION)
+            if g80_amount > 2000:
+                observations.append(DED_80G_CASH_CAP_OBSERVATION)
+            observations.append(DED_80G_NEW_REGIME_OBSERVATION)
+
         old_res.risk_level = risk
         old_res.audit_observations = observations
         new_res.risk_level = risk
@@ -364,7 +519,13 @@ class TaxEngine:
         # never claim 80GG, even when the Rule 2A exemption computes to 0.
         ded_80gg = self._calc_80gg(ded["80gg"], gross, ded["hra_received"], rules)
 
-        # Full Chapter VI-A + Section 24(b) deductions
+        # Full Chapter VI-A + Section 24(b) deductions. Step D: the 80G
+        # booking is category- and qualifying-limit-driven (R-g), and the
+        # 80U/80DD + 80DDB amounts join the sum for the first time (they
+        # were collected and silently dropped before — the H4 bug).
+        g80_deduction, g80_reason = self._calc_80g(
+            ded["80g"], ded.get("80g_category"), gross, cg_data
+        )
         total_ded = (
             std_ded +
             hra_ex +
@@ -375,10 +536,12 @@ class TaxEngine:
             ded["80d_p"] +
             ded["nps"] +
             ded["80e"] +
-            ded["80g"] +
+            g80_deduction +
             ded_80gg +
             ded["80tta"] +
-            ded["80ttb"]
+            ded["80ttb"] +
+            ded["80u"] +
+            ded["80ddb"]
         )
         res.total_deductions = round(total_ded, 2)
 
@@ -448,8 +611,40 @@ class TaxEngine:
             res.explanations.append(Explanation("NPS Section 80CCD(1B)", "Additional voluntary contribution to National Pension System.", "80CCD(1B)", ded["nps"]))
         if ded["80e"] > 0:
             res.explanations.append(Explanation("Section 80E", "Interest on higher education loan.", "80E", ded["80e"]))
-        if ded["80g"] > 0:
-            res.explanations.append(Explanation("Section 80G", "Eligible charitable donations & relief funds.", "80G", ded["80g"]))
+        if g80_deduction > 0:
+            res.explanations.append(Explanation("Section 80G", g80_reason, "80G", g80_deduction))
+        if ded["80u"] > 0:
+            # Step D: the flat amount is booked from the disability
+            # CATEGORY; the reason names it (never a bare amount).
+            ded_caps = rules.deduction_caps
+            res.explanations.append(Explanation(
+                "Section 80U/80DD",
+                f"Flat deduction for disability category "
+                f"{ded['80u_category']} (₹{ded_caps.sec_80u_80dd_40_79:,.0f} / "
+                f"₹{ded_caps.sec_80u_80dd_80_plus:,.0f}) — actual expenditure "
+                f"is irrelevant.",
+                "80U/80DD",
+                ded["80u"],
+            ))
+        if ded["80ddb"] > 0:
+            ddb_tier = (
+                rules.deduction_caps.sec_80ddb_senior if is_senior
+                else rules.deduction_caps.sec_80ddb
+            )
+            res.explanations.append(Explanation(
+                "Section 80DDB",
+                f"Treatment expenditure ₹{ded['80ddb_expenditure']:,.0f} "
+                f"allowed up to the ₹{ddb_tier:,.0f} tier limit.",
+                "80DDB",
+                ded["80ddb"],
+            ))
+        if ded_80gg > 0:
+            res.explanations.append(Explanation(
+                "Section 80GG",
+                "Rent paid where no HRA is received (least-of test).",
+                "80GG",
+                ded_80gg,
+            ))
         if ded["80tta"] > 0:
             res.explanations.append(Explanation("Section 80TTA", "Savings bank account interest deduction.", "80TTA", ded["80tta"]))
         if ded["80ttb"] > 0:
@@ -674,6 +869,72 @@ class TaxEngine:
         caps = rules.deduction_caps
         # Least of: ₹5,000/month (₹60,000/yr), 25% of total income, rent paid minus 10% of total income
         return max(0.0, min(caps.sec_80gg_annual_max, caps.sec_80gg_income_pct * adj_total, ded_80gg - caps.sec_80gg_rent_excess_pct * adj_total))
+
+    def _calc_80g(self, amount: float, category: Optional[str], gross: float,
+                  cg_data: list) -> Tuple[float, str]:
+        """Section 80G deduction for one donation amount + category (Step D).
+
+        Ruling R-g (docs/sprint2-design.md): categories 1/2 book
+        rate x amount; categories 3/4 count the donation only up to the
+        qualifying limit — 10% of the ADJUSTED gross total income — and
+        book rate x min(amount, limit). An absent/unknown category falls
+        back to the default (category 4), which calculate_tax_advanced
+        discloses via the default-category advisory; the cash-mode cap
+        (₹2,000) is advisory-only this sprint (mode not collected).
+
+        Returns (deduction, explanation reason) — reason "" when nothing
+        is booked.
+        """
+        if amount <= 0:
+            return 0.0, ""
+        rates = self._80G_CATEGORY_RATES
+        known = category in rates
+        rate, applies_limit = rates.get(category, rates[self._80G_DEFAULT_CATEGORY])
+        category_label = category if known else self._80G_DEFAULT_CATEGORY
+        if not applies_limit:
+            return (
+                rate * amount,
+                f"Donation of ₹{amount:,.0f} eligible at {rate * 100:.0f}% under "
+                f"category {category_label} (no qualifying limit).",
+            )
+        adjusted_gti, limit = self._80g_qualifying_limit(gross, cg_data)
+        eligible = min(amount, limit)
+        reason = (
+            f"Donation of ₹{amount:,.0f} eligible at {rate * 100:.0f}% under "
+            f"category {category_label}; counted up to the qualifying limit of "
+            f"₹{limit:,.0f} ({self._80G_QUALIFYING_LIMIT_PCT * 100:.0f}% of the "
+            f"adjusted GTI ₹{adjusted_gti:,.0f})"
+            + (" — capped." if amount > limit else ".")
+        )
+        return rate * eligible, reason
+
+    @staticmethod
+    def _80g_qualifying_limit(gross: float, cg_data: list) -> Tuple[float, float]:
+        """R-g qualifying limit: 10% of the ADJUSTED gross total income.
+
+        Adjusted GTI = GTI (before Ch VI-A) minus the special-rate capital
+        gains — the aggregate Sec 112A equity LTCG, the Sec 112 property
+        LTCG and the Sec 111A equity STCG. The engine's `gross` EXCLUDES
+        the special-rate CG entries (they join only the special-rate tax
+        and taxable_income), so GTI before Ch VI-A is gross + every CG
+        amount and the adjustment strips the special-rate entries back
+        out; a non-special-rate CG type (none registered today) would be
+        slab income and stay in the adjusted GTI.
+
+        Returns (adjusted GTI, qualifying limit) — the limit floors at 0.
+        """
+        all_cg = 0.0
+        special_rate_cg = 0.0
+        for cg in cg_data:
+            if not isinstance(cg, dict):
+                continue
+            entry_amount = float(cg.get("amount", 0) or 0)
+            all_cg += entry_amount
+            if cg.get("type") in ("equity_ltcg", "equity_stcg", "property_cg"):
+                special_rate_cg += entry_amount
+        gti_before_ch_via = gross + all_cg
+        adjusted_gti = gti_before_ch_via - special_rate_cg
+        return adjusted_gti, max(0.0, TaxEngine._80G_QUALIFYING_LIMIT_PCT * adjusted_gti)
 
     def _calc_hra(self, rules, salary, hra_received, rent_paid, is_metro) -> float:
         """Section 10(13A) exemption — Rule 2A least-of test (Step B).

@@ -13,8 +13,8 @@ Summary of what differs from FY 2024-25 (all other fields are identical):
 - Property CG is 12.5% in BOTH regimes (post-23-Jul-2024 statute; the
   20%-old-regime split was FY 2024-25-specific) — §5; transfer-date
   routing lands in Step C.
-- 80EEA is ABSENT (31-Mar-2022 sunset) — §6; removal from the engine and
-  validators lands in Step D.
+- 80EEA is REMOVED from the schema entirely (31-Mar-2022 sunset) — §6;
+  the engine/validator removal landed in Step D.
 - professional_tax_default is 0 (state levy; the engine emits the advisory
   when the default applies) — §6 + tax-expert ruling j.
 - Old regime otherwise unchanged (§7), and the surcharge ladder, cess and
@@ -150,21 +150,23 @@ FY_2025_26 = FYRules(
         special_rate_excludes_87a=True,
     ),
 
-    # Chapter VI-A caps unchanged EXCEPT 80EEA, which is ABSENT: the
-    # deduction was discontinued by its 31-Mar-2022 loan-sanction sunset,
-    # so the omittable schema field defaults to 0 and the engine's
-    # unchanged min(declared, cap) booking yields no deduction. (Removal
-    # of the 80eea collection field and validator lands in Step D.)
+    # Chapter VI-A caps unchanged. Step D: sec_80eea is REMOVED from the
+    # schema itself (the deduction was discontinued by its 31-Mar-2022
+    # loan-sanction sunset; the engine stops reading the key in the same
+    # step and validate_rules rejects any re-introduction).
     # 80DDB is min(expenditure, tier-cap) with the PATIENT's age deciding
     # the tier (40,000 / 1,00,000 senior); specialist prescription required
     # per Budget 2019 — the caps below record the tiers; tier selection
-    # tooling defaults to the self age with an advisory.
+    # tooling defaults to the self age with an advisory. The parents' 80D
+    # cap splits into base 25,000 + senior 50,000 (ruling i; the engine
+    # books the base until the Sprint 3 parents_senior input lands).
     # Source: docs/tax-verification.md §6 (+ tax-expert corrections 4 and 5).
     deduction_caps=DeductionCaps(
         sec_80c=150000,
         sec_80d_self=25000,
         sec_80d_self_senior=50000,
-        sec_80d_parents=50000,
+        sec_80d_parents=25000,
+        sec_80d_parents_senior=50000,
         sec_80ccd_1b=50000,
         sec_24b=200000,
         sec_80tta=10000,
@@ -178,8 +180,7 @@ FY_2025_26 = FYRules(
         sec_80u_80dd_80_plus=125000,
         sec_80ddb=40000,
         sec_80ddb_senior=100000,
-        # sec_80eea deliberately ABSENT (defaults to 0.0 — sunset
-        # 31-Mar-2022; engine/validator removal lands in Step D).
+        # sec_80eea deliberately ABSENT (removed in Step D).
         sec_80g=None,
     ),
 
