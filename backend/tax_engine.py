@@ -15,11 +15,24 @@ key (default "fy_2024_25") and results report top-level tax_year /
 assessment_year / fy_label. Behavior is byte-identical to the pre-registry
 engine for FY 2024-25 — proven by tests/fixtures/parity_fy2425.json
 (generated with tests/tools/generate_parity_snapshot.py).
+
+Sprint 2 Step A2/E (documented statutory bug fixes per tax-expert rulings,
+2026-10-31): the surcharge marginal relief is reworked to the band-based
+threshold comparison (T_r1(h_top) at the band rate containing h_top; relief
+at ALL FOUR thresholds, not just 50L) and Section 87A is harmonized —
+eligibility keyed on TOTAL income (incl. special-rate CG), rebate on
+normal-rate tax only, and the new-regime band cap applied AFTER cess to the
+payable total (endpoint emerges from min(); the stored 727777 pre-cess band
+bound is retired). The new regime also gains the s.115BAC(6) 15% cap on the
+surcharge over the special-rate (111A/112A) portion. These changes apply
+ONLY inside the surcharge-relief zones and the 87A band — the parity
+fixture's other cells remain byte-identical (relief-zone cells were
+re-pinned with citations by tests/tools/apply_a2_fixture_updates.py).
 """
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 try:
     import numpy as np
 except ImportError:
@@ -235,12 +248,28 @@ class TaxEngine:
         tax_norm, slabs = self._slab_old(taxable, is_senior, is_vsr, rules)
         res.slabs_breakdown = slabs
 
-        # Section 87A rebate (Up to 12,500 if taxable income <= 5L)
+        # Section 87A rebate (old regime: up to 12,500 while TOTAL income
+        # <= 5,00,000). Step A2: eligibility is keyed on TOTAL income
+        # (slab taxable + special-rate CG) per the tax-expert rulings —
+        # the rebate, when eligible, touches the normal-rate tax only and
+        # stays band-free.
         rebate_rule = rules.rebate["old"]
-        rebate = min(tax_norm, rebate_rule.max_amount) if taxable <= rebate_rule.income_cap else 0
-        tax_norm = max(0.0, tax_norm - rebate)
+        total_income = taxable + cg_inc
+        if total_income <= rebate_rule.income_cap:
+            if rebate_rule.max_amount is None:
+                tax_norm = 0.0
+            else:
+                tax_norm = max(0.0, tax_norm - min(tax_norm, rebate_rule.max_amount))
 
-        surcharge = self._apply_marginal_relief(tax_norm, cg_tax, taxable + cg_inc, "old", rules)
+        surcharge = self._apply_marginal_relief(
+            tax_norm,
+            cg_tax,
+            taxable,
+            cg_inc,
+            "old",
+            rules,
+            lambda v: self._slab_old(v, is_senior, is_vsr, rules)[0],
+        )
         total_tax = (tax_norm + cg_tax + surcharge) * (1 + rules.cess_rate)
 
         res.total_tax = round(total_tax, 2)
@@ -304,22 +333,44 @@ class TaxEngine:
         tax, slabs = self._slab_new(taxable, rules)
         res.slabs_breakdown = slabs
 
-        # Section 87A Rebate in New Regime:
-        # Full rebate if taxable income <= 7,00,000 (Tax = 0)
-        # Marginal relief if taxable income is slightly above 7,00,000:
-        # The tax payable cannot exceed (Taxable Income - 7,00,000)
-        # (Crude band method preserved as-is in Step A1 — caps read from the
-        # registry rebate rule; the statutory method lands in Step A2/E.)
+        # Section 87A in the New Regime — harmonized in Step A2/E per the
+        # tax-expert rulings (FA-2025 Explanation):
+        #   1. Eligibility is keyed on TOTAL income (slab taxable +
+        #      special-rate CG), NOT the slab taxable alone. When eligible,
+        #      the rebate wipes the normal-rate tax only (max_amount None =
+        #      full rebate) — 111A/112A tax is never rebated.
+        #   2. When TOTAL income exceeds the threshold, the PAYABLE total
+        #      (income-tax after rebate + special-rate tax + surcharge +
+        #      cess) is capped at (TOTAL INCOME - threshold) AFTER cess —
+        #      the band endpoint EMERGES from that min() (derived:
+        #      7,23,214 incl-cess for FY 2024-25; the stored 727777
+        #      pre-cess band constant is retired in this step).
         rebate_rule = rules.rebate["new"]
-        if taxable <= rebate_rule.income_cap:
-            tax = 0.0
-        elif rebate_rule.band_upper_bound is not None and taxable <= rebate_rule.band_upper_bound:
-            # Marginal relief under Sec 87A: tax is capped at the excess income over 7L
-            excess_over_7l = taxable - rebate_rule.income_cap
-            tax = min(tax, excess_over_7l)
+        total_income = taxable + cg_inc
+        if total_income <= rebate_rule.income_cap:
+            if rebate_rule.max_amount is None:
+                tax = 0.0
+            else:
+                tax = max(0.0, tax - min(tax, rebate_rule.max_amount))
 
-        surcharge = self._apply_marginal_relief(tax, cg_tax, taxable + cg_inc, "new", rules)
-        res.total_tax = round((tax + cg_tax + surcharge) * (1 + rules.cess_rate), 2)
+        surcharge = self._apply_marginal_relief(
+            tax,
+            cg_tax,
+            taxable,
+            cg_inc,
+            "new",
+            rules,
+            lambda v: self._slab_new(v, rules)[0],
+        )
+        total_tax = (tax + cg_tax + surcharge) * (1 + rules.cess_rate)
+        if rebate_rule.marginal_relief and total_income > rebate_rule.income_cap:
+            # Post-cess 87A band cap (Step A2): the payable TOTAL, including
+            # surcharge and cess, cannot exceed the income excess over the
+            # rebate threshold. Beyond the emergent band endpoint the
+            # excess exceeds the payable and the min() is inert — no stored
+            # band bound is needed.
+            total_tax = min(total_tax, float(total_income - rebate_rule.income_cap))
+        res.total_tax = round(total_tax, 2)
         res.taxable_income = round(taxable + cg_inc, 2)
 
         # New Regime Breakdown
@@ -340,28 +391,102 @@ class TaxEngine:
 
         return res
 
-    def _apply_marginal_relief(self, tax, cg_tax, income, regime, rules) -> float:
-        total_tax_base = tax + cg_tax
+    def _apply_marginal_relief(
+        self,
+        tax_normal: float,
+        tax_special: float,
+        slab_income: float,
+        cg_income: float,
+        regime: str,
+        rules,
+        slab_tax_fn: Callable[[float], float],
+    ) -> float:
+        """Section 2(3) surcharge with the statutory band-based marginal
+        relief (reworked in Step A2/E per the tax-expert rulings).
+
+        For total income x (slab income + special-rate CG income) above
+        the highest crossed threshold h_top:
+
+            S_payable = min(S_band(x), max(0, T_r1(h_top) + (x - h_top) - T(x)))
+
+        where S_band(x) is the band-rate surcharge at x — split into the
+        normal-rate and special-rate portions, with the s.115BAC(6) cap
+        (rules.new_regime_cg_surcharge_cap, 15%) applied to the special
+        portion in the new regime; the old regime is uncapped — and
+        T_r1(h_top) is the total pre-surcharge tax at h_top WITH the
+        surcharge rate of the band CONTAINING h_top (50L->0%, 1Cr->10%,
+        2Cr->15%, 5Cr->25%: at exactly h the LOWER band's rate applies).
+        Cess is applied by the caller, OUTSIDE this comparison.
+
+        At x == h exactly no relief is due: h_top is then the previous
+        threshold and the band rate at x is the lower band's, so the
+        comparison degenerates to the normal band computation.
+
+        The pre-surcharge tax at h_top keeps the composition frozen at x:
+        the slab portion absorbs the (x - h_top) reduction first (re-walked
+        exactly through the slab via slab_tax_fn); only a residual beyond
+        the slab income — reachable only when surcharge is triggered
+        almost exclusively by capital gains — shrinks the special-rate
+        portion proportionally to the CG income.
+        """
         surcharge_rule = rules.surcharge
+        income = slab_income + cg_income  # TOTAL income drives every threshold test
         first_threshold = surcharge_rule.bands[0][0]
         if income <= first_threshold:
             return 0.0
 
+        def effective_rates(band_rate: float) -> Tuple[float, float]:
+            """(normal-rate, special-rate) surcharge pair at a band rate."""
+            if regime == "new":
+                normal_rate = min(band_rate, surcharge_rule.new_regime_cap)
+                # s.115BAC(6): surcharge on the 111A/112A portion is capped.
+                return normal_rate, min(normal_rate, rules.new_regime_cg_surcharge_cap)
+            uncapped = min(band_rate, surcharge_rule.old_regime_cap)
+            return uncapped, uncapped
+
+        def special_tax_at(income_at: float) -> float:
+            """Special-rate tax on the composition reduced to income_at."""
+            excess = income - income_at
+            if excess <= slab_income or cg_income <= 0.0:
+                return tax_special
+            return tax_special * max(0.0, 1.0 - (excess - slab_income) / cg_income)
+
+        pre_surcharge_tax = tax_normal + tax_special
+
         # Band walk: the applicable rate is the first band (from the top)
         # whose threshold is strictly below the income. income >
         # first_threshold guarantees a band matches.
-        rate = None
-        for threshold, band_rate in reversed(surcharge_rule.bands):
-            if income > threshold:
-                rate = band_rate
-                break
-        # Section 115BAC(6): the new regime caps the effective surcharge rate.
-        cap = surcharge_rule.new_regime_cap if regime == "new" else surcharge_rule.old_regime_cap
-        effective_rate = min(rate, cap)  # type: ignore[type-var]  (rate is not None here)
-        surcharge = total_tax_base * effective_rate
+        band_rate = next(
+            rate for threshold, rate in reversed(surcharge_rule.bands) if income > threshold
+        )
+        normal_rate, special_rate = effective_rates(band_rate)
+        band_surcharge = tax_normal * normal_rate + tax_special * special_rate
+        if not surcharge_rule.marginal_relief:
+            return band_surcharge
 
-        # Marginal Relief Check at 50 Lakhs surcharge threshold
-        return min(surcharge, max(0.0, income - first_threshold))
+        h_top = max(t for t, _ in surcharge_rule.bands if income > t)
+        # Rate of the band CONTAINING h_top (the lower band's rate at h).
+        rate_at_h = next(
+            (
+                rate
+                for threshold, rate in reversed(surcharge_rule.bands)
+                if h_top > threshold
+            ),
+            0.0,
+        )
+        normal_rate_at_h, special_rate_at_h = effective_rates(rate_at_h)
+        slab_income_at_h = max(0.0, slab_income - (income - h_top))
+        tax_r1 = (
+            slab_tax_fn(slab_income_at_h) * (1.0 + normal_rate_at_h)
+            + special_tax_at(h_top) * (1.0 + special_rate_at_h)
+        )
+        relief_ceiling = max(0.0, tax_r1 + (income - h_top) - pre_surcharge_tax)
+        if relief_ceiling < band_surcharge:
+            logger.debug(
+                "Surcharge marginal relief bound at h_top=%s: band %.2f capped to %.2f",
+                h_top, band_surcharge, relief_ceiling,
+            )
+        return min(band_surcharge, relief_ceiling)
 
     def _calc_cg(self, cg_data: list, regime: str, rules) -> Tuple[float, float]:
         tax, inc = 0.0, 0.0

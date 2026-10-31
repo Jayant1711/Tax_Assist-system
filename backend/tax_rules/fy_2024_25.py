@@ -2,9 +2,16 @@
 tax_engine.py (Sprint 2 Step A1, ADR-008).
 
 Every constant below reproduces tax_engine.py's FY 2024-25 behavior
-EXACTLY; parity is proven by tests/fixtures/parity_fy2425.json (frozen at
-commit d6a6609+). The FY 2025-26 constants record is docs/tax-verification.md
-and lands in Step A3 — do not "update" values here before then.
+EXACTLY, except the constants explicitly re-pinned by Step A2/E (the
+documented statutory bug fixes per tax-expert rulings, 2026-10-31): the
+new-regime rebate's band_cap_includes_cess flag (pre-cess -> post-cess)
+and the retirement of the crude 727777 band bound — both confined to the
+87A band, and the 115BAC(6) special-rate surcharge cap now enforced in
+the engine. Parity is proven by tests/fixtures/parity_fy2425.json with
+only the relief-zone cells re-pinned (tests/tools/
+apply_a2_fixture_updates.py). The FY 2025-26 constants record is
+docs/tax-verification.md and lands in Step A3 — do not "update" values
+here before then.
 """
 from __future__ import annotations
 
@@ -62,11 +69,16 @@ FY_2024_25 = FYRules(
     # _calc_old std_ded 50000 / _calc_new std_ded 75000 (Budget 2024).
     standard_deduction=MappingProxyType({"old": 50000, "new": 75000}),
 
-    # Old regime: min(tax, 12500) while taxable <= 500000.
-    # New regime: full rebate while taxable <= 700000, then the crude
-    # marginal-relief zone up to 727777 — the 727777 band constant is
-    # transcribed as-is; superseded in Step A2 per tax-expert ruling
-    # Rs 7,23,214 incl-cess.
+    # Old regime: min(tax, 12500) while TOTAL income <= 500000 (Step A2:
+    # eligibility keyed on total income incl. special-rate CG; simple
+    # rebate, no band).
+    # New regime: full rebate while TOTAL income <= 700000; above it the
+    # harmonized post-cess band cap applies — the payable TOTAL is capped
+    # at (TOTAL INCOME - 700000) with cess included. band_cap_includes_cess
+    # True: harmonized in Step A2 per FA-2025 Explanation; was pre-cess.
+    # The crude 727777 stored band bound is REMOVED in Step A2; derived
+    # endpoint 7,23,214 incl-cess is a QA expectation only — the cap's
+    # reach emerges from the engine's min().
     rebate=MappingProxyType({
         "old": RebateRule(
             income_cap=500000,
@@ -77,16 +89,20 @@ FY_2024_25 = FYRules(
         ),
         "new": RebateRule(
             income_cap=700000,
-            max_amount=None,        # full rebate of the computed tax
+            max_amount=None,        # full rebate of the computed (normal-rate) tax
             marginal_relief=True,
-            band_upper_bound=727777,
-            band_cap_includes_cess=False,
+            band_upper_bound=None,  # removed in Step A2 (see comment above)
+            band_cap_includes_cess=True,
         ),
     }),
 
     # _apply_marginal_relief ladder: 10% above 50L, 15% above 1Cr, 25% above
-    # 2Cr, 37% above 5Cr — with the new regime capped at 25% (115BAC(6)) and
-    # marginal relief min(surcharge, income - 50L).
+    # 2Cr, 37% above 5Cr — with the new regime capped at 25% (115BAC(6)).
+    # Step A2 marginal relief is the band-based threshold comparison at ALL
+    # FOUR thresholds: S_payable = min(S_band(x), max(0, T_r1(h_top) +
+    # (x - h_top) - T(x))), T_r1(h_top) at the band rate containing h_top
+    # (50L->0%, 1Cr->10%, 2Cr->15%, 5Cr->25%); cess applied after, outside
+    # the comparison. No relief at x == h exactly (lower band's rate).
     surcharge=SurchargeRule(
         bands=(
             (5000000, 0.10),
@@ -159,7 +175,9 @@ FY_2024_25 = FYRules(
     # professional_tax default of 2500 when salary > 0.
     professional_tax_default=2500,
 
-    # Section 115BAC(6) special-rate surcharge cap — registry constant added
-    # now per the ADR; the engine starts using it in Step A2/E.
+    # Section 115BAC(6) special-rate surcharge cap — enforced by the engine
+    # from Step A2/E: the surcharge on the 111A/112A portion of tax is
+    # capped at 15% in the new regime (S = rate*T_normal +
+    # min(rate, 0.15)*T_special); the old regime is uncapped.
     new_regime_cg_surcharge_cap=0.15,
 )

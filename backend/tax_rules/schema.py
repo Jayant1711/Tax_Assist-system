@@ -37,16 +37,27 @@ class RebateRule:
     """Section 87A rebate parameters for one regime.
 
     max_amount None means the rebate wipes out the entire slab tax (full
-    rebate) while taxable income is at or below income_cap. When
-    marginal_relief is True, band_upper_bound is the (crude) upper edge of
-    the relief zone in which the tax is capped at the income excess over
-    income_cap; band_cap_includes_cess records whether that cap is applied
-    before or after cess (FY 2024-25 engine applies it before cess).
+    rebate) while TOTAL income is at or below income_cap; a numeric
+    max_amount caps the rebate (old regime: 12,500). Step A2 harmonized
+    eligibility: it is keyed on TOTAL income (slab taxable + special-rate
+    CG), and a rebate, when eligible, applies to the normal-rate tax only
+    — never to 111A/112A.
+
+    When marginal_relief is True (new regime), the PAYABLE total (income-
+    tax after rebate + special-rate tax + surcharge + cess) is capped at
+    (TOTAL INCOME - income_cap) AFTER cess: band_cap_includes_cess is
+    True from Step A2 ("harmonized per the FA-2025 Explanation; was
+    pre-cess"). The band's upper endpoint EMERGES from that min() — for
+    FY 2024-25 it derives to 7,23,214 incl-cess — so no bound is stored:
+    band_upper_bound remains only as an optional informational field and
+    is None from Step A2 on.
     """
 
     income_cap: float
-    max_amount: Optional[float]  # None = full rebate of the computed tax
+    max_amount: Optional[float]  # None = full rebate of the computed (normal-rate) tax
     marginal_relief: bool
+    # Removed in Step A2; derived endpoint 7,23,214 incl-cess is a QA
+    # expectation only (kept as a field so older year modules stay valid).
     band_upper_bound: Optional[int]
     band_cap_includes_cess: bool
 
@@ -58,7 +69,10 @@ class SurchargeRule:
     bands: ascending (threshold, rate) pairs; the rate applies to income
     strictly above the threshold. new_regime_cap caps the effective rate
     under Section 115BAC(6) regardless of band; old_regime_cap is the old
-    regime's ceiling (37%).
+    regime's ceiling (37%). marginal_relief (Step A2) is the band-based
+    threshold comparison: S_payable = min(S_band(x), max(0, T_r1(h_top) +
+    (x - h_top) - T(x))) with T_r1(h_top) carrying the band rate that
+    CONTAINS h_top; cess is applied after, outside the comparison.
     """
 
     bands: Tuple[Tuple[float, float], ...]
