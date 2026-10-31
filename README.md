@@ -8,6 +8,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tax Compliance](https://img.shields.io/badge/Tax_Compliance-FY_2024--25-orange?style=for-the-badge&logo=google-keep&logoColor=white)
+![Test Suite](https://img.shields.io/badge/Test_Suite-97%2F97_Passed_(100%25)-brightgreen?style=for-the-badge)
 
 An advanced, AI-powered tax filing assistance system specifically designed for Indian taxpayers. This system combines the precision of a **Rule-Based Engine** with the intelligence of **Conversational AI** to provide a deep-thinking tax consultant experience.
 
@@ -16,6 +17,10 @@ An advanced, AI-powered tax filing assistance system specifically designed for I
 ## 🚀 Overview
 
 Tax filing in India is complex, with two distinct regimes and numerous sections for deductions and exemptions. **Tax Assist AI** simplifies this by guiding users through a deep financial discovery process, helping them identify legitimate tax-saving opportunities they might have missed.
+
+## 📚 Documentation
+
+Full engineering documentation lives in [`docs/`](docs/index.md) — start with the [documentation index](docs/index.md) (architecture, API reference, NLP pipeline, tax rules as coded, testing, security, deployment, roadmap, and ADRs).
 
 ## ✨ Key Features (Anfis v3 + Industrial Overhaul v5.0)
 
