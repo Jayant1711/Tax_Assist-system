@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from typing import Dict, Any
 
+from validation import safe_session_id
+
 class SessionLab:
     """
     The Industrial Black Box — Records every neuron fire in the system.
@@ -18,6 +20,10 @@ class SessionLab:
         """
         Appends a high-fidelity turn to the session's blackbox file.
         """
+        # C6 defense-in-depth: sanitize BEFORE anything else (and outside the
+        # try block, so a traversal/absolute id can never reach os.path.join
+        # even if a future caller bypasses the API-level validator).
+        session_id = safe_session_id(session_id)
         try:
             file_path = os.path.join(self.lab_dir, f"{session_id}.json")
             
@@ -52,9 +58,3 @@ class SessionLab:
     def _safe_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Prevents logging massive history blobs in every turn."""
         return {k: v for k, v in state.items() if k not in ["history", "id"]}
-
-if __name__ == "__main__":
-    # Small test
-    lab = SessionLab()
-    lab.record_step("test_01", {"input": "Hello", "response": "Hi", "state": {"test": True}})
-    print("Step recorded in logs/lab/test_01_lab.jsonl")

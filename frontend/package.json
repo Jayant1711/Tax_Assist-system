@@ -1,5 +1,4 @@
 {
-  "summer_internship_project": "Summer internship project",
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
@@ -10,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "next": "16.2.4",
+    "next": "16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -19,7 +18,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.4.3",
     "typescript": "^5"
   }
 }

@@ -1,83 +1,156 @@
 'use client';
-// Summer internship project
 
 import React from 'react';
 
-interface SavingsGraphProps {
+interface Props {
   data: any;
 }
 
-const SavingsGraph: React.FC<SavingsGraphProps> = ({ data }) => {
+export default function SavingsGraph({ data }: Props) {
   if (!data) return null;
 
   const oldTax = data.old_regime?.total_tax || 0;
   const newTax = data.new_regime?.total_tax || 0;
+  const oldGross = data.old_regime?.gross_total_income || 1;
+  const newGross = data.new_regime?.gross_total_income || 1;
+
   const maxTax = Math.max(oldTax, newTax, 1);
-  
-  const oldWidth = (oldTax / maxTax) * 100;
-  const newWidth = (newTax / maxTax) * 100;
+  const rec = data.recommendation || (newTax <= oldTax ? 'New Regime' : 'Old Regime');
+  const savings = data.savings ?? Math.abs(oldTax - newTax);
+
+  const oldRate = ((oldTax / oldGross) * 100).toFixed(1);
+  const newRate = ((newTax / newGross) * 100).toFixed(1);
+
+  const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
   return (
-    <div className="premium-card graph-entrance" style={{ padding: '2rem' }}>
-      <h4 style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
-        Regime Comparison Graph
-      </h4>
-      
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        {/* Old Regime Bar */}
-        <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            <span style={{ fontWeight: 600 }}>Old Regime</span>
-            <span style={{ color: 'var(--text-dim)' }}>₹{oldTax.toLocaleString('en-IN')}</span>
+    <div className="card" style={{ position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, right: 0, width: '150px', height: '150px', background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+      <div className="card-header">
+        <div>
+          <div className="card-title">Regime Tax Comparison (FY 2024-25)</div>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Direct side-by-side computation based on declared deductions & income
+          </p>
+        </div>
+        <span className="regime-badge recommended">
+          ✓ {rec} is Optimal
+        </span>
+      </div>
+
+      <div className="regime-bar-wrap">
+        {/* Old Regime */}
+        <div className="regime-bar-item">
+          <div className="regime-bar-header">
+            <span className="regime-bar-name" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>Old Tax Regime</span>
+              {rec === 'Old Regime' && (
+                <span className="regime-badge recommended" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }}>
+                  ★ Winner
+                </span>
+              )}
+            </span>
+            <div style={{ textAlign: 'right' }}>
+              <span className="regime-bar-amount" style={{ fontSize: '1rem', fontWeight: 700, color: rec === 'Old Regime' ? 'var(--accent-green)' : 'var(--text-main)' }}>
+                {fmt(oldTax)}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                ({oldRate}% eff.)
+              </span>
+            </div>
           </div>
-          <div style={{ height: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', overflow: 'hidden' }}>
-            <div style={{ 
-              height: '100%', 
-              width: `${oldWidth}%`, 
-              background: 'linear-gradient(90deg, #6366f1, #a855f7)', 
-              borderRadius: '6px',
-              transition: 'width 1s ease-out'
-            }} />
+          <div className="regime-bar-track">
+            <div
+              className="regime-bar-fill old"
+              style={{
+                width: `${Math.max(4, (oldTax / maxTax) * 100)}%`,
+                opacity: rec === 'Old Regime' ? 1 : 0.65,
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            <span>Eligible for 80C, 80D, HRA & 24(b)</span>
+            <span>Taxable: {fmt(data.old_regime?.taxable_income || 0)}</span>
           </div>
         </div>
 
-        {/* New Regime Bar */}
-        <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            <span style={{ fontWeight: 600 }}>New Regime (U/S 115BAC)</span>
-            <span style={{ color: 'var(--text-dim)' }}>₹{newTax.toLocaleString('en-IN')}</span>
+        {/* New Regime */}
+        <div className="regime-bar-item">
+          <div className="regime-bar-header">
+            <span className="regime-bar-name" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>New Tax Regime (Sec 115BAC)</span>
+              {rec === 'New Regime' && (
+                <span className="regime-badge recommended" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem' }}>
+                  ★ Winner
+                </span>
+              )}
+            </span>
+            <div style={{ textAlign: 'right' }}>
+              <span className="regime-bar-amount" style={{ fontSize: '1rem', fontWeight: 700, color: rec === 'New Regime' ? 'var(--accent-green)' : 'var(--text-main)' }}>
+                {fmt(newTax)}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                ({newRate}% eff.)
+              </span>
+            </div>
           </div>
-          <div style={{ height: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', overflow: 'hidden' }}>
-            <div style={{ 
-              height: '100%', 
-              width: `${newWidth}%`, 
-              background: 'linear-gradient(90deg, #10b981, #34d399)', 
-              borderRadius: '6px',
-              transition: 'width 1s ease-out'
-            }} />
+          <div className="regime-bar-track">
+            <div
+              className="regime-bar-fill new"
+              style={{
+                width: `${Math.max(4, (newTax / maxTax) * 100)}%`,
+                opacity: rec === 'New Regime' ? 1 : 0.65,
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            <span>₹75k Standard Ded. + Nil tax up to ₹7L (87A)</span>
+            <span>Taxable: {fmt(data.new_regime?.taxable_income || 0)}</span>
           </div>
         </div>
       </div>
 
-      <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <div style={{ 
-          width: '40px', 
-          height: '40px', 
-          borderRadius: '50%', 
-          background: 'rgba(16, 185, 129, 0.1)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          color: 'var(--accent-green)',
-          fontSize: '1.2rem'
-        }}>✨</div>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
-          The <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{data.recommendation}</span> saves you 
-          <span style={{ color: 'var(--accent-green)', fontWeight: 700 }}> ₹{data.savings?.toLocaleString('en-IN')}</span> annually.
-        </p>
+      {/* Savings Summary Banner */}
+      <div
+        style={{
+          marginTop: '1.5rem',
+          padding: '1rem 1.25rem',
+          background: 'rgba(16, 185, 129, 0.08)',
+          border: '1px solid rgba(16, 185, 129, 0.2)',
+          borderRadius: 'var(--radius-md)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+        }}
+      >
+        <div
+          style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '50%',
+            background: 'rgba(16, 185, 129, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.1rem',
+            color: 'var(--accent-green)',
+            flexShrink: 0,
+          }}
+        >
+          💰
+        </div>
+        <div>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
+            Choosing <span style={{ color: 'var(--accent-green)' }}>{rec}</span> will save you {fmt(savings)} in taxes!
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-sub)', marginTop: '2px' }}>
+            {rec === 'New Regime'
+              ? 'Lower slab rates and higher standard deduction outweigh your eligible itemized deductions.'
+              : 'Your combined deductions under Section 80 and house property exceed the threshold where New Regime would be beneficial.'}
+          </div>
+        </div>
       </div>
     </div>
   );
-};
-
-export default SavingsGraph;
+}

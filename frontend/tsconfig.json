@@ -1,5 +1,4 @@
 {
-  "summer_internship_project": "Summer internship project",
   "compilerOptions": {
     "target": "ES2017",
     "lib": [
