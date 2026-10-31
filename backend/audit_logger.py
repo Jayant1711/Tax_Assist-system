@@ -404,6 +404,35 @@ class AuditLogger:
             return self._store_text_override
         return store_text_enabled()
 
+    def log_event(self, event: str, session_id: str = "auth", **fields: Any) -> None:
+        """Append one generic structured event (Sprint 3 Wave C).
+
+        The auth core (auth.py/main.py) appends its lifecycle events —
+        register / login success / login failure / lockout / logout /
+        session revoke — as new event types on the SAME append-only
+        stream, reusing the process-wide lock, rotation and retention.
+        Callers pass only sanitized values (sha256[:16] correlation
+        hashes — never raw emails, tokens or passwords; that sanitization
+        is the caller's contract, this method writes what it is given).
+
+        ``None``/absent optional fields are omitted from the line so
+        records stay compact.
+        """
+        safe = safe_session_id(session_id)
+        entry: Dict[str, Any] = {
+            "timestamp": datetime.now().isoformat(),
+            "session_id": safe,
+            "event": event,
+        }
+        for key, value in fields.items():
+            if value is not None:
+                entry[key] = value
+
+        with _WRITE_LOCK:
+            _append_entry_unlocked(self.log_file, entry, safe)
+            self._rotate_if_needed()
+            self._sweep_rotated()
+
     # -- rotation / retention ----------------------------------------------
 
     def _rotate_if_needed(self) -> None:

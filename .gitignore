@@ -24,3 +24,6 @@ Thumbs.db
 # Logs
 backend/logs/
 *.log
+
+# SQLite store (Sprint 3 Wave C: server-side sessions, ADR-013)
+backend/data/

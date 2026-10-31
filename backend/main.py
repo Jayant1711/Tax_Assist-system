@@ -19,12 +19,13 @@ middleware stack, outermost first:
    that land with the auth wave.
 4. **rate-limit** — per-client-IP sliding windows (user-id keys land
    with auth): route-class bucket + shared global bucket, /health
-   exempt, 429 with Retry-After.
-5. **CORS** — NOTE: still the Sprint-1 wildcard THIS wave (no contract
-   change before the cookie exists). The explicit allowlist
-   (config.cors_origins) + allow_credentials=True replace it in the
-   auth wave (Wave C), retiring the wildcard permanently; production
-   then fails closed at the config layer.
+   exempt, 429 with Retry-After. The /auth/* class bucket (10/min/IP)
+   is ACTIVE as of Wave C.
+5. **CORS** — Wave C retires the Sprint-1 wildcard permanently: the
+   explicit allowlist (config.cors_origins) + allow_credentials=True
+   now protect the session cookie issued by /auth/login; production
+   fails closed at the config layer (unset/wildcard CORS_ORIGINS ->
+   empty allowlist, no origin trusted).
 
 Short-circuit responses (413/403/429) carry the security-header set too
 — the headers control applies to every response the app emits.
@@ -35,6 +36,16 @@ TAX_DB_PATH via mode=rw — it NEVER creates the file) and audit
 response to 503 while naming the check. ``?verbose=1`` adds uptime +
 registry keys in dev only. Prod also disables /docs, /redoc and
 /openapi.json via the factory.
+
+Sprint 3 Wave C (auth core, ADR-012) adds the /auth/* endpoints on top
+of auth.py + db.py: register (scrypt passwords), login (opaque
+HttpOnly-cookie sessions, server-side rows in SQLite, lockout after 5
+failures), logout (row revoke), /auth/me and per-session management.
+Auth lifecycle events are appended to the existing JSONL audit stream
+via AuditLogger.log_event, sanitized to sha256[:16] correlation hashes
+(never raw emails, tokens or passwords). /chat, /calculate and
+/history are UNCHANGED this wave (the app_sessions contract swap is
+Wave D).
 """
 import json
 import logging
@@ -47,7 +58,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -55,6 +74,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
+import auth
 import config
 from audit_logger import AuditLogger
 from nlp_engine import NLPEngine
@@ -686,6 +706,21 @@ class CalculateRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Auth request models (Sprint 3 Wave C — ADR-012)
+# ---------------------------------------------------------------------------
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(max_length=320)  # RFC 5321 practical limit; auth.py
+    password: str = Field(max_length=1024)  # enforces the 254-char cap too.
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(max_length=320)
+    password: str = Field(max_length=1024)
+
+
+# ---------------------------------------------------------------------------
 # Application factory (Sprint 3 Step A)
 # ---------------------------------------------------------------------------
 
@@ -716,17 +751,25 @@ def create_app(app_env: str = "dev") -> FastAPI:
 
     limiter = RateLimiter()
 
-    # NOTE (Sprint 3 Step B): CORS stays the Sprint-1 wildcard THIS wave —
-    # no contract change lands before cookies exist. The auth wave (Wave C)
-    # replaces this block with the explicit allowlist from
-    # config.cors_origins() + allow_credentials=True, retiring the wildcard
-    # permanently; production then fails closed at the config layer.
+    # Wave C: the session cookie exists now — the Sprint-1 wildcard is
+    # retired permanently (design §4). Explicit allowlist from
+    # config.cors_origins() + allow_credentials=True; a wildcard with
+    # credentials would be unrepresentable anyway. Production with
+    # unset/empty/wildcard CORS_ORIGINS fails closed at the config layer;
+    # the RuntimeError is consumed here as an EMPTY allowlist (no origin
+    # is trusted — same posture the origin-check middleware applies).
+    # DELETE is allowed because Wave C adds DELETE /auth/sessions/{id}
+    # (the design §4 method list predates that endpoint).
+    try:
+        allowed_origins = config.cors_origins()
+    except RuntimeError:
+        allowed_origins = []
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["Content-Type"],
     )
     app.add_middleware(RateLimitMiddleware, limiter=limiter)
     app.add_middleware(OriginCheckMiddleware)
@@ -766,6 +809,231 @@ def create_app(app_env: str = "dev") -> FastAPI:
             status_code=422,
             content={"detail": "Validation error", "errors": errors},
         )
+
+    # ------------------------------------------------------------------
+    # /auth/* (Sprint 3 Wave C — ADR-012)
+    # ------------------------------------------------------------------
+
+    def _current_user(request: Request) -> auth.CurrentUser:
+        # Dependency wrapper: passes the module-level audit logger so auth
+        # events (e.g. UA-mismatch revocations) land in the SAME stream the
+        # endpoints use. The global is resolved at call time, so tests can
+        # swap the stream per fixture.
+        return auth.require_user(request, audit=audit)
+
+    def _client_ip(request: Request) -> str:
+        client = request.scope.get("client")
+        return client[0] if client and client[0] else "unknown"
+
+    def _set_session_cookie(response: Response, token: str) -> None:
+        # Design §1: __Host-ta_session when Secure else ta_session;
+        # HttpOnly always; SameSite=Lax; Path=/; Max-Age mirrors the
+        # sliding TTL. The token itself lives ONLY in this cookie —
+        # never in a response body or a log line.
+        response.set_cookie(
+            auth.session_cookie_name(),
+            token,
+            max_age=config.session_ttl_minutes() * 60,
+            httponly=True,
+            secure=config.tax_cookie_secure(),
+            samesite="lax",
+            path="/",
+        )
+
+    def _clear_session_cookie(response: Response) -> None:
+        # Mirror the issue-time attributes so the browser drops the cookie.
+        response.delete_cookie(
+            auth.session_cookie_name(),
+            path="/",
+            httponly=True,
+            secure=config.tax_cookie_secure(),
+            samesite="lax",
+        )
+
+    @app.post("/auth/register", status_code=201)
+    async def auth_register(req: RegisterRequest, request: Request) -> Dict[str, str]:
+        """Create a password account. 201 {user_id, email}.
+
+        409 on a duplicate (case-insensitive); 422 on a malformed email or
+        an out-of-policy password (12-1024 chars). Only sanitized values
+        (email correlation hash) reach the audit stream.
+        """
+        email = auth.normalize_email(req.email)
+        if email is None:
+            raise HTTPException(status_code=422, detail="Invalid email address")
+        if not auth.validate_password(req.password):
+            raise HTTPException(
+                status_code=422,
+                detail="Password must be between 12 and 1024 characters",
+            )
+        if auth.find_user_by_email(email) is not None:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        # scrypt runs only after the cheap checks (a duplicate registration
+        # must not cost the server a full KDF).
+        password_hash = auth.hash_password(req.password)
+        try:
+            user = auth.create_user(email, password_hash)
+        except sqlite3.IntegrityError:
+            # Race with a concurrent registration of the same email.
+            raise HTTPException(status_code=409, detail="Email already registered")
+        auth.log_auth_event(
+            audit,
+            "auth_register",
+            user_id=user["id"],
+            email_sha256_16=auth.email_hash(email),
+            ip_sha256_16=auth.ip_hash(_client_ip(request)),
+        )
+        return {"user_id": user["id"], "email": user["email"]}
+
+    @app.post("/auth/login")
+    async def auth_login(req: LoginRequest, request: Request) -> JSONResponse:
+        """Password login -> 200 {user_id, email} + hardened session cookie.
+
+        Uniform 401 "Invalid email or password" for unknown emails AND
+        wrong passwords (dummy-scrypt timing equalization); generic 423
+        lockout response once the account is locked — shown only to a
+        CORRECT password, so it is not an enumeration oracle.
+        """
+        email = auth.normalize_email(req.email)
+        ip_sha256_16 = auth.ip_hash(_client_ip(request))
+        ua_sha256_16 = auth.ua_hash(request.headers.get("user-agent", ""))
+        result = auth.authenticate(
+            email,
+            req.password,
+            request.headers.get("user-agent", ""),
+            _client_ip(request),
+        )
+        if result["status"] == auth.AUTH_OK:
+            user = result["user"]
+            auth.log_auth_event(
+                audit,
+                "auth_login_success",
+                user_id=user["id"],
+                email_sha256_16=auth.email_hash(user["email"]),
+                ip_sha256_16=ip_sha256_16,
+                ua_sha256_16=ua_sha256_16,
+            )
+            response = JSONResponse(
+                {"user_id": user["id"], "email": user["email"]}
+            )
+            _set_session_cookie(response, result["token"])
+            return response
+
+        if result["status"] == auth.AUTH_LOCKED:
+            user = result["user"]
+            auth.log_auth_event(
+                audit,
+                "auth_login_failure",
+                user_id=user["id"],
+                email_sha256_16=auth.email_hash(user["email"]),
+                ip_sha256_16=ip_sha256_16,
+                while_locked=True,
+            )
+            return JSONResponse(
+                status_code=423,
+                content={"detail": "Account temporarily locked"},
+            )
+
+        # Uniform failure path (unknown email or wrong password).
+        user = result.get("user")
+        failure_fields: Dict[str, Any] = {"ip_sha256_16": ip_sha256_16}
+        if user is not None:
+            failure_fields["user_id"] = user["id"]
+            failure_fields["email_sha256_16"] = auth.email_hash(user["email"])
+        elif email is not None:
+            failure_fields["email_sha256_16"] = auth.email_hash(email)
+        if result.get("while_locked"):
+            failure_fields["while_locked"] = True
+        auth.log_auth_event(audit, "auth_login_failure", **failure_fields)
+        if result.get("locked_now") and user is not None:
+            # The 5th failure just locked the account: record it once.
+            auth.log_auth_event(
+                audit,
+                "auth_lockout",
+                user_id=user["id"],
+                email_sha256_16=auth.email_hash(user["email"]),
+                ip_sha256_16=ip_sha256_16,
+            )
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid email or password"},
+        )
+
+    @app.post("/auth/logout", status_code=204)
+    async def auth_logout(request: Request) -> Response:
+        """Revoke the presented session (idempotent) and clear the cookie.
+
+        Deliberately NOT behind get_current_user: a stale/expired/garbage
+        cookie still gets the clean 204 + cookie clear, so logout never
+        becomes a session-validity oracle.
+        """
+        token = request.cookies.get(auth.session_cookie_name())
+        if token:
+            token_hash = auth.hash_token(token)
+            row = auth.fetch_session_row(token_hash)
+            if row is not None and row["revoked_at"] is None:
+                auth.revoke_session(token_hash)
+                auth.log_auth_event(
+                    audit,
+                    "auth_logout",
+                    user_id=row["user_id"],
+                    session_row_id=token_hash[: auth.SESSION_ROW_ID_LENGTH],
+                    ip_sha256_16=auth.ip_hash(_client_ip(request)),
+                )
+        response = Response(status_code=204)
+        _clear_session_cookie(response)
+        return response
+
+    @app.get("/auth/me")
+    async def auth_me(
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, str]:
+        """200 {user_id, email, expires_at} for a live session, else 401."""
+        return {
+            "user_id": user.user_id,
+            "email": user.email,
+            "expires_at": user.expires_at,
+        }
+
+    @app.get("/auth/sessions")
+    async def auth_sessions_list(
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> List[Dict[str, Any]]:
+        """The calling user's active sessions.
+
+        Each row is identified by a 12-hex prefix of its (hashed) token —
+        the token hash itself never leaves the store. ``current`` marks
+        the session the request was authenticated with.
+        """
+        rows = auth.list_active_sessions(user.user_id)
+        return [
+            {
+                "id": row["token_hash"][: auth.SESSION_ROW_ID_LENGTH],
+                "created_at": row["created_at"],
+                "last_used_at": row["last_used_at"],
+                "expires_at": row["expires_at"],
+                "current": row["token_hash"] == user.token_hash,
+            }
+            for row in rows
+        ]
+
+    @app.delete("/auth/sessions/{row_id}", status_code=204)
+    async def auth_session_revoke(
+        row_id: str,
+        request: Request,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Response:
+        """Revoke one of the caller's sessions (owner-checked; else 404)."""
+        if not auth.revoke_session_by_public_id(user.user_id, row_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+        auth.log_auth_event(
+            audit,
+            "auth_session_revoke",
+            user_id=user.user_id,
+            session_row_id=row_id,
+            ip_sha256_16=auth.ip_hash(_client_ip(request)),
+        )
+        return Response(status_code=204)
 
     @app.get("/health")
     async def health_endpoint(
