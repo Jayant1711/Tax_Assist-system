@@ -11,6 +11,19 @@ from typing import Dict, Any, List, Optional
 from ai_models import SemanticAttention, UniversalParser, ReasoningAgent
 from profession_db import classify_profession
 
+# Sprint 2 Step B: metro-city detection heuristics (documented).
+# A statutory HRA metro (Sec 10(13A): Delhi/Mumbai/Kolkata/Chennai) named in
+# a sentence books session["is_metro"] = True ONLY when the sentence also
+# talks rent/HRA (word-boundary match, so "parents" never counts as rent
+# context) OR while the rent/HRA discovery question is the open question —
+# this gates out false positives like "I work in Mumbai". is_metro is NEVER
+# set to False by city evidence: a named non-metro city (or no city at all)
+# leaves the key absent, and the engine then applies — and discloses — its
+# non-metro 40% assumption. A bare False is booked only by an explicit
+# negative answer to the metro part of the discovery question.
+_METRO_CITY_RE = re.compile(r"\b(?:delhi|mumbai|kolkata|chennai)\b", re.IGNORECASE)
+_RENT_HRA_CONTEXT_RE = re.compile(r"\brent\w*|\bhra\b|\bkiraya\b", re.IGNORECASE)
+
 
 class NLPEngine:
     def __init__(self):
@@ -22,7 +35,8 @@ class NLPEngine:
     #  Helpers
     # ------------------------------------------------------------------ #
 
-    def _get_asked_cat(self, last_q: str, profile: Optional[str] = None) -> Optional[str]:
+    def _get_asked_cat(self, last_q: str, profile: Optional[str] = None,
+                       session: Optional[Dict[str, Any]] = None) -> Optional[str]:
         if not last_q:
             return None
         lq = last_q.lower()
@@ -37,7 +51,18 @@ class NLPEngine:
         if any(k in lq for k in ["home loan", "24b", "interest", "ghar ka loan"]):
             return "24b"
         if any(k in lq for k in ["rent", "hra", "80gg", "kiraya"]):
-            return "hra"
+            # Sprint 2 Step B: rent/HRA questions map to BOTH split
+            # categories (asked-cat list behavior). Return the first
+            # matching of the two whose session slot is still open, so a
+            # bare amount after the combined discovery question fills the
+            # next empty leg instead of re-accumulating a booked one;
+            # without a session, fall back to rent_paid (the question leads
+            # with the rent leg).
+            if session is not None:
+                for cat in ("rent_paid", "hra_received"):
+                    if session.get(cat) is None:
+                        return cat
+            return "rent_paid"
         if any(k in lq for k in ["donation", "charity", "ngo", "gift", "daan"]):
             return "80g"
         return None
@@ -53,7 +78,7 @@ class NLPEngine:
         negative_phrases = [
             r"don'?t have", r"do not have", r"haven'?t", r"not paying",
             r"no investment", r"no insurance", r"no nps", r"no hra",
-            r"no donation", r"nahi hai", r"kuch nahi", r"nahi kiya",
+            r"no rent", r"no donation", r"nahi hai", r"kuch nahi", r"nahi kiya",
             r"not applicable", r"i don'?t", r"i have none", r"i have no",
         ]
         return any(re.search(p, t) for p in negative_phrases)
@@ -124,15 +149,37 @@ class NLPEngine:
             s = sentence.strip()
             if not s:
                 continue
+            s_lower = s.lower()
+
+            # Sprint 2 Step B: metro-city booking (heuristic documented at
+            # module top). A statutory metro named in a sentence that also
+            # talks rent/HRA — or while the rent/HRA question is open —
+            # books is_metro=True. Never booked from city evidence alone.
+            if _METRO_CITY_RE.search(s_lower) and (
+                _RENT_HRA_CONTEXT_RE.search(s_lower)
+                or self._get_asked_cat(
+                    session.get("_last_question", ""), session.get("profile"), session
+                ) in ("rent_paid", "hra_received")
+            ):
+                session["is_metro"] = True
 
             # 4a. Zero-Sentinel per sentence
             if self._is_zero_intent(s):
                 asked_cat = self._get_asked_cat(
-                    session.get("_last_question", ""), session.get("profile")
+                    session.get("_last_question", ""), session.get("profile"), session
                 )
                 if asked_cat and session.get(asked_cat) is None:
                     session[asked_cat] = 0
                     newly_extracted.append(f"{asked_cat.upper()}: Noted (None)")
+                    continue
+                # Step B: the metro leg of the combined rent/HRA question —
+                # once both rent legs are booked, a bare negative answers
+                # the metro part ("not a metro city") and unblocks the
+                # discovery waterfall.
+                if (asked_cat in ("rent_paid", "hra_received")
+                        and session.get("is_metro") is None):
+                    session["is_metro"] = False
+                    newly_extracted.append("METRO: Noted (non-metro)")
                     continue
 
             # C4b: clause segmentation — each value belongs to the clause it
@@ -197,7 +244,10 @@ class NLPEngine:
                     if is_correction:
                         if session.get("_prev_salary"):
                             session["salary"] = session.pop("_prev_salary")
-                        for suspect in ["salary", "business", "nps", "80c", "80g", "hra", "other_income"]:
+                        # Step B: the legacy "hra" suspect becomes the two
+                        # split categories (mechanical rename).
+                        for suspect in ["salary", "business", "nps", "80c", "80g",
+                                        "rent_paid", "hra_received", "other_income"]:
                             if suspect == best_cat:
                                 continue
                             prev_val = session.get(suspect, 0)
@@ -339,7 +389,9 @@ class NLPEngine:
             income_keys = ["salary", "business", "rental", "other_income"]
             has_income  = any(session.get(k, 0) > 0 for k in income_keys)
             if has_income:
-                for key in ["80c", "80d", "nps", "hra", "24b", "80g"]:
+                # Step B: the legacy "hra" slot becomes the two split legs
+                # (is_metro is handled by the zero-sentinel's metro leg).
+                for key in ["80c", "80d", "nps", "rent_paid", "hra_received", "24b", "80g"]:
                     if session.get(key) is None:
                         session[key] = 0
                         break
@@ -389,10 +441,15 @@ class NLPEngine:
                     "completely separate from your 80C limit!")
 
         if "HRA" in plan or "rent" in plan:
+            # Step B: the combined Rule 2A question asks all THREE statutory
+            # inputs (monthly rent, monthly HRA received, metro city) and
+            # states the non-metro default so the assumption is never silent.
             return (ack +
-                    "🏠 **Rent & HRA** — Do you pay rent for your accommodation? "
-                    "If yes, you may be eligible for **HRA exemption** (salaried) or "
-                    "**Section 80GG** (self-employed). What's your monthly rent?")
+                    "🏠 **Rent & HRA** — What is your **monthly rent**, your "
+                    "**monthly HRA received**, and do you live in a **metro city** "
+                    "(Delhi / Mumbai / Kolkata / Chennai)? "
+                    "_(HRA exemption if salaried, Section 80GG if not — until a "
+                    "metro city is confirmed, the non-metro 40% assumption applies)_")
 
         if "home loan interest" in plan or "24b" in plan:
             return (ack +

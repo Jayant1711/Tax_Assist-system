@@ -108,6 +108,29 @@ def _validate_session_payload(session: Dict[str, Any]) -> None:
             if isinstance(value, float) and not math.isfinite(value):
                 raise ValueError(f"session.{key} must be a finite number")
 
+    # Sprint 2 Step B (security table): the split HRA legs are numeric
+    # 0..1e11 non-finite-reject rows; the legacy "hra" key keeps its
+    # unbounded numeric row above.
+    for key in ("hra_received", "rent_paid"):
+        if key in session:
+            value = session[key]
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"session.{key} must be numeric")
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"session.{key} must be a finite number")
+            if not 0 <= value <= 1e11:
+                raise ValueError(f"session.{key} must be between 0 and 1e11")
+
+    if "is_metro" in session:
+        # Sprint 2 Step B (security table): bool strictly — "yes" and 1 are
+        # NOT bools (1 is isinstance-True of int, so the bool check must
+        # come first, as everywhere else in this validator).
+        metro = session["is_metro"]
+        if metro is not None and not isinstance(metro, bool):
+            raise ValueError("session.is_metro must be a boolean or null")
+
     if "capital_gains" in session:
         cg = session["capital_gains"]
         if not isinstance(cg, list):
@@ -292,6 +315,14 @@ class CalculateRequest(BaseModel):
     ddb80: float = Field(0.0, ge=0, le=1e11, alias="80ddb")
     b24: float = Field(0.0, ge=0, le=1e11, alias="24b")
     hra: float = Field(0.0, ge=0, le=1e11)
+    # Sprint 2 Step B: the three Rule 2A inputs with identical bounds; the
+    # legacy "hra" key above keeps its numeric row. is_metro is bool
+    # strictly (the mode="before" validator below rejects the values
+    # pydantic lax mode would coerce, e.g. "yes" / 1 — mirroring the
+    # session validator).
+    hra_received: float = Field(0.0, ge=0, le=1e11)
+    rent_paid: float = Field(0.0, ge=0, le=1e11)
+    is_metro: Optional[bool] = None
     professional_tax: float = Field(0.0, ge=0, le=1e11)
 
     profile: Optional[str] = Field(None, max_length=64)
@@ -340,6 +371,15 @@ class CalculateRequest(BaseModel):
             raise ValueError(
                 "cg_transfer_before_2024_07_23 must be a boolean or null"
             )
+        return value
+
+    @field_validator("is_metro", mode="before")
+    @classmethod
+    def _validate_is_metro_strict_bool(cls, value: Any) -> Any:
+        # Sprint 2 Step B (security table): bool strictly, same pattern as
+        # the transfer flag above and the session validator.
+        if value is not None and not isinstance(value, bool):
+            raise ValueError("is_metro must be a boolean or null")
         return value
 
 

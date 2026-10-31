@@ -53,6 +53,22 @@ property_cg exists, plus a transfer-date note keyed on the tri-state
 flag cg_transfer_before_2024_07_23 (False = post-cutoff note; True/null/
 absent = election advisory — the 20%-with-indexation election is never
 computed or fabricated).
+
+Sprint 2 Step B (HRA — Section 10(13A) Rule 2A, tax-expert rulings +
+tax-verification.md §8): _calc_hra now runs the full statutory least-of
+test over THREE inputs — (a) HRA received, (b) rent paid minus 10% of
+salary, (c) 50% of salary in the statutory metros (Delhi/Mumbai/Kolkata/
+Chennai) or 40% elsewhere — returning 0 when salary, rent_paid or
+hra_received is non-positive. The new session keys hra_received/rent_paid
+are authoritative per leg; the legacy "hra" key maps to BOTH legs and
+therefore reproduces the legacy formula min(0.4*salary, hra,
+hra - 0.1*salary) exactly (parity cell in tests/test_hra.py; the FY
+2024-25 parity fixture is untouched). The 80GG guard switches to
+hra_received > 0 (receiving any HRA disqualifies 80GG even when the
+exemption computes to 0), and an unstated metro status assumes non-metro
+with the disclosure "Metro status not provided — non-metro 40% assumption
+applied" appended to the audit observations whenever an HRA computation
+ran. The new regime continues to ignore all three inputs.
 """
 
 import logging
@@ -87,6 +103,16 @@ PROPERTY_POST_CUTOFF_NOTE = (
 PROPERTY_HOLDING_ASSUMPTION = (
     "Property gains are treated as long-term; short-term property gains "
     "are taxed at slab rates — verify your holding period."
+)
+
+# Sprint 2 Step B (Section 10(13A) Rule 2A — tax-verification.md §8): the
+# metro leg of the least-of test needs a third input (metro status). When
+# the session never states it, the engine assumes NON-METRO (40%) and
+# discloses the assumption — never silent (R-e disclosure pattern). Both
+# registered years carry non_metro_pct 0.40, so the "40%" wording is
+# registry-stable.
+HRA_METRO_ASSUMPTION_OBSERVATION = (
+    "Metro status not provided — non-metro 40% assumption applied"
 )
 
 @dataclass
@@ -138,6 +164,31 @@ class TaxEngine:
         if not isinstance(cg_data, list):
             cg_data = []
 
+        # Sprint 2 Step B: the HRA exemption needs THREE statutory inputs
+        # (Sec 10(13A) Rule 2A — verification record §8). The new session
+        # keys hra_received/rent_paid are authoritative per leg when present;
+        # the LEGACY session key "hra" (frontend-suggested) maps to BOTH
+        # legs, which reproduces the legacy formula
+        #   min(0.4*salary, hra, hra - 0.1*salary)
+        # exactly (leg (a) = hra, leg (b) = hra - 10%*salary, leg (c) =
+        # 0.4*salary non-metro baseline) — proven by the parity cell in
+        # tests/test_hra.py. A None value counts as absent (sessions may
+        # carry explicit nulls until the slot is collected).
+        legacy_hra = data.get("hra", 0)
+        hra_received_raw = data.get("hra_received")
+        rent_paid_raw = data.get("rent_paid")
+        hra_leg = float(
+            hra_received_raw if hra_received_raw is not None else legacy_hra or 0
+        )
+        rent_leg = float(
+            rent_paid_raw if rent_paid_raw is not None else legacy_hra or 0
+        )
+        # is_metro is bool-strict at the API boundary; anything else (None,
+        # absent, junk on direct engine calls) assumes non-metro and is
+        # disclosed via the audit observation below.
+        is_metro_raw = data.get("is_metro")
+        is_metro = is_metro_raw if isinstance(is_metro_raw, bool) else None
+
         age       = int(data.get("age", 30) or 30)
         is_senior = age >= 60
         is_vsr    = age >= 80
@@ -153,7 +204,10 @@ class TaxEngine:
             "80d_p": min(float(data.get("80d_parents", 0) or 0), sec_80d_parents_limit),
             "80e":   float(data.get("80e", 0) or 0), # No upper limit on interest
             "80g":   float(data.get("80g", 0) or 0),
-            "hra":   float(data.get("hra", 0) or 0),
+            # Step B: the two Rule 2A legs (the legacy "hra" entry is gone —
+            # it lives on only through the mapping above).
+            "hra_received": hra_leg,
+            "rent_paid":    rent_leg,
             "24b":   min(float(data.get("24b", 0) or 0), caps.sec_24b), # Max 2L for self-occupied
             "80eea": min(float(data.get("80eea", 0) or 0), caps.sec_80eea),
             "nps":   min(float(data.get("nps", 0) or 0), caps.sec_80ccd_1b), # 80CCD(1B) extra 50k
@@ -166,7 +220,7 @@ class TaxEngine:
 
         prof_tax = float(data.get("professional_tax", rules.professional_tax_default if salary > 0 else 0) or 0)
 
-        old_res = self._calc_old(salary, business, agri, rental_gross, other_income, cg_data, ded, prof_tax, is_senior, is_vsr, rules)
+        old_res = self._calc_old(salary, business, agri, rental_gross, other_income, cg_data, ded, prof_tax, is_senior, is_vsr, rules, is_metro)
         new_res = self._calc_new(salary, business, agri, rental_gross, other_income, cg_data, is_senior, rules)
 
         # Optimizer Logic
@@ -189,7 +243,10 @@ class TaxEngine:
         cg_total  = sum(c.get("amount", 0) for c in cg_data)
         risk = "Low"
         observations = []
-        if ded["hra"] > 0.5 * (salary or 1):
+        # Step B: the risk check keys on the HRA RECEIVED leg — for
+        # legacy-key sessions the leg equals the old ded["hra"] value, so
+        # the behavior is unchanged there.
+        if hra_leg > 0.5 * (salary or 1):
             risk = "Medium"
             observations.append("HRA Claim vs Salary ratio is unusually high (>50%). Rent receipts & landlord PAN are mandatory.")
         if ded["80g"] > 0.1 * (total_inc or 1):
@@ -254,6 +311,14 @@ class TaxEngine:
                 "(commonly ₹200/month, capped ₹2,500/yr)."
             )
 
+        # Step B (Rule 2A): the metro leg is assumed NON-METRO whenever the
+        # session never states it — disclosed whenever an HRA computation
+        # was attempted (any HRA received declared), even when the exemption
+        # ends up 0 (rent below the 10% excess, zero salary). An explicit
+        # is_metro False is a definitive non-metro answer, not an assumption.
+        if hra_leg > 0 and is_metro is None:
+            observations.append(HRA_METRO_ASSUMPTION_OBSERVATION)
+
         old_res.risk_level = risk
         old_res.audit_observations = observations
         new_res.risk_level = risk
@@ -278,10 +343,11 @@ class TaxEngine:
             "efficiency_score": round(eff_score, 1),
         }
 
-    def _calc_old(self, salary, business, agri, rental, other, cg_data, ded, prof_tax, is_senior, is_vsr, rules) -> TaxResult:
+    def _calc_old(self, salary, business, agri, rental, other, cg_data, ded, prof_tax, is_senior, is_vsr, rules, is_metro=None) -> TaxResult:
         res = TaxResult()
         std_ded = rules.standard_deduction["old"] if salary > 0 else 0
-        hra_ex  = self._calc_hra(salary, ded["hra"], rules)
+        # Step B: three-leg Rule 2A least-of test (legs carried in ded).
+        hra_ex  = self._calc_hra(rules, salary, ded["hra_received"], ded["rent_paid"], is_metro)
 
         # Net rental income after 30% statutory deduction under Section 24(a)
         net_rental = round(rental * 0.7, 2) if rental > 0 else 0
@@ -293,8 +359,10 @@ class TaxEngine:
         gross = salary + business + net_rental + other
         res.gross_total_income = round(gross, 2)
 
-        # Calculate 80GG if applicable (rent paid without HRA)
-        ded_80gg = self._calc_80gg(ded["80gg"], gross, hra_ex, rules)
+        # Calculate 80GG if applicable (rent paid without HRA). Step B: the
+        # guard keys on the HRA RECEIVED leg — a user who receives HRA can
+        # never claim 80GG, even when the Rule 2A exemption computes to 0.
+        ded_80gg = self._calc_80gg(ded["80gg"], gross, ded["hra_received"], rules)
 
         # Full Chapter VI-A + Section 24(b) deductions
         total_ded = (
@@ -597,19 +665,35 @@ class TaxEngine:
         tax += max(0.0, ltcg_112a_total - cg_rules.ltcg_112a_exemption) * cg_rules.ltcg_112a_rate
         return tax, inc
 
-    def _calc_80gg(self, ded_80gg, adj_total, hra_claimed, rules) -> float:
-        if hra_claimed > 0 or ded_80gg <= 0:
+    def _calc_80gg(self, ded_80gg, adj_total, hra_received, rules) -> float:
+        # Step B: the guard switches from the computed Rule 2A exemption to
+        # the HRA RECEIVED leg — receiving any HRA disqualifies 80GG even
+        # when the exemption computes to 0 (e.g. rent below 10% of salary).
+        if hra_received > 0 or ded_80gg <= 0:
             return 0.0
         caps = rules.deduction_caps
         # Least of: ₹5,000/month (₹60,000/yr), 25% of total income, rent paid minus 10% of total income
         return max(0.0, min(caps.sec_80gg_annual_max, caps.sec_80gg_income_pct * adj_total, ded_80gg - caps.sec_80gg_rent_excess_pct * adj_total))
 
-    def _calc_hra(self, salary, hra_claimed, rules) -> float:
-        if salary <= 0 or hra_claimed <= 0:
+    def _calc_hra(self, rules, salary, hra_received, rent_paid, is_metro) -> float:
+        """Section 10(13A) exemption — Rule 2A least-of test (Step B).
+
+        Least of: (a) actual HRA received; (b) rent paid minus 10% of
+        salary; (c) salary x rules.hra.metro_pct (the statutory metros
+        Delhi/Mumbai/Kolkata/Chennai) or rules.hra.non_metro_pct elsewhere.
+        Zero when salary <= 0, rent_paid <= 0 or hra_received <= 0 (an HRA
+        received leg of 0 also blocks 80GG via _calc_80gg's guard).
+
+        is_metro None assumes non-metro; the assumption is disclosed by the
+        caller via HRA_METRO_ASSUMPTION_OBSERVATION, never silent. Legacy
+        compat: callers mapping the legacy "hra" key to BOTH hra_received
+        and rent_paid reproduce the legacy formula
+        min(0.4*salary, hra, hra - 0.1*salary) exactly.
+        """
+        if salary <= 0 or rent_paid <= 0 or hra_received <= 0:
             return 0.0
-        # Baseline non-metro: 40% of salary
-        baseline = salary * rules.hra.non_metro_pct
-        return max(0.0, min(baseline, hra_claimed, hra_claimed - rules.hra.salary_pct * salary))
+        pct = rules.hra.metro_pct if is_metro else rules.hra.non_metro_pct
+        return max(0.0, min(hra_received, rent_paid - rules.hra.salary_pct * salary, salary * pct))
 
     def _slab_old(self, v, senior, vsr, rules) -> Tuple[float, List[Dict[str, Any]]]:
         exemption_by_age = rules.old_regime_exemption_by_age

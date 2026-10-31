@@ -117,7 +117,14 @@ def _regime_incomes(engine: TaxEngine, rules, data: Dict[str, Any]) -> Dict[str,
 
     caps = rules.deduction_caps
     std_old = rules.standard_deduction["old"] if salary > 0 else 0
-    hra_ex = engine._calc_hra(salary, float(data.get("hra", 0) or 0), rules)
+    # Sprint 2 Step B: _calc_hra took the three-leg Rule 2A signature
+    # (rules, salary, hra_received, rent_paid, is_metro). Mapping the legacy
+    # "hra" key to BOTH legs (is_metro None -> non-metro baseline) reproduces
+    # the legacy two-keyword formula min(0.4*salary, hra, hra - 0.1*salary)
+    # exactly, so every fixture-zone number this tool recomputes is
+    # unchanged.
+    legacy_hra = float(data.get("hra", 0) or 0)
+    hra_ex = engine._calc_hra(rules, salary, legacy_hra, legacy_hra, None)
     prof_tax = float(
         data.get("professional_tax", rules.professional_tax_default if salary > 0 else 0) or 0
     )
@@ -133,7 +140,10 @@ def _regime_incomes(engine: TaxEngine, rules, data: Dict[str, Any]) -> Dict[str,
     ded_24b = min(float(data.get("24b", 0) or 0), caps.sec_24b)
     ded_80tta = min(float(data.get("80tta", 0) or 0), caps.sec_80tta) if not senior else 0
     ded_80ttb = min(float(data.get("80ttb", 0) or 0), caps.sec_80ttb) if senior else 0
-    ded_80gg = engine._calc_80gg(float(data.get("80gg", 0) or 0), gross, hra_ex, rules)
+    # Step B: the 80GG guard keys on the HRA RECEIVED leg (legacy "hra"
+    # mapping — no fixture scenario carries an 80gg input, so the pinned
+    # outputs are unaffected either way).
+    ded_80gg = engine._calc_80gg(float(data.get("80gg", 0) or 0), gross, legacy_hra, rules)
     total_ded_old = (
         std_old + hra_ex + prof_tax + ded_24b + ded_80c + ded_80d + ded_80d_p
         + ded_nps + ded_80e + ded_80g + ded_80gg + ded_80tta + ded_80ttb

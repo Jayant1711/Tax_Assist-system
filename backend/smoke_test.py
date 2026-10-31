@@ -53,7 +53,11 @@ for step in range(8):
     if "80C" in d: sess2["80c"] = 100000
     elif "80D" in d: sess2["80d"] = 20000
     elif "NPS" in d: sess2["nps"] = 50000
-    elif "HRA" in d: sess2["hra"] = 0
+    elif "HRA" in d:
+        # Sprint 2 Step B: the HRA step needs all three Rule 2A inputs.
+        sess2["rent_paid"] = 0
+        sess2["hra_received"] = 0
+        sess2["is_metro"] = False
     elif "home loan" in d: break
     elif "donations" in d: sess2["80g"] = 0
     elif "Final" in d: break
