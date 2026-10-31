@@ -2,7 +2,8 @@
 
 Covers the tax_rules package contract: key lookup, unknown-key rejection
 with the supported-key list, import-time validation for every registered
-year, the Step A1 default pin, and FYRules immutability.
+year, the registry default (pinned to FY 2024-25 in Step A1, flipped to
+FY 2025-26 in Step A3), and FYRules immutability.
 """
 import dataclasses
 
@@ -44,9 +45,11 @@ def test_validate_rules_passes_for_all_registered_years() -> None:
         validate_rules(rules)  # must not raise
 
 
-def test_default_tax_year_is_fy_2024_25() -> None:
-    # Step A3 flips this to "fy_2025_26" (commented in tax_rules/__init__).
-    assert DEFAULT_TAX_YEAR == "fy_2024_25"
+def test_default_tax_year_is_fy_2025_26() -> None:
+    # Step A3 flipped the registry default to the current filing year;
+    # FY 2024-25 stays registered for the pinned legacy callers and the
+    # parity fixture.
+    assert DEFAULT_TAX_YEAR == "fy_2025_26"
     assert DEFAULT_TAX_YEAR in REGISTRY
 
 

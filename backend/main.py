@@ -279,7 +279,9 @@ class CalculateRequest(BaseModel):
     id: Optional[str] = None
 
     # ADR-008: optional tax-year pin; None keeps the registry default
-    # (fy_2024_25). Step A3 adds the fy_2025_26 key to the registry.
+    # (fy_2025_26 since Step A3). Both registered keys — fy_2024_25 and
+    # fy_2025_26 — validate via REGISTRY, which is also the 422 message's
+    # single source for the supported list.
     tax_year: Optional[str] = Field(None, max_length=32)
 
     @field_validator("id")

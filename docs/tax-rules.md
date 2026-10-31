@@ -1,6 +1,6 @@
 # Tax Rules Reference — as implemented (FY 2024-25 / AY 2025-26)
 
-> ⚠ **Scope warning:** this file documents what is *coded* in `backend/tax_engine.py` today, which targets **FY 2024-25 (AY 2025-26) only**. As of October 2026 the live filing year is AY 2026-27 (FY 2025-26) — see [§5 Gap](#5-fy-2025-26-ay-2026-27-gap).
+> ⚠ **Scope warning:** this file documents what is *coded* in `backend/tax_engine.py` today. Since Sprint 2 Step A3 (October 2026) the per-year constants live in the versioned registry `backend/tax_rules/` (ADR-008) — see [§5](#5-fy-2025-26-ay-2026-27-gap) and [§6](#6-rule-change-checklist-where-fy-constants-live) — and the engine serves **both** FY 2024-25 (explicit pin / parity fixture) and FY 2025-26 (the registry default) through the same algorithms.
 > Rules were transcribed from the codebase (path:line evidence), not assumed. Verify each figure against the Income Tax Act / relevant Finance Act before relying on it for an actual filing.
 
 ## 1. New Regime (Section 115BAC)
@@ -18,7 +18,7 @@ Slab computation: `_slab_new` (`backend/tax_engine.py:348-368`).
 
 - **Standard deduction:** ₹75,000 when `salary > 0` (`tax_engine.py:237`), else ₹0.
 - **Other deductions:** none — no Chapter VI-A; house-property gets only the 30% standard deduction under 24(a) (`tax_engine.py:240`).
-- **Section 87A rebate:** full rebate if taxable ≤ ₹7,00,000; marginal relief caps tax at `(taxable − 7,00,000)` for taxable ≤ ₹7,27,777 (`tax_engine.py:251-259`).
+- **Section 87A rebate:** full rebate while TOTAL income (incl. special-rate CG) ≤ ₹7,00,000; above it the POST-CESS band cap applies — the payable total (incl. surcharge and cess) is capped at `TOTAL income − 7,00,000`, so the band endpoint is **derived** at 7,23,214 incl-cess (Step A2 retired the stored pre-cess 7,27,777 bound; constants in `tax_rules/fy_2024_25.py` `rebate["new"]`, mechanics in `_calc_new`).
 - Senior-citizen age parameters are accepted but unused (new-regime slabs are age-independent).
 
 ## 2. Old Regime
@@ -77,7 +77,7 @@ FY 2024-25 grandfathering (pre-23-Jul-2024 transactions at 10%/15%) is not model
 | > ₹2Cr | 25% if new regime, else… |
 | > ₹5Cr (old only) | 37% |
 
-"Marginal relief" as coded = `min(surcharge, income − 50,00,000)` (`:292`). This is an **approximation**, not the statutory computation (compare tax liability at the threshold income). Wrong near ₹50L and for capital-gains-heavy incomes.
+"Marginal relief" as originally coded = `min(surcharge, income − 50,00,000)` — an **approximation**, wrong near ₹50L and for capital-gains-heavy incomes. **RESOLVED in Sprint 2 Step A2 (2026-10-31):** `_apply_marginal_relief` now implements the statutory band-based threshold comparison at ALL FOUR thresholds — `S_payable = min(S_band(x), max(0, T_r1(h_top) + (x − h_top) − T(x)))`, with T_r1(h_top) at the band rate CONTAINING h_top and cess applied after, outside the comparison (see `tax_engine.py`; constants in `tax_rules/fy_2024_25.py` `surcharge`).
 
 ### Cess
 4% Health & Education Cess applied multiplicatively in both regimes (`tax_engine.py:187,262`).
@@ -91,23 +91,24 @@ FY 2024-25 grandfathering (pre-23-Jul-2024 transactions at 10%/15%) is not model
 | C4 | **NLP misclassification** in real usage: education-loan interest → income; tuition fees → salary; property sale → other income; PPF → 80D | `backend/logs/session_audit.json` (2026-04-22/23 entries) | Critical |
 | H1 | LTCG ₹1.25L exemption applied **per entry**, not per assessee | `tax_engine.py:300-302` | High |
 | H2 | HRA formula: no metro 50% leg; rent/HRA conflation | `tax_engine.py:316-321` | High |
-| H3 | Surcharge marginal relief is an approximation | `tax_engine.py:283-292` | High |
+| H3 | ~~Surcharge marginal relief is an approximation~~ **RESOLVED (Step A2, 2026-10-31)** — statutory band-based threshold comparison implemented | `_apply_marginal_relief` in `tax_engine.py` | High → closed |
 | H4 | 80EEA / 80U / 80DD / 80DDB collected but silently excluded from the deduction total | `tax_engine.py:78,83,84` vs `:159-172` | High |
 | M1 | Professional-tax default ₹2,500 assumed at maximum | `tax_engine.py:87` | Medium |
 | M2 | No grandfathering for pre-23-Jul-2024 equity transactions | `tax_engine.py:294-308` | Medium |
 
 ## 5. FY 2025-26 (AY 2026-27) gap
 
-⚠ **Uncertain — verify before implementing:** the engine is hardcoded to AY 2025-26. The current filing year (FY 2025-26, per Finance Act 2025) changed the **new regime** materially: basic exemption ₹4,00,000, slab edges re-cut every ₹4L up to ₹24L, and an enlarged 87A rebate (zero tax up to ~₹12L taxable). Standard deduction stays ₹75,000. **Do not code these from memory — confirm each constant against the Finance Act 2025 text, then implement via the rules registry (ADR-008 in [decisions.md](decisions.md)).**
+✅ **RESOLVED (Sprint 2 Step A3, 2026-10-31):** FY 2025-26 is implemented via the rules registry — `backend/tax_rules/fy_2025_26.py`, transcribed 1:1 from the frozen record [tax-verification.md](tax-verification.md) plus the six tax-expert corrections of that date, import-validated by `tax_rules.validate_rules`. The registry **default is now `fy_2025_26`** (ADR-008); `fy_2024_25` stays registered for the pinned legacy callers and the parity fixture (`tests/fixtures/parity_fy2425.json`). New regime per Finance Act 2025: basic exemption ₹4,00,000, slab edges every ₹4L up to ₹24L, 87A rebate ₹60,000 (zero tax up to ₹12,00,000 TOTAL income; post-cess band above, endpoint derived at ₹12,73,934); standard deduction stays ₹75,000; old regime unchanged except the professional-tax default (0 + advisory). Verified cell-by-cell by `backend/tests/test_fy2025_26_matrix.py`.
 
 ## 6. Rule-change checklist (where FY constants live)
 
-When updating the tax year, every location below must change together:
+When adding or changing a tax year, every location below must change together. Since Step A3 the constants have a **single source**:
 
-1. `backend/tax_engine.py` — slabs (`_slab_old`, `_slab_new`), std deductions (`:146`, `:237`), 87A (`:183`, `:251-259`), surcharge bands (`:288`), CG rates (`:294-308`).
-2. `backend/anfis_trainer.py` — its own copies of slab/HRA/surcharge math used as training ground truth (currently divergent).
-3. `backend/test_suite.py` — Block 5 ground-truth expectations.
-4. Frontend copy: `frontend/src/app/page.tsx` (sidebar "Quick Rules"), `frontend/src/components/TaxReport.tsx` (AY strings), `frontend/src/app/layout.tsx` (metadata), `frontend/src/components/ChatInterface.tsx` (welcome message).
-5. `README.md` badge + this file.
+1. `backend/tax_rules/` — **single source of truth (ADR-008)**: `schema.py` (validated dataclasses) plus one module per year (`fy_2024_25.py`, `fy_2025_26.py`); `DEFAULT_TAX_YEAR` in `__init__.py`. Every slab, deduction cap, rebate, surcharge, CG rate, cess and professional-tax constant is transcribed here (from `docs/tax-verification.md`) and import-validated.
+2. `backend/tax_engine.py` — the generalized algorithms only (slab walk, 87A, surcharge relief, CG booking); **no per-year constants**. A new year must run through them unforked.
+3. `backend/anfis_trainer.py` — its own copies of slab/HRA/surcharge math used as training ground truth (currently divergent).
+4. `backend/test_suite.py` — Block 5 ground-truth expectations (pinned to `fy_2024_25` since Step A3; `backend/tests/` is the authoritative suite, ADR-011).
+5. Frontend copy: `frontend/src/app/page.tsx` (sidebar "Quick Rules"), `frontend/src/components/TaxReport.tsx` (AY strings — now rendered from the response's `fy_label`), `frontend/src/app/layout.tsx` (metadata), `frontend/src/components/ChatInterface.tsx` (welcome message).
+6. `README.md` badge + this file.
 
 This scattered-constants problem is tracked as design debt in [architecture.md §5](architecture.md#5-known-architectural-weaknesses-audit-2026-10-31) and resolved by ADR-008.

@@ -27,7 +27,7 @@ cases = [
     ("Zero income",         {"salary": 0}),
 ]
 for name, data in cases:
-    r = eng.calculate_tax_advanced(data)
+    r = eng.calculate_tax_advanced(data, tax_year="fy_2024_25")  # FY 2024-25 pinned (Step A3)
     old = r["old_regime"].total_tax
     new = r["new_regime"].total_tax
     eff = r["efficiency_score"]

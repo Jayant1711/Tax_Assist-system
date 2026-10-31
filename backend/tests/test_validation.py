@@ -97,7 +97,16 @@ class TestCalculateEndpointValidation:
             assert key in body
 
     def test_frontend_payload_shape_and_numbers_unchanged(self, client) -> None:
-        payload = {"id": "sid_x", "salary": 1800000, "80c": 150000, "profile": "Salaried"}
+        # Sprint 2 (ADR-008): pinned to fy_2024_25 (both here and in the
+        # reference below) so the numeric-parity check survives the Step A3
+        # default flip to fy_2025_26.
+        payload = {
+            "id": "sid_x",
+            "salary": 1800000,
+            "80c": 150000,
+            "profile": "Salaried",
+            "tax_year": "fy_2024_25",
+        }
         response = client.post("/calculate", json=payload)
         assert response.status_code == 200
         body = response.json()
@@ -105,9 +114,7 @@ class TestCalculateEndpointValidation:
             assert key in body
         # Numeric parity: the endpoint must compute exactly what the engine
         # computes on the raw payload (guards the engine-default handling,
-        # e.g. the internal professional_tax default for salaried users).
-        # Sprint 2 (ADR-008): the reference is pinned to the pre-Sprint-2
-        # default tax year so the parity check survives the Step A3 flip.
+        # e.g. the registry professional-tax default for salaried users).
         from main import engine
 
         reference = engine.calculate_tax_advanced(
@@ -404,9 +411,11 @@ class TestTaxYearValidation:
         assert body["fy_label"] == "FY 2024-25 (AY 2025-26)"
 
     def test_calculate_without_tax_year_keeps_default(self, client) -> None:
+        # Step A3 flipped the registry default; an unpinned call resolves
+        # FY 2025-26 (fy_2024_25 remains available via an explicit pin).
         response = client.post("/calculate", json={"salary": 500000})
         assert response.status_code == 200
-        assert response.json()["tax_year"] == "2024-25"
+        assert response.json()["tax_year"] == "2025-26"
 
     def test_chat_rejects_unknown_tax_year_in_session(self, client) -> None:
         response = client.post(

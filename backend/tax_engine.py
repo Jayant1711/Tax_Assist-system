@@ -28,6 +28,16 @@ surcharge over the special-rate (111A/112A) portion. These changes apply
 ONLY inside the surcharge-relief zones and the 87A band — the parity
 fixture's other cells remain byte-identical (relief-zone cells were
 re-pinned with citations by tests/tools/apply_a2_fixture_updates.py).
+
+Sprint 2 Step A3: the registry default flips to "fy_2025_26"
+(docs/tax-verification.md + the six tax-expert corrections, 2026-10-31).
+No algorithm forks per year — every slab/rebate/surcharge/CG/cess/prof-tax
+constant is read from the registered rule set, so both years run through
+the identical generalized A2 algorithms. One behavior addition: when the
+professional-tax input is absent (registry default applied) and salary > 0,
+a state-specific advisory is appended to the audit observations for BOTH
+years (FY 2024-25 keeps its 2,500 default; FY 2025-26 defaults to 0 —
+ruling j). "tax_year": "fy_2024_25" reproduces every pre-A3 figure.
 """
 
 import logging
@@ -180,6 +190,17 @@ class TaxEngine:
                 "Capital gains are booked at the declared amount — confirm this is the "
                 "GAIN (sale price minus cost of acquisition), not the gross sale value, "
                 "before filing."
+            )
+
+        # Step A3 (ruling j): professional tax is a state levy with no
+        # national rate. When the input was never provided (the registry
+        # default applies — 2,500 for FY 2024-25, 0 for FY 2025-26) and
+        # there is salary income, disclose it so the default is never
+        # silent. An explicit professional_tax (even 0) suppresses this.
+        if salary > 0 and "professional_tax" not in data:
+            observations.append(
+                "Professional tax is state-specific — enter your actual figure "
+                "(commonly ₹200/month, capped ₹2,500/yr)."
             )
 
         old_res.risk_level = risk

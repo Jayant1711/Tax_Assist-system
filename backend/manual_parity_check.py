@@ -12,7 +12,7 @@ def verify_50l_case():
         "profile": "Salaried"
     }
     
-    report = engine.calculate_tax_advanced(session)
+    report = engine.calculate_tax_advanced(session, tax_year="fy_2024_25")  # FY 2024-25 pinned (Step A3)
     old = report["old_regime"]
     new = report["new_regime"]
     

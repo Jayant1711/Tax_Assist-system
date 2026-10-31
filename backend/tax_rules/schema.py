@@ -94,7 +94,7 @@ class CGRules:
 
 @dataclass(frozen=True)
 class DeductionCaps:
-    """Chapter VI-A / Chapter VI statutory caps (FY 2024-25).
+    """Chapter VI-A / Chapter VI statutory caps (per registered year).
 
     Fields the current engine books UNCAPPED (80E, 80G, 80U/80DD, 80DDB)
     still record their statutory caps for auditability; the engine's
@@ -119,8 +119,14 @@ class DeductionCaps:
     sec_80u_80dd_80_plus: float             # 1,25,000 (severe disability 80%+)
     sec_80ddb: float                        # 40,000 medical treatment
     sec_80ddb_senior: float                 # 1,00,000 senior medical treatment
-    sec_80eea: float                        # 1,50,000 affordable housing
-    sec_80g: Optional[float]                # placeholder — engine books declared amount
+    # 80EEA is omittable from a year module (defaults to 0.0): the
+    # deduction was discontinued by its 31-Mar-2022 loan-sanction sunset,
+    # so FY 2025-26 carries no cap and the engine's unchanged
+    # min(declared, cap) booking yields no deduction. FY 2024-25 pins
+    # 1,50,000 for parity; removal from the engine/validators lands in
+    # Step D.
+    sec_80eea: float = 0.0                  # 1,50,000 affordable housing (pre-sunset years)
+    sec_80g: Optional[float] = None         # placeholder — engine books declared amount
 
 
 @dataclass(frozen=True)

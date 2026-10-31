@@ -22,7 +22,7 @@ for txt, expected in tests:
 # 2. Tax Engine — 50L case
 eng = TaxEngine()
 data = {"salary": 5000000, "80c": 150000, "nps": 50000, "80d": 25000, "age": 30}
-r = eng.calculate_tax_advanced(data)
+r = eng.calculate_tax_advanced(data, tax_year="fy_2024_25")  # FY 2024-25 pinned (Step A3)
 old_tax = r["old_regime"].total_tax
 new_tax = r["new_regime"].total_tax
 rec = r["recommendation"]
@@ -31,7 +31,7 @@ print(f"  [PASS] TaxEngine 50L: Old=Rs.{old_tax:,.0f}  New=Rs.{new_tax:,.0f}  Re
 
 # 3. Surcharge test — 1Cr income
 data2 = {"salary": 10000000, "80c": 150000}
-r2 = eng.calculate_tax_advanced(data2)
+r2 = eng.calculate_tax_advanced(data2, tax_year="fy_2024_25")  # FY 2024-25 pinned (Step A3)
 sur_tax = r2["old_regime"].total_tax
 print(f"  [PASS] Surcharge (1Cr): Old=Rs.{sur_tax:,.0f}")
 

@@ -77,11 +77,11 @@ export default function Home() {
           </div>
         </nav>
 
-        <div className="nav-section-label">Quick Rules (FY 2024-25)</div>
+        <div className="nav-section-label">Quick Rules (FY 2025-26)</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.25rem 0.5rem' }}>
           <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.6rem 0.75rem', fontSize: '0.73rem', lineHeight: 1.5 }}>
             <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>New Regime:</span>
-            <div style={{ color: 'var(--text-sub)' }}>Standard ded. ₹75k, rebate up to ₹7L (Sec 87A).</div>
+            <div style={{ color: 'var(--text-sub)' }}>Standard ded. ₹75k, zero tax up to ₹12L (Sec 87A).</div>
           </div>
           <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.6rem 0.75rem', fontSize: '0.73rem', lineHeight: 1.5 }}>
             <span style={{ color: 'var(--primary-light)', fontWeight: 600 }}>Old Regime:</span>
