@@ -1,135 +1,194 @@
 'use client';
-// Summer internship project
 
 import React, { useState } from 'react';
 import ChatInterface from '@/components/ChatInterface';
 import TaxReport from '@/components/TaxReport';
+import SavingsGraph from '@/components/SavingsGraph';
 
 export default function Home() {
-  const [session, setSession] = useState<any>({});
+  const [session, setSession] = useState<any>({ phase: 'PROFILING' });
   const [showReport, setShowReport] = useState(false);
   const [activeView, setActiveView] = useState<'chat' | 'summary' | 'graph'>('chat');
 
+  const hasData = session && (session.salary > 0 || session.business > 0 || session.rental > 0);
+
   return (
     <main className="app-shell">
-      {/* Sidebar - Premium Navigation */}
+      {/* ── Left Sidebar (Navigation & Controls) ── */}
       <aside className="sidebar">
-        <div style={{ marginBottom: '3rem' }}>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ 
-              width: '40px', 
-              height: '40px', 
-              background: 'linear-gradient(135deg, var(--primary), #4f46e5)', 
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.25rem',
-              color: 'white',
-              boxShadow: '0 8px 16px var(--primary-glow)'
-            }}>T</span>
-            TaxAssist <span style={{ color: 'var(--accent-saffron)' }}>AI</span>
-          </h1>
+        <div className="sidebar-logo">
+          <div className="logo-icon">T</div>
+          <div>
+            <div className="logo-text">
+              TaxAssist <span>AI</span>
+            </div>
+            <div className="logo-sub">Deep Consultant · FY 24-25</div>
+          </div>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <div className="badge-luxe" style={{ marginBottom: '1rem', textAlign: 'center' }}>FY 2024-25</div>
-          
-          <button 
-            className={`premium-card ${activeView === 'chat' ? 'active' : ''}`} 
-            style={{ padding: '1rem', textAlign: 'left', cursor: 'pointer', background: activeView === 'chat' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255,255,255,0.05)', border: activeView === 'chat' ? '1px solid var(--primary)' : '1px solid transparent' }}
+        <div className="nav-section-label">Consultation Views</div>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          <div
+            className={`nav-item ${activeView === 'chat' ? 'active' : ''}`}
             onClick={() => setActiveView('chat')}
           >
-            <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600 }}>Active Session</span>
-            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-dim)' }}>Consulting now...</span>
-          </button>
-          
-          <div style={{ marginTop: '2rem' }}>
-            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1rem' }}>Tools</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div 
-                style={{ fontSize: '0.85rem', color: activeView === 'summary' ? 'var(--primary)' : 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}
-                onClick={() => { setActiveView('summary'); setShowReport(true); }}
-              >
-                <span style={{ fontSize: '1.1rem' }}>📋</span> Tax Summary
+            <span className="icon">💬</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>Active Dialogue</div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                Guided discovery flow
               </div>
-              <div 
-                style={{ fontSize: '0.85rem', color: activeView === 'graph' ? 'var(--primary)' : 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}
-                onClick={() => { setActiveView('graph'); setShowReport(true); }}
-              >
-                <span style={{ fontSize: '1.1rem' }}>📈</span> Savings Graph
+            </div>
+            <span style={{ fontSize: '0.65rem', background: 'rgba(99,102,241,0.2)', color: 'var(--primary-light)', padding: '0.1rem 0.4rem', borderRadius: '10px' }}>
+              Live
+            </span>
+          </div>
+
+          <div
+            className={`nav-item ${activeView === 'summary' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveView('summary');
+              setShowReport(true);
+            }}
+          >
+            <span className="icon">📋</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>Tax Summary & Statement</div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                ITR computation breakdown
               </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontSize: '1.1rem' }}>⚙️</span> Preferences
+            </div>
+          </div>
+
+          <div
+            className={`nav-item ${activeView === 'graph' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveView('graph');
+              setShowReport(true);
+            }}
+          >
+            <span className="icon">📈</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>Regime Comparison</div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                Old vs New tax visualizer
               </div>
             </div>
           </div>
         </nav>
 
-        <div style={{ marginTop: 'auto', padding: '1rem', background: 'var(--bg-accent)', borderRadius: '16px', border: '1px solid var(--border)' }}>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-            Expert AI analysis powered by ANFIS v3 + EE-BAT Intelligence.
-          </p>
+        <div className="nav-section-label">Quick Rules (FY 2024-25)</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.25rem 0.5rem' }}>
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.6rem 0.75rem', fontSize: '0.73rem', lineHeight: 1.5 }}>
+            <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>New Regime:</span>
+            <div style={{ color: 'var(--text-sub)' }}>Standard ded. ₹75k, rebate up to ₹7L (Sec 87A).</div>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.6rem 0.75rem', fontSize: '0.73rem', lineHeight: 1.5 }}>
+            <span style={{ color: 'var(--primary-light)', fontWeight: 600 }}>Old Regime:</span>
+            <div style={{ color: 'var(--text-sub)' }}>80C (₹1.5L), 80D (₹25k-₹50k), HRA & Sec 24(b) home loan.</div>
+          </div>
+        </div>
+
+        {/* Profile Status Badge */}
+        {session?.profile && (
+          <div style={{ margin: '1rem 0 0.5rem', padding: '0.75rem', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary-light)', fontWeight: 700 }}>
+              Profile Detected
+            </div>
+            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
+              {session.profile}
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Phase: {session.phase || 'PROFILING'}
+            </div>
+          </div>
+        )}
+
+        <div className="sidebar-footer">
+          <strong>⚡ Powered by ANFIS v3.5</strong>
+          Dual-engine neuro-fuzzy inference & compliance checks for Indian tax filing.
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <section className="main-content">
-        <div className="dashboard-grid">
-          {/* Chat Pane */}
-          <div className="chat-section">
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>AI Consultant</h2>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Multi-source income reasoning active</p>
+      {/* ── Main Content Area (Chat + Live Dashboard) ── */}
+      <div className="main-content">
+        {/* Left: Chat Conversation Pane */}
+        <div className="chat-panel">
+          <ChatInterface
+            onUpdateSession={setSession}
+            onShowReport={setShowReport}
+          />
+        </div>
+
+        {/* Right: Live Tax Intelligence Dashboard */}
+        <div className="report-panel">
+          <div className="report-header">
+            <div>
+              <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                Real-Time Tax Audit
+              </h2>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Instant parity calculation & deduction optimization
+              </p>
+            </div>
+            {hasData && (
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button
+                  className={`btn btn-sm ${activeView === 'chat' || activeView === 'summary' ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => {
+                    setActiveView('summary');
+                    setShowReport(true);
+                  }}
+                >
+                  Statement
+                </button>
+                <button
+                  className={`btn btn-sm ${activeView === 'graph' ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => {
+                    setActiveView('graph');
+                    setShowReport(true);
+                  }}
+                >
+                  Regime Graph
+                </button>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <div className="badge-luxe" style={{ color: 'var(--accent-green)', borderColor: 'rgba(16, 185, 129, 0.2)' }}>● Live</div>
-              </div>
-            </header>
-            
-            <ChatInterface 
-              onUpdateSession={setSession} 
-              onShowReport={setShowReport} 
-            />
+            )}
           </div>
 
-          {/* Report Pane - Real-time Dashboard */}
-          <div className="report-section">
-            <header style={{ marginBottom: '2rem' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Real-time Insights</h2>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Instant tax simulation and optimization</p>
-            </header>
-
-            {showReport ? (
-              <TaxReport session={session} onUpdateSession={setSession} />
+          <div className="report-body">
+            {showReport || hasData ? (
+              <TaxReport
+                session={session}
+                activeView={activeView}
+                onUpdateSession={setSession}
+              />
             ) : (
-              <div style={{ 
-                height: '80%', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                textAlign: 'center',
-                color: 'var(--text-muted)',
-                gap: '1.5rem'
-              }}>
-                <div style={{ 
-                  fontSize: '4rem', 
-                  opacity: 0.2, 
-                  animation: 'pulse-slow 3s infinite ease-in-out' 
-                }}>📊</div>
-                <div>
-                  <h3 style={{ color: 'var(--text-dim)', marginBottom: '0.5rem' }}>Waiting for Data</h3>
-                  <p style={{ maxWidth: '250px', margin: '0 auto', fontSize: '0.85rem' }}>
-                    Speak with our AI consultant to build your real-time tax profile.
-                  </p>
+              <div className="empty-state">
+                <div className="empty-icon">📊</div>
+                <div className="empty-title">Awaiting Financial Discovery</div>
+                <div className="empty-desc">
+                  Provide your profession and income details in the chat to generate real-time tax simulations.
+                </div>
+
+                <div className="empty-steps">
+                  <div className="empty-step">
+                    <div className="empty-step-num">1</div>
+                    <span>Declare salary or business revenue</span>
+                  </div>
+                  <div className="empty-step">
+                    <div className="empty-step-num">2</div>
+                    <span>Specify 80C, 80D, rent or home loan</span>
+                  </div>
+                  <div className="empty-step">
+                    <div className="empty-step-num">3</div>
+                    <span>Review instant side-by-side tax comparison</span>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </div>
-      </section>
+      </div>
     </main>
   );
 }
