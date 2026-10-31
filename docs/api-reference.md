@@ -1,265 +1,203 @@
 # API Reference
 
-> Verified against the code 2026-10-31. Backend entry point: `backend/main.py` (Uvicorn on `0.0.0.0:8000`, `main.py:100-101`). Interactive docs: `http://localhost:8000/docs` (FastAPI auto).
+> Refreshed 2026-11-01 for the Sprint 3 contract (Waves C+D+H). Backend entry point: `backend/main.py` via `create_app(app_env)`; dev run: `cd backend && python main.py` (Uvicorn on `127.0.0.1:8000`, `/docs` enabled). Production: container CMD, `/docs` disabled (see [deployment.md](deployment.md)).
 >
-> **There is no authentication on any endpoint.** CORS is `allow_origins=["*"]` with all methods/headers (`main.py:16-22`). See [security.md](security.md) before exposing this API anywhere but localhost.
+> **All data endpoints are authenticated** (HttpOnly cookie sessions, ADR-012) and operate on **server-side session state** (ADR-013): the client carries only a `session_id`, never a session dict. Hardening posture (CORS allowlist, rate limits, security headers): [decisions.md](decisions.md) ADR-014. Threat model: [security.md](security.md).
+
+## Conventions
+
+- **Session cookie** (`ta_session` / `__Host-ta_session` in prod): opaque 256-bit token, HttpOnly, SameSite=Lax, Secure in prod. Send with `credentials: "include"` (the frontend's `apiFetch` does). Send `Content-Type: application/json` for POSTs — JSON-only bodies on state-changing routes.
+- **`X-Request-ID`** is on every response (Wave H): a fresh uuid4 hex per request, echoed in the structured logs — quote it when reporting server issues.
+- **Auth errors:** a missing/expired/revoked/forged cookie on a protected endpoint → `401 {"detail": "Authentication required"}` (uniform; never a validity oracle — `/auth/logout` still 204s). A **foreign or unknown** app-session id → `404 {"detail": "Session not found"}` (no existence oracle).
+- **Rate limits** (sliding windows): `/auth/*` 10/min/IP · `/chat` + `/sessions*` 30/min/user · `/calculate` 60/min/user · aggregate 120/min/IP. Exceeded → `429 {"detail", "retry_after_seconds"}` + `Retry-After` header. `/health` is exempt.
+- **Bodies** over `TAX_MAX_BODY_BYTES` (1 MB) → `413`. Malformed/oversized fields → `422 {"detail": "Validation error", "errors": [...]}` (loc/msg/type only, input never echoed).
+- **Cross-site browser POSTs** with a non-allowlisted `Origin` → `403 {"detail": "Origin not allowed"}` (CSRF posture; curl/same-origin without an Origin header pass).
 
 ## Endpoints at a glance
 
-| Method | Path | Auth | Purpose | Defined |
-|---|---|---|---|---|
-| `POST` | `/chat` | none | Conversational extraction; mutates and returns the full session; attaches `tax_report` when any income is set | `main.py:40-79` |
-| `GET` | `/history/{sid}` | none | Returns this session's entries from the audit log | `main.py:81-92` |
-| `POST` | `/calculate` | none | Pure tax computation for an arbitrary session dict (used by the report UI) | `main.py:94-98` |
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/auth/register` | none | Create account (scrypt) — 201 `{user_id, email}`, 409 duplicate |
+| `POST` | `/auth/login` | none | 200 `{user_id, email}` + session cookie; uniform 401; 423 locked |
+| `POST` | `/auth/logout` | none required | 204 — revokes the presented session, clears cookie |
+| `GET` | `/auth/me` | cookie | 200 `{user_id, email, expires_at}` / 401 |
+| `GET` | `/auth/sessions` | cookie | The caller's active auth sessions |
+| `DELETE` | `/auth/sessions/{row_id}` | cookie | Revoke one (owner-checked, 404 otherwise) |
+| `POST` | `/sessions` | cookie (demo: opt-in) | Bootstrap one server-side app session |
+| `GET` | `/sessions` | cookie | List the caller's app sessions |
+| `GET` | `/sessions/{session_id}` | cookie + owner | Read-only projection of the state |
+| `DELETE` | `/sessions/{session_id}` | cookie + owner | Delete one app session |
+| `POST` | `/chat` | cookie (demo: opt-in) | Conversational turn `{message, session_id}` |
+| `POST` | `/calculate` | cookie (demo: opt-in) | Full report `{session_id, tax_year?}` |
+| `GET` | `/history/{sid}` | cookie + owner | Paginated audit entries for an OWNED session |
+| `GET` | `/health` | none (exempt) | 200 ok / 503 degraded liveness probe |
 
-There is no `/health` endpoint yet (roadmap Week 3). `GET /docs` and `/redoc` are served by FastAPI defaults.
+`/docs`, `/redoc`, `/openapi.json` exist in dev only — 404 in prod.
 
 ---
 
-## `POST /chat`
+## Auth endpoints (ADR-012)
 
-### Request
+### `POST /auth/register`
 
 ```json
-{
-  "message": "I am a software engineer earning 18 LPA",
-  "session": { "id": "sid_1730000000000", "phase": "PROFILING" }
-}
+{ "email": "user@example.com", "password": "correct horse battery staple" }
 ```
 
-Body is validated by the only Pydantic model in the codebase (`main.py:29-31`):
+- `201 {"user_id": "<uuid>", "email": "..."}`; `409 {"detail": "Email already registered"}` (case-insensitive); `422` invalid email / password outside 12–1024 chars. Auth events are audited with sha256[:16] correlation hashes only (never raw emails/tokens/passwords).
+
+### `POST /auth/login`
+
+- `200 {"user_id", "email"}` + `Set-Cookie` on success.
+- `401 {"detail": "Invalid email or password"}` — uniform for unknown email AND wrong password (dummy-scrypt timing equalization; no enumeration oracle).
+- `423 {"detail": "Account temporarily locked"}` — shown only for a CORRECT password after 5 failures within 15 minutes.
+
+### `POST /auth/logout`
+
+`204`, idempotent: revokes the presented session row and clears the cookie. Deliberately NOT behind the auth dependency — a stale/garbage cookie still gets the clean 204 (never a session-validity oracle).
+
+### `GET /auth/me` · `GET /auth/sessions` · `DELETE /auth/sessions/{row_id}`
+
+`/auth/me` → `{user_id, email, expires_at}`. `/auth/sessions` → rows identified by a 12-hex prefix of the hashed token (`current: true` marks the caller's), never the token material. `DELETE .../{row_id}` revokes one of the caller's sessions (owner-checked; 404 otherwise).
+
+---
+
+## App sessions + conversation (ADR-013)
+
+### `POST /sessions` — bootstrap
+
+`200 {"session_id": "<server-uuid-hex>", "session": {"id", "phase": "PROFILING"}}` — the `session` value is the read-only PROJECTION of the bootstrap state (internal `history` is not projected). Under `TAX_ENABLE_ANON_DEMO=1` a cookie-less caller creates a user-less session (never usable with `/history`).
+
+### `POST /chat`
+
+Request (the client-authored `session` dict is GONE from the wire):
+
+```json
+{ "message": "I am a software engineer earning 18 LPA", "session_id": "<server-issued id>" }
+```
 
 | Field | Type | Notes |
 |---|---|---|
-| `message` | `str` | No length limit; `/end`, `end`, `/done`, `done`, `finish`, `complete` force the FINAL phase (`nlp_engine.py:67`) |
-| `session` | `Dict[str, Any]` | **The entire conversation state, client-owned.** First call may be almost empty; every later call must return the `session` object the server last sent. The `id` key is client-chosen (`sid_${Date.now()}` in `ChatInterface.tsx:105`) |
+| `message` | `str` | ≤ 4000 chars (422 above); same NLP semantics as always ([nlp-pipeline.md](nlp-pipeline.md)) |
+| `session_id` | `str` | A session THIS USER owns (POST /sessions first); foreign/unknown → 404 |
 
-Session keys read or written by the backend (client may add more; unknown keys are preserved):
+An old-style body containing `session` → `422 {"detail": "Validation error", ...}` with the migration hint "Session state is now server-side; send session_id".
 
-| Group | Keys |
-|---|---|
-| Income | `salary`, `business`, `rental`, `other_income`, `agriculture`, `capital_gains[]` (entries `{type, amount, holding}`) |
-| Deductions | `80c`, `80d`, `80d_parents`, `80e`, `80g`, `80eea`, `nps`, `80tta`, `80ttb`, `80gg`, `80u_80dd`, `80ddb`, `24b`, `hra`, `professional_tax` |
-| Profile / flow | `id`, `profile`, `phase`, `age`, `has_parents`, `has_home_loan`, `pays_rent`, `_last_question`, `_last_val`, `_prev_salary`, `history[]` (`{user, ai}`) |
+Processing: load OWNED state → `nlp.process_message(message, state)` (unchanged) → engine **only if** any of `salary`/`business`/`rental`/`other_income`/`agriculture` > 0 → re-validate the mutated state (fail-closed 422 on validator regression) → persist → audit (background) + blackbox (synchronous).
 
-### Processing
-
-`nlp.process_message()` mutates the session in place (full pipeline: [nlp-pipeline.md](nlp-pipeline.md)). Then, **only if** any of `salary`, `business`, `rental`, `other_income`, `agriculture` is `> 0`, the engine runs and the result becomes `tax_report` (`main.py:47-55`); a calculation exception is caught, printed to the server console, and returned as `tax_report: null` (`main.py:52-55`).
-
-After the response body is prepared, audit logging is deferred via `BackgroundTasks`, but the black-box write runs synchronously inside the handler (`main.py:57-76`) — both write PII to disk (see [security.md](security.md)).
-
-### Response — 200
+Response — 200:
 
 ```json
 {
-  "response": "✅ Mapped — SALARY: ₹1,800,000. 💰 **Section 80C** — Have you made any tax-saving investments this year? …",
-  "session": { "…": "full mutated session — replace your local copy with this" },
+  "response": "✅ Mapped — SALARY: ₹1,800,000. 💰 **Section 80C** — …",
+  "session_id": "<id>",
+  "session": { "id": "<id>", "phase": "PROFILING", "salary": 1800000.0, "…": "…" },
   "extracted": ["SALARY: ₹1,800,000"],
-  "plan": "Ask about Section 80C investments (PPF, ELSS, PF, Life Insurance up to 1.5L).",
+  "plan": "Ask about Section 80C investments …",
   "tax_report": null
 }
 ```
 
-| Field | Type | Source |
-|---|---|---|
-| `response` | `str` | Consultant reply (light markdown: `**bold**`, `_italics_`, bullets) — `nlp_engine.py:242` |
-| `session` | `object` | Mutated state; the client must wholesale-replace its copy (frontend does this at `ChatInterface.tsx:157-158`) |
-| `extracted` | `str[]` | Human-readable badges, e.g. `"SALARY: ₹1,800,000"`, `"80E: ₹500,000"`, `"SALARY (ANNUALIZED): ₹11,520,000"`, `"80C: ₹200,000 (CORRECTED)"`, `"80C: Noted (None)"` — `nlp_engine.py:135,154,185,217` |
-| `plan` | `str` | The discovery agent's next step, without the `plan: ` prefix — `nlp_engine.py:220-221`. Quirk: on bare-"no" turns the plan can be one step **behind** the response text, because the zero-fill advance happens inside reply generation (`nlp_engine.py:276-287`) |
-| `tax_report` | `object \| null` | Present (not `null`) only when at least one income key is positive; same shape as the `/calculate` response below |
-
-### Errors
-
-| Condition | Result |
-|---|---|
-| Body not matching `ChatRequest` (missing `message`/`session`, wrong types) | `422` with FastAPI's standard `{"detail": [...]}` |
-| Engine exception during calculation | `200` with `tax_report: null`; the traceback text goes to the server console only (`main.py:52-55`) |
-| Exception inside NLP itself | Unhandled → `500` (no global exception handler exists) |
-
----
-
-## `POST /calculate`
-
-Stateless recomputation used by the report dashboard (`TaxReport.tsx:24-28` sends the **whole session object** on every session change — duplicating work `/chat` already did).
-
-### Request
-
-```json
-{
-  "id": "sid_1730000000000",
-  "salary": 1800000,
-  "80c": 150000,
-  "80d": 25000,
-  "nps": 50000,
-  "age": 30,
-  "capital_gains": [{ "type": "equity_ltcg", "amount": 200000, "holding": "unknown" }]
-}
-```
-
-**No schema validation** — the handler takes raw `Dict[str, Any]` (`main.py:94-98`). The engine coerces with `float(x or 0)` for amounts (`tax_engine.py:53-64`), so `null`/missing keys are tolerated, but malformed shapes crash: a `capital_gains` entry that is not an object raises `AttributeError` → `500` (`tax_engine.py:296-299`); a non-numeric string in any amount raises `ValueError` → `500`. Honored keys and caps are documented in [tax-rules.md](tax-rules.md) §2.
-
-### Response — 200
-
-The engine returns `{old_regime, new_regime, recommendation, savings, efficiency_score}` (`tax_engine.py:136-142`); each regime is a serialized `TaxResult` dataclass (`tax_engine.py:31-45`):
-
-```json
-{
-  "old_regime": {
-    "income_details":   [{ "source": "Income from Salary", "amount": 1800000.0, "section": "17(1)", "status": "Reported" }],
-    "deduction_details": [],
-    "gross_total_income": 1800000.0,
-    "total_deductions": 277500.0,
-    "taxable_income": 1722500.0,
-    "total_tax": 289770.0,
-    "recommendation": "New Regime",
-    "savings": 64220.0,
-    "explanations": [
-      { "particular": "Standard Deduction", "reason": "Flat deduction for salaried employees.",
-        "section": "16(ia)", "amount": 50000, "status": "Valid", "eli5": "" },
-      { "particular": "Professional Tax", "reason": "State statutory tax on employment.",
-        "section": "16(iii)", "amount": 2500.0, "status": "Valid", "eli5": "" },
-      { "particular": "Section 80C", "reason": "PF, PPF, ELSS, Life Insurance, School Fees.",
-        "section": "80C", "amount": 150000.0, "status": "Valid", "eli5": "" },
-      { "particular": "Section 80D (Self & Family)", "reason": "Health insurance premium and preventive checkup.",
-        "section": "80D", "amount": 25000.0, "status": "Valid", "eli5": "" },
-      { "particular": "NPS Section 80CCD(1B)", "reason": "Additional voluntary contribution to National Pension System.",
-        "section": "80CCD(1B)", "amount": 50000.0, "status": "Valid", "eli5": "" }
-    ],
-    "slabs_breakdown": [
-      { "range": "Above 10L", "rate": "30%", "income": 522500.0, "tax": 156750.0 },
-      { "range": "5L - 10L",  "rate": "20%", "income": 500000,   "tax": 100000.0 },
-      { "range": "2.5L - 5L", "rate": "5%",  "income": 250000,   "tax": 12500.0 },
-      { "range": "0 - 2.5L",  "rate": "0%",  "income": 250000,   "tax": 0.0 }
-    ],
-    "efficiency_score": 54.7,
-    "savings_tips": [],
-    "audit_observations": [],
-    "risk_level": "Low"
-  },
-  "new_regime": { "…same TaxResult shape (std ded 75000, 115BAC slabs, total_tax 225550.0)…" },
-  "recommendation": "New Regime",
-  "savings": 64220.0,
-  "efficiency_score": 54.7
-}
-```
-
-(Values above are the engine's actual output for the example input, captured 2026-10-31. Note the professional-tax default ₹2,500 was assumed because `salary > 0` — see [tax-rules.md](tax-rules.md) §2 — and the ₹1.25L LTCG exemption was applied to the single `equity_ltcg` entry.)
-
 | Field | Notes |
 |---|---|
-| `recommendation` | `"New Regime"` when `new.total_tax <= old.total_tax`, else `"Old Regime"` (`tax_engine.py:93`) |
-| `savings` | `abs(old − new)`, rounded to 2 dp (`tax_engine.py:94,140`) |
-| `efficiency_score` | ANFIS output 0-100 rounded to 1 dp — heuristic fallback (30-98.5) if numpy is missing (`ai_models.py:506-559`) |
-| `income_details[]` | `{source, amount, section, status}` per populated income head (`tax_engine.py:193-203, 266-274`) |
-| `explanations[]` | `{particular, reason, section, amount, status, eli5}` (`Explanation` dataclass, `tax_engine.py:21-28`) |
-| `slabs_breakdown[]` | `{range, rate, income, tax}` top-down (`tax_engine.py:323-368`) |
-| `savings_tips[]` / `audit_observations[]` / `risk_level` | From `ReasoningAgent.get_savings_tips` and the HRA/80G/CG risk heuristics (`tax_engine.py:107-134`, `ai_models.py:418-454`) |
+| `session` | READ-ONLY projection: `history`, `_last_question`, `_last_val`, `_prev_salary`, `memory` dropped; every frontend key kept (`id`, `phase`, `profile`, incomes, deductions, flags). The client cannot write state back |
+| `tax_report` | `null` when no income yet OR when the engine raised — a calculation failure degrades gracefully and logs `logger.exception` server-side with the request id + session-id hash (never in the response) |
 
-Values are made JSON-safe by `clean_json` (dataclasses → `__dict__`, numpy scalars → `.item()`), `main.py:33-38`.
+Errors: `401` no/invalid cookie · `404` foreign/unknown session · `422` validation (legacy body, oversized message, rejected state) · `429` rate limit.
 
-### Errors
+### `POST /calculate`
 
-Any engine exception is unhandled → `500` Internal Server Error (there is no global exception handler; `main.py:94-98`).
+Request `{ "session_id": "<id>", "tax_year": "fy_2025_26"? }` — computes the full report from the OWNED server-side state. `tax_year` (ADR-008) overrides the state's pin, else the registry default; an unregistered value → 422.
+
+Response — 200: the dual-regime statement (unchanged shape — `old_regime`/`new_regime` `TaxResult` nodes with `income_details`, `deduction_details`, `explanations`, `slabs_breakdown`, plus top-level `recommendation`, `savings`, `efficiency_score`; documented field-by-field in [tax-rules.md](tax-rules.md) §2). Any engine exception → the global handler logs it (with request id) and returns `500 {"detail": "Internal server error"}` — no stack traces in the body, ever.
+
+### `GET /sessions` · `GET /sessions/{session_id}` · `DELETE /sessions/{session_id}`
+
+List (id + timestamps, newest use first) · owned projection · owner-checked delete (204 / 404).
 
 ---
 
-## `GET /history/{sid}`
+## `GET /history/{sid}` — paginated, owned
 
-Returns every audit-log entry recorded for `sid`. The **entire** `logs/session_audit.json` is read synchronously inside the async handler and filtered by `session_id` (`main.py:81-92`).
+Returns audit entries for an **owned** session from the append-only global stream `logs/audit/session_audit.jsonl`. Requires an authenticated user whose `app_sessions` row matches `sid`; foreign/unknown → `404 {"detail": "Session not found"}` (same as every ownership miss); unauthenticated → `401`; the `TAX_ENABLE_HISTORY=0` kill-switch → `404` (never reveals existence).
 
-### Response — 200
+Query params: `limit` (1–200, default 50), `offset` (default 0).
 
-Array of entries as written by `AuditLogger` (`audit_logger.py:14-34`):
+Response — 200:
 
 ```json
-[
-  {
-    "timestamp": "2026-04-23T22:59:12.806796",
-    "session_id": "sid_1776965272179",
-    "user_input": "childs tution of 2 Lakhs",
-    "ai_response": "Successfully mapped SALARY: ₹200,000. …",
-    "internal_state": { "profile": "Salaried", "salary": 200000.0, "80c": 114000.0, "…": "…" },
-    "tax_calculation": {
-      "old_regime": { "total_tax": 0.0, "taxable_income": 0.0, "efficiency": 30.0 },
-      "new_regime": { "total_tax": 0.0, "taxable_income": 0.0, "efficiency": 30.0 },
-      "recommendation": "New Regime",
-      "savings": 0.0,
-      "efficiency_score": 30.0
+{
+  "entries": [
+    {
+      "timestamp": "2026-11-01T12:00:00.000000",
+      "session_id": "…",
+      "event": "chat_turn",
+      "user_input": { "stored": false, "sha256_16": "…", "char_length": 34 },
+      "ai_response": { "stored": false, "sha256_16": "…", "char_length": 220 },
+      "extracted": ["SALARY: ₹1,800,000"],
+      "internal_state": { "profile": "Salaried", "salary": 1800000.0 },
+      "tax_calculation": { "old_regime": { "total_tax": 289770.0 }, "…": "…" },
+      "user_id": "<owner uuid>"
     }
-  }
-]
+  ],
+  "corrupt_lines_skipped": 0,
+  "has_more": false
+}
 ```
 
-| Field | Notes |
-|---|---|
-| `internal_state` | Full session minus `history`-style `"memory"` key (`audit_logger.py:38-45`) — contains all financial figures in plaintext |
-| `tax_calculation` | `"Pending"` when no calculation ran; otherwise only `{total_tax, taxable_income, efficiency}` per regime plus the top-level scalars (`audit_logger.py:47-60`) |
+PII note: `user_input`/`ai_response` are correlation records (sha256[:16] + char length) unless `TAX_AUDIT_STORE_TEXT` opted in server-side; `internal_state` is scrubbed of the internal keys. `user_id` is the additive Wave D owner field. Read-only legacy fallback: if the JSONL stream is absent but `logs/session_audit.json` exists, it is served (unpaginated legacy entries).
 
-### Errors / edge behavior
+## `GET /health`
 
-| Condition | Result |
-|---|---|
-| Log file missing | `200` with `[]` (`main.py:83-85`) |
-| Log file corrupt (JSON parse error) | `200` with `[]` — broad `except` (`main.py:86-92`) |
-| Unknown `sid` | `200` with `[]` (filter simply matches nothing) |
+```json
+{ "status": "ok", "checks": { "db": "ok", "audit": "ok" }, "app_env": "prod", "version": "0.3.0" }
+```
 
-There is **no 404 and no 401/403** — any caller can read any session's financial data, and `sid` values are timestamp-guessable (`sid_${Date.now()}`). See [security.md](security.md).
+- `db`: `SELECT 1` against `TAX_DB_PATH` (mode=rw — never creates the file) + dir write permission.
+- `audit`: `logs/audit` dir writable.
+- Any failing check → `503` with `"status": "degraded"` and the failing check named. `?verbose=1` adds uptime + registry keys in dev only. Unauthenticated, rate-limit exempt; this is the Docker HEALTHCHECK target.
 
 ---
 
-## Worked curl examples
-
-Backend running via `cd backend && python main.py`. (Quoting style matches Windows `cmd` / the existing [deployment.md](deployment.md) examples.)
+## Worked curl examples (Windows cmd style)
 
 ```bash
-:: 1. Open a consultation — profession + income in one message
-curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" ^
-  -d "{\"message\":\"I am a software engineer earning 18 LPA\",\"session\":{\"id\":\"sid_demo1\",\"phase\":\"PROFILING\"}}"
+:: 0. Register + login (cookie jar)
+curl -c jar -X POST http://localhost:8000/auth/register -H "Content-Type: application/json" ^
+  -d "{\"email\":\"demo@example.com\",\"password\":\"correct horse battery staple\"}"
+curl -c jar -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" ^
+  -d "{\"email\":\"demo@example.com\",\"password\":\"correct horse battery staple\"}"
+
+:: 1. Bootstrap a server-side session
+curl -b jar -X POST http://localhost:8000/sessions
+:: -> {"session_id":"<sid>","session":{"id":"<sid>","phase":"PROFILING"}}
+
+:: 2. Chat (server state mutates; the response `session` is read-only)
+curl -b jar -X POST http://localhost:8000/chat -H "Content-Type: application/json" ^
+  -d "{\"message\":\"I am a software engineer earning 18 LPA\",\"session_id\":\"<sid>\"}"
+curl -b jar -X POST http://localhost:8000/chat -H "Content-Type: application/json" ^
+  -d "{\"message\":\"1.5 lakhs in PPF\",\"session_id\":\"<sid>\"}"
+curl -b jar -X POST http://localhost:8000/chat -H "Content-Type: application/json" ^
+  -d "{\"message\":\"/end\",\"session_id\":\"<sid>\"}"
+
+:: 3. Full report from server-side state
+curl -b jar -X POST http://localhost:8000/calculate -H "Content-Type: application/json" ^
+  -d "{\"session_id\":\"<sid>\"}"
+
+:: 4. Audit trail for YOUR session (paginated)
+curl -b jar "http://localhost:8000/history/<sid>?limit=50&offset=0"
+
+:: 5. Health
+curl http://localhost:8000/health
 ```
 
-Response `extracted` is `["SALARY: ₹1,800,000"]`, `plan` asks about 80C, and `tax_report` is already populated (income > 0). Copy the returned `session` object into the next call.
+## Environment variables
 
-```bash
-:: 2. Declare a deduction (session = the object returned above)
-curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" ^
-  -d "{\"message\":\"1.5 lakhs in PPF\",\"session\":{ ...session from step 1... }}"
-
-:: 3. Skip a slot, then force the final report
-curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" ^
-  -d "{\"message\":\"no\",\"session\":{ ...session... }}"
-curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" ^
-  -d "{\"message\":\"/end\",\"session\":{ ...session... }}"
-
-:: 4. Recompute standalone (what the report dashboard does on every session change)
-curl -X POST http://localhost:8000/calculate -H "Content-Type: application/json" ^
-  -d "{\"id\":\"sid_demo1\",\"salary\":1800000,\"80c\":150000,\"80d\":25000,\"nps\":50000,\"age\":30}"
-
-:: 5. Read the audit trail for a session
-curl http://localhost:8000/history/sid_demo1
-
-:: 6. Read a session you never created (no auth — this also succeeds)
-curl http://localhost:8000/history/sid_1730000000000
-```
-
-Note on step 3: because bare `"no"` fills the currently-asked slot with `0` and advances the waterfall (`nlp_engine.py:276-287`), the `/end` call after it produces a `session` with `80c/80d/…: 0` for every skipped slot and `phase: "FINAL"`, with `tax_report` containing the complete dual-regime statement.
-
----
-
-## Frontend consumption (reference)
-
-| Call site | Behavior |
-|---|---|
-| `ChatInterface.tsx:148-157` | `POST /chat` with `{message, session}`; replaces its session with `data.session`; shows `data.extracted` as badges after an artificial 400 ms delay (`ChatInterface.tsx:160-174`) |
-| `ChatInterface.tsx:171-173` | Opens the report pane when `session.phase === "FINAL"` or a non-empty `tax_report` arrives |
-| `TaxReport.tsx:18-52` | `POST /calculate` with the **whole session** on every `session` object change (`useEffect` dep `[session]`), so every turn computes the tax twice |
-| Error surfaces | Chat failure message hardcodes `http://localhost:8000` (`ChatInterface.tsx:183`); report failure likewise (`TaxReport.tsx:74-84`) |
-
-Both data paths hardcode `localhost:8000` — the app cannot reach a hosted backend until ADR-010 ([decisions.md](decisions.md)) lands.
+Runtime (backend, read at call time; defaults on absent/invalid): `APP_ENV`, `CORS_ORIGINS`, `TAX_DB_PATH`, `TAX_HOST`/`TAX_PORT`, `TAX_SESSION_TTL_MINUTES`, `TAX_SESSION_ABS_TTL_HOURS`, `TAX_COOKIE_SECURE`, `TAX_ENABLE_ANON_DEMO`, `TAX_ENABLE_HISTORY`, `TAX_AUDIT_MAX_BYTES`/`_MAX_FILES`/`_RETENTION_DAYS`/`_STORE_TEXT`, `TAX_RATE_LIMIT_AUTH|CHAT|CALC|GLOBAL_PER_MIN`, `TAX_MAX_BODY_BYTES`, `TAX_LOG_LEVEL`, `TAX_APP_LOG_MAX_BYTES`/`_MAX_FILES`/`_RETENTION_DAYS`. Build-time (frontend): `NEXT_PUBLIC_API_URL`. Full table with container paths: [deployment.md](deployment.md) §3. No signing secret exists.
 
 ## Known limitations
 
-- **No auth, no rate limiting, no request-size cap** — see [security.md](security.md).
-- **CORS `*`** (`main.py:18`) means any origin can call and read these endpoints from a browser.
-- **Session state is client-owned and tamperable** (ADR-002): a caller may send a forged `salary`, `age`, or `phase` directly to `/calculate`.
-- **`/history` reads the whole audit file synchronously** per request; latency grows with total log size, and concurrent requests race with `AuditLogger`'s read-modify-write (`audit_logger.py:24-35`).
-- **Double annualization trap for API consumers**: a message containing both a parser-level unit (`"80,000 per month"`) and the engine-level monthly keywords is multiplied by 12 twice — `"my salary is 80,000 per month"` yields `salary = 11,520,000` (verified; documented in [nlp-pipeline.md](nlp-pipeline.md) and [tax-rules.md](tax-rules.md) C3).
+- **Double annualization trap** (unchanged NLP semantics): `"my salary is 80,000 per month"` annualizes twice → `salary = 11,520,000` ([nlp-pipeline.md](nlp-pipeline.md) §11).
+- **Rate limits are per-process** (in-memory) — valid under the documented single-worker deployment only.
+- **`/history` reads the whole global stream** per request (line-scan, corrupted lines skipped and counted); latency grows with total stream size.
+- **Anonymous demo sessions are ephemeral by design** — user-less rows are invisible to `/history` and to authenticated callers even with the demo flag on.

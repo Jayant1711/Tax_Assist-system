@@ -2,6 +2,8 @@
 
 > Verified against the code 2026-10-31. There is **no pytest, no CI, no frontend test runner** — everything below is standalone scripts under `backend/`. Migration target: ADR-011 in [decisions.md](decisions.md). Related: [nlp-pipeline.md](nlp-pipeline.md) (what the tests exercise) · [roadmap.md](roadmap.md) Week 1 item 8, Week 3 item 4.
 
+> **Sprint 3 Wave H update (2026-11-01):** observability tests now exist — `backend/tests/test_observability.py` covers the structured-logging contract end to end (request-ID header presence + uniqueness, JSON record shape against the design §7 field set, secret hygiene: no tokens/cookies/message bodies in the app log across a full register→login→chat flow, `TAX_APP_LOG_MAX_BYTES` rotation with zero lost lines, and the engine-failure path: graceful `tax_report: null` plus a correlated structured ERROR record). They run in the standard `pytest tests/` suite alongside the Sprint 3 API/hardening/auth/session modules.
+
 ## 1. Inventory
 
 | File | What it does | How to run | Can it fail? |

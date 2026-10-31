@@ -1,0 +1,76 @@
+# Tax Assist AI — single-host production stack (Sprint 3 Wave F, design §3).
+#
+# Topology (TLS terminates OUTSIDE this file):
+#
+#   [Browser] --HTTPS--> [Reverse proxy: TLS, e.g. nginx/Caddy/traefik]
+#                            |  /            \
+#                            | /              \
+#                            v                 v
+#                 127.0.0.1:3000 (frontend)   127.0.0.1:8000 (backend)
+#
+# - Both services publish ONLY on the host loopback: nothing is reachable
+#   from the network without the reverse proxy, and TLS lives there (the
+#   backend never terminates TLS itself).
+# - SINGLE-ORIGIN production: the proxy routes / to the frontend and /api
+#   (or a subdomain) to the backend, so the browser talks to ONE origin —
+#   build the frontend with NEXT_PUBLIC_API_URL="" (empty) and the client
+#   uses same-origin relative URLs (docs/deployment.md §5). For a
+#   split-host deployment set NEXT_PUBLIC_API_URL=https://api.your-app.example
+#   in the environment (or .env) before `docker compose build`.
+# - CORS_ORIGINS in .env must list the browser-reachable frontend origin,
+#   or the backend fails closed at startup (config.cors_origins, prod).
+# - One backend worker is a documented correctness requirement (audit
+#   lock + SQLite WAL); scale by adding containers behind the proxy.
+# - State lives in the named volumes db-data (/app/data: SQLite store) and
+#   logs-data (/app/logs: audit + app + blackbox streams) and survives
+#   `docker compose down` (they do NOT survive `down -v` — see
+#   docs/backup-recovery.md before pruning).
+#
+# First run:  cp .env.example .env  (fill CORS_ORIGINS), then
+#             docker compose up -d --build
+
+services:
+  backend:
+    build:
+      context: ./backend
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - db-data:/app/data
+      - logs-data:/app/logs
+    healthcheck:
+      # Same probe the image's HEALTHCHECK runs (stdlib urllib; the slim
+      # image has no curl/wget). 200 ok -> healthy, 503 degraded ->
+      # unhealthy (db/audit check failed).
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Browser-reachable API URL; "" = single-origin prod behind the
+        # reverse proxy (see header). Substituted from the environment or
+        # .env (compose reads .env for substitution as well).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  logs-data:

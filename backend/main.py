@@ -70,7 +70,17 @@ sessions, server-side rows in SQLite, lockout after 5 failures), logout
 are appended to the same JSONL audit stream via AuditLogger.log_event,
 sanitized to sha256[:16] correlation hashes (never raw emails, tokens or
 passwords).
+
+Wave H (observability, design §7): create_app wires
+observability.setup_logging (JSON records in prod, human-readable
+console in dev, rotated logs/app/app.jsonl in both) and the outermost
+request-ID middleware — a fresh uuid4 per request, echoed as the
+X-Request-ID response header and stamped onto EVERY log line via the
+request contextvars (so audit-module failure logs are correlated too).
+The /chat engine-failure path logs a structured exception (request id +
+sha256[:16] session-id hash; tax_report stays null for the client).
 """
+import hashlib
 import json
 import logging
 import math
@@ -100,6 +110,7 @@ from starlette.types import ASGIApp
 import auth
 import config
 import db
+import observability
 from audit_logger import AuditLogger, scrub_state
 from nlp_engine import NLPEngine
 from rate_limit import RateLimiter
@@ -677,16 +688,25 @@ def create_app(app_env: str = "dev") -> FastAPI:
 
     - prod: /docs, /redoc and /openapi.json are disabled (attack-surface
       reduction); dev keeps them enabled (current behavior).
-    - Middleware order (request path, outermost first): body-cap ->
-      security-headers -> origin-check -> rate-limit -> CORS. add_middleware
-      registers innermost-first, so the CORS block comes FIRST here.
+    - Middleware order (request path, outermost first): request-id ->
+      body-cap -> security-headers -> origin-check -> rate-limit -> CORS.
+      add_middleware registers innermost-first, so the CORS block comes
+      FIRST here and the request-ID middleware LAST (outermost — every
+      app-emitted response, including the 413/403/429 short-circuits,
+      carries X-Request-ID).
     - The rate limiter is per-app in-memory state, exposed at
       ``app.state.rate_limiter`` (single-worker deployment is documented).
+    - Wave H: logging is wired here too — structured JSON in prod, a
+      human-readable console in dev, plus the rotated
+      ``logs/app/app.jsonl`` (observability.setup_logging is idempotent,
+      so repeated factory calls never duplicate handlers).
     """
     # Fail-safe normalization: only the explicit "prod" selects prod posture
     # (same rule as config._normalize_app_env for the APP_ENV env var).
     env = "prod" if (app_env or "").strip().lower() == "prod" else "dev"
     docs_enabled = env != "prod"
+
+    observability.setup_logging(env)
 
     app = FastAPI(
         title="Tax Assist AI - Deep Consultant",
@@ -722,6 +742,9 @@ def create_app(app_env: str = "dev") -> FastAPI:
     app.add_middleware(OriginCheckMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(BodySizeCapMiddleware)
+    # Outermost (registered last): request ids + access records on every
+    # response, including the short-circuits above.
+    app.add_middleware(observability.RequestIdMiddleware)
 
     app.state.rate_limiter = limiter
     app.state.app_env = env
@@ -765,8 +788,13 @@ def create_app(app_env: str = "dev") -> FastAPI:
         # Dependency wrapper: passes the module-level audit logger so auth
         # events (e.g. UA-mismatch revocations) land in the SAME stream the
         # endpoints use. The global is resolved at call time, so tests can
-        # swap the stream per fixture.
-        return auth.require_user(request, audit=audit)
+        # swap the stream per fixture. Wave H: the authenticated user joins
+        # the request context (contextvar + request state) so every log
+        # line emitted during the request — and the access record —
+        # carries the user_id.
+        user = auth.require_user(request, audit=audit)
+        observability.annotate_request_user(request.scope, user.user_id)
+        return user
 
     def _resolve_actor(request: Request) -> Optional[auth.CurrentUser]:
         """Auth dependency for the Wave D protected surface.
@@ -783,7 +811,9 @@ def create_app(app_env: str = "dev") -> FastAPI:
             if config.tax_enable_anon_demo():
                 return None
             raise HTTPException(status_code=401, detail="Authentication required")
-        return auth.require_user(request, audit=audit)
+        user = auth.require_user(request, audit=audit)
+        observability.annotate_request_user(request.scope, user.user_id)
+        return user
 
     def _owned_session_or_404(
         session_id: str, actor: Optional[auth.CurrentUser]
@@ -1129,11 +1159,19 @@ def create_app(app_env: str = "dev") -> FastAPI:
                 tax_result = engine.calculate_tax_advanced(
                     result["session"], result["session"].get("tax_year")
                 )
-            except Exception as e:
+            except Exception:
                 # Graceful degradation: the chat continues with a null tax
-                # report; the failure goes to the server log (never the
-                # client response).
-                logger.warning("chat calculation error: %s", e)
+                # report; the failure is a STRUCTURED error record (Wave H
+                # — logger.exception replaces the bare warning). request_id
+                # and user_id arrive via the request-context filter; the
+                # session id appears only as a sha256[:16] hash (never
+                # raw), and nothing about the failure reaches the client.
+                logger.exception(
+                    "tax engine failure on chat turn (session_id_sha256_16=%s)",
+                    hashlib.sha256(
+                        session_id.encode("utf-8", "replace")
+                    ).hexdigest()[:16],
+                )
 
         # 3. Validate the mutated state before persisting (defense-in-depth:
         # the ONLY writer is NLP, and its output must keep satisfying the
