@@ -1,5 +1,9 @@
 """Sprint 2 Step C — capital gains (engine aggregation + API + validation).
 
+typing note: Dict/Any annotations below are evaluated at def time on
+Python <= 3.13 (CI runs 3.12) — the explicit import sits at the end of
+this docstring block.
+
 Tests FIRST (red), per AI_RULES.md. Every engine cell pins an explicit
 tax_year: "fy_2024_25" for the parity-comparable 112A aggregation cells,
 "fy_2025_26" for the property cross-regime identity + advisory cells.
@@ -22,6 +26,7 @@ Ground truths (tax-expert rulings R-e/R-f; docs/tax-verification.md §5):
   null = unknown → default post-cutoff route + election advisory).
   Indexation is NEVER fabricated.
 """
+from typing import Any, Dict
 import os
 
 import pytest
