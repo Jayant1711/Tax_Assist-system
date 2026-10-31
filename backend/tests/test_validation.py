@@ -439,7 +439,12 @@ class TestTaxYearValidation:
 
 
 class TestHistoryEndpointGate:
-    """C5 interim: /history is 404 unless TAX_ENABLE_HISTORY opts in."""
+    """C5 interim: /history is 404 unless TAX_ENABLE_HISTORY opts in.
+
+    Sprint 2 Step F (mechanical adaptation): the enabled response is now
+    the documented {entries, corrupt_lines_skipped, has_more} envelope
+    instead of a bare list.
+    """
 
     def test_history_disabled_by_default(self, client, monkeypatch) -> None:
         monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
@@ -449,17 +454,25 @@ class TestHistoryEndpointGate:
 
     def test_history_enabled_with_env(self, client, monkeypatch) -> None:
         monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
-        # The endpoint filters by sid; an unknown sid yields [] whether or
-        # not the log file exists in cwd.
+        # The endpoint filters by sid; an unknown sid yields an empty page
+        # whether or not a log file exists in cwd.
         response = client.get("/history/history_probe_1")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "entries": [],
+            "corrupt_lines_skipped": 0,
+            "has_more": False,
+        }
 
     def test_history_enabled_with_true(self, client, monkeypatch) -> None:
         monkeypatch.setenv("TAX_ENABLE_HISTORY", "True")
         response = client.get("/history/history_probe_1")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "entries": [],
+            "corrupt_lines_skipped": 0,
+            "has_more": False,
+        }
 
     def test_history_stays_disabled_for_other_values(self, client, monkeypatch) -> None:
         monkeypatch.setenv("TAX_ENABLE_HISTORY", "yes")

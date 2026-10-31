@@ -5,6 +5,10 @@ session ids and still accept the frontend-generated "sid_<epoch-ms>" shape and
 sessions without an id. Unit level: SessionLab.record_turn must never write
 outside its lab_dir even when called directly with a hostile id (defense in
 depth behind the API validator).
+
+Sprint 2 Step F (mechanical adaptation): the blackbox is an append-only
+JSONL stream, so per-session files are now ``<sid>.jsonl`` instead of
+``<sid>.json``.
 """
 import os
 import re
@@ -13,9 +17,9 @@ import pytest
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# "untrusted_" + 16 lowercase hex digest chars + .json — path-safe by
+# "untrusted_" + 16 lowercase hex digest chars + .jsonl — path-safe by
 # construction (no separators, no traversal sequences).
-_UNTRUSTED_FILE_RE = re.compile(r"^untrusted_[0-9a-f]{16}\.json$")
+_UNTRUSTED_FILE_RE = re.compile(r"^untrusted_[0-9a-f]{16}\.jsonl$")
 
 
 @pytest.fixture(scope="module")
@@ -81,7 +85,7 @@ class TestSafeSessionId:
         once = safe_session_id("../evil")
         again = safe_session_id("../evil")
         assert once == again  # stable audit name across turns
-        assert _UNTRUSTED_FILE_RE.match(once + ".json")
+        assert _UNTRUSTED_FILE_RE.match(once + ".jsonl")
 
 
 class TestSessionLabSanitization:
@@ -107,9 +111,9 @@ class TestSessionLabSanitization:
         # Nothing appeared anywhere else in the pytest tmp tree.
         assert set(os.listdir(tmp_path.parent)) == parent_before
 
-    def test_default_id_writes_default_json(self, tmp_path) -> None:
+    def test_default_id_writes_default_jsonl(self, tmp_path) -> None:
         from session_lab import SessionLab
 
         lab = SessionLab(lab_dir=str(tmp_path))
         lab.record_turn("default", dict(self.TURN))
-        assert os.listdir(tmp_path) == ["default.json"]
+        assert os.listdir(tmp_path) == ["default.jsonl"]

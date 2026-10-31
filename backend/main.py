@@ -1,6 +1,6 @@
 # Summer internship project
 from datetime import date
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, Response
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,7 +11,7 @@ from tax_rules import REGISTRY
 from nlp_engine import NLPEngine
 from audit_logger import AuditLogger
 from session_lab import SessionLab
-from validation import is_valid_session_id
+from validation import is_valid_session_id, safe_session_id
 import logging
 import math
 import uvicorn
@@ -276,7 +276,9 @@ async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks)
         input_text=request.message,
         response=result["response"],
         session_state=result["session"],
-        tax_results=tax_result
+        tax_results=tax_result,
+        extracted=result.get("extracted"),
+        plan=result.get("plan"),
     )
     
     # 4. Record to Industrial Black Box for Regression Auditing
@@ -293,23 +295,62 @@ async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks)
     return clean_json({**result, "tax_report": tax_result})
 
 @app.get("/history/{sid}")
-async def get_history(sid: str):
-    # C5 interim: history browsing is disabled by default (the audit log
-    # itself keeps being written regardless). Opt in explicitly by setting
-    # TAX_ENABLE_HISTORY to 1 / true / True. Read at request time so the
-    # flag can be flipped without a restart.
+async def get_history(
+    sid: str,
+    limit: int = Query(50, ge=1, le=200, description="Entries per page (hard max 200)"),
+    offset: int = Query(0, ge=0, description="Entries to skip before the page"),
+):
+    """C5 interim: history browsing is disabled by default (the audit log
+    itself keeps being written regardless). Opt in explicitly by setting
+    TAX_ENABLE_HISTORY to 1 / true / True. Read at request time so the
+    flag can be flipped without a restart.
+
+    Sprint 2 Step F: when enabled, serves the append-only JSONL global
+    stream (logs/audit/session_audit.jsonl) line-by-line, filtered by the
+    sanitized session id and paginated (limit default 50, hard max 200,
+    offset). Response envelope: {entries, corrupt_lines_skipped, has_more};
+    the entry schema fields are unchanged (timestamp, session_id,
+    user_input/ai_response — now correlation/structured records per the
+    write-time PII minimization, internal_state, tax_calculation).
+
+    Read-only compat fallback: if the JSONL stream does not exist but the
+    legacy logs/session_audit.json does, serve from it as before. The
+    per-session blackbox streams are NEVER served here.
+    """
     if os.environ.get("TAX_ENABLE_HISTORY") not in {"1", "true", "True"}:
         raise HTTPException(status_code=404, detail="Not found")
-    log_file = "logs/session_audit.json"
-    if not os.path.exists(log_file):
-        return []
-    try:
-        with open(log_file, "r") as f:
-            logs = json.load(f)
-        session_logs = [l for l in logs if l.get("session_id") == sid]
-        return session_logs
-    except:
-        return []
+    safe = safe_session_id(sid)
+    empty: Dict[str, Any] = {"entries": [], "corrupt_lines_skipped": 0, "has_more": False}
+    if not os.path.exists(audit.log_file):
+        legacy = getattr(audit, "legacy_file", None)
+        if legacy and os.path.exists(legacy):
+            try:
+                with open(legacy, "r", encoding="utf-8") as fh:
+                    logs = json.load(fh)
+            except (OSError, ValueError) as exc:
+                logger.warning("legacy audit log %s unreadable (%s)", legacy, exc)
+                return empty
+            if not isinstance(logs, list):
+                return empty
+            matches = [
+                entry
+                for entry in logs
+                if isinstance(entry, dict) and entry.get("session_id") == safe
+            ]
+            return {
+                "entries": matches[offset:offset + limit],
+                "corrupt_lines_skipped": 0,
+                "has_more": len(matches) > offset + limit,
+            }
+        return empty
+    entries, corrupt_lines, has_more = audit.read_session_entries(
+        safe, limit=limit, offset=offset
+    )
+    return {
+        "entries": entries,
+        "corrupt_lines_skipped": corrupt_lines,
+        "has_more": has_more,
+    }
 
 class CapitalGainItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
