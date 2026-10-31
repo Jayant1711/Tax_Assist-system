@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../lib/api';
 
 interface Message {
   id: string;
@@ -145,7 +146,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
     setIsTyping(true);
 
     try {
-      const res = await fetch('http://localhost:8000/chat', {
+      const res = await apiFetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: textToSend, session }),
@@ -180,7 +181,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
         {
           id: `err_${Date.now()}`,
           role: 'ai',
-          text: '⚠️ **Backend Unavailable** — Ensure the FastAPI server is running on `http://localhost:8000`. You can start it via `cd backend && python main.py`.',
+          text: '⚠️ **Unable to reach the calculation service** — please try again in a moment.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);

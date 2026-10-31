@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import SavingsGraph from './SavingsGraph';
+import { apiFetch } from '../lib/api';
 
 interface Props {
   session: any;
@@ -21,7 +22,7 @@ export default function TaxReport({ session, activeView }: Props) {
     let isMounted = true;
     setLoading(true);
 
-    fetch('http://localhost:8000/calculate', {
+    apiFetch('/calculate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(session),
@@ -78,7 +79,7 @@ export default function TaxReport({ session, activeView }: Props) {
           <span>⚠️</span> Calculation Service Offline
         </div>
         <p style={{ fontSize: '0.82rem', color: 'var(--text-sub)' }}>
-          Could not communicate with the Python backend (`http://localhost:8000/calculate`). Ensure `main.py` is running.
+          Unable to reach the calculation service — please try again in a moment.
         </p>
       </div>
     );

@@ -1,34 +1,75 @@
 # Summer internship project
+"""Tax Assist AI API — FastAPI application (Sprint 3 Step A+B).
+
+Sprint 3 Step A moved every piece of wiring into :func:`create_app`
+(application factory): middleware stack, exception handlers, routes and
+the docs gating. The module-level ``app`` is preserved so existing
+imports/tests keep working; the ``__main__`` entry binds TAX_HOST /
+TAX_PORT (defaults 127.0.0.1:8000 — dev bind safety, never 0.0.0.0).
+
+Sprint 3 Step B adds the hardening edge. Request path through the
+middleware stack, outermost first:
+
+1. **body-cap** — Content-Length over TAX_MAX_BODY_BYTES -> 413.
+2. **security-headers** — the fixed hardening set on EVERY response.
+3. **origin-check** — a browser-declared ``Origin`` on a state-changing
+   route must be in the allowlist (config.cors_origins), else 403. An
+   absent Origin (same-origin script, curl, non-browser) passes THIS
+   wave; the middleware already sits in the stack ahead of the cookies
+   that land with the auth wave.
+4. **rate-limit** — per-client-IP sliding windows (user-id keys land
+   with auth): route-class bucket + shared global bucket, /health
+   exempt, 429 with Retry-After.
+5. **CORS** — NOTE: still the Sprint-1 wildcard THIS wave (no contract
+   change before the cookie exists). The explicit allowlist
+   (config.cors_origins) + allow_credentials=True replace it in the
+   auth wave (Wave C), retiring the wildcard permanently; production
+   then fails closed at the config layer.
+
+Short-circuit responses (413/403/429) carry the security-header set too
+— the headers control applies to every response the app emits.
+
+``GET /health`` (public, rate-limit exempt) reports db (SELECT 1 against
+TAX_DB_PATH via mode=rw — it NEVER creates the file) and audit
+(logs/audit dir writable) checks; any failing check degrades the
+response to 503 while naming the check. ``?verbose=1`` adds uptime +
+registry keys in dev only. Prod also disables /docs, /redoc and
+/openapi.json via the factory.
+"""
+import json
+import logging
+import math
+import os
+import sqlite3
+import time
 from datetime import date
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Query, Request, Response
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from typing import Dict, Any, List, Literal, Optional
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.types import ASGIApp
+
+import config
+from audit_logger import AuditLogger
+from nlp_engine import NLPEngine
+from rate_limit import RateLimiter
+from session_lab import SessionLab
 from tax_engine import TaxEngine
 from tax_rules import REGISTRY
-from nlp_engine import NLPEngine
-from audit_logger import AuditLogger
-from session_lab import SessionLab
 from validation import is_valid_session_id, safe_session_id
-import logging
-import math
-import uvicorn
-import os
-import json
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Tax Assist AI - Deep Consultant")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# /health contract version (Sprint 3 design §3) and the process-start
+# monotonic reading the dev-only uptime figure is derived from.
+APP_VERSION = "0.3.0"
+_STARTED_AT = time.monotonic()
 
 nlp = NLPEngine()
 engine = TaxEngine()
@@ -36,37 +77,257 @@ audit = AuditLogger()
 lab = SessionLab()
 
 
-@app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    # N1: never leak stack traces / exception details in the response body.
-    # The full traceback still goes to the server log (auditability).
-    logger.exception(
-        "Unhandled error on %s %s", request.method, request.url.path
-    )
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+# ---------------------------------------------------------------------------
+# Hardening edge — security headers
+# ---------------------------------------------------------------------------
+
+# The exact set from the Sprint 3 design (§4). Applied by the middleware
+# below AND by every short-circuit response helper, so 413/403/429 bodies
+# are hardened exactly like route responses.
+_SECURITY_HEADERS: Dict[str, str] = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
 
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    # Reflection-amplification fix: the default handler echoes each error's
-    # 'input' field verbatim (a 100KB padded session came back as a ~100KB
-    # body), and it 500s outright when 'input' is inf/nan because
-    # JSONResponse refuses non-finite floats. Respond with loc/msg/type
-    # only, loc flattened to strings, capped at 20 entries.
-    errors = [
-        {
-            "loc": [str(part) for part in err.get("loc", ())],
-            "msg": err.get("msg", ""),
-            "type": err.get("type", ""),
-        }
-        for err in exc.errors()[:20]
-    ]
-    return JSONResponse(
-        status_code=422,
-        content={"detail": "Validation error", "errors": errors},
+def _apply_security_headers(response: JSONResponse) -> None:
+    for name, value in _SECURITY_HEADERS.items():
+        response.headers[name] = value
+
+
+class BodySizeCapMiddleware(BaseHTTPMiddleware):
+    """413 when Content-Length exceeds TAX_MAX_BODY_BYTES (design §4).
+
+    Reads only the header — the body is never buffered. A malformed
+    Content-Length is left to the server/route layers to reject.
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> JSONResponse:
+        raw_length = request.headers.get("content-length")
+        if raw_length:
+            try:
+                length = int(raw_length)
+            except ValueError:
+                length = None  # malformed header: not a size we can enforce
+            if length is not None and length > config.tax_max_body_bytes():
+                response = JSONResponse(
+                    status_code=413, content={"detail": "Request body too large"}
+                )
+                _apply_security_headers(response)
+                return response
+        return await call_next(request)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Applies the hardening header set to every downstream response."""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> JSONResponse:
+        response = await call_next(request)
+        _apply_security_headers(response)
+        return response
+
+
+# ---------------------------------------------------------------------------
+# Hardening edge — origin check (CSRF posture; design §1/§4)
+# ---------------------------------------------------------------------------
+
+_STATE_CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+# State-changing routes: POST /chat, /calculate, /auth/*, /sessions* (the
+# /auth and /sessions trees populate in the auth/session waves; the
+# prefix match is already in place for them).
+_ORIGIN_CHECK_EXACT_PATHS = frozenset({"/chat", "/calculate"})
+_ORIGIN_CHECK_PREFIXES = ("/auth/", "/sessions")
+
+
+def _is_state_changing(method: str, path: str) -> bool:
+    if method.upper() not in _STATE_CHANGING_METHODS:
+        return False
+    return path in _ORIGIN_CHECK_EXACT_PATHS or path.startswith(
+        _ORIGIN_CHECK_PREFIXES
     )
+
+
+class OriginCheckMiddleware(BaseHTTPMiddleware):
+    """Rejects non-allowlisted ``Origin`` headers on state-changing routes.
+
+    Allowlist = config.cors_origins() (dev default localhost:3000). When
+    that raises (prod fail-closed on unset/wildcard CORS_ORIGINS) the
+    allowlist is treated as empty — every declared Origin is rejected,
+    which is exactly the fail-closed posture. A request WITHOUT an Origin
+    header passes this wave (non-browser clients / same-origin scripts);
+    cookie-backed requests arrive in the auth wave and this control is
+    already in place ahead of them.
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> JSONResponse:
+        if _is_state_changing(request.method, request.url.path):
+            origin = request.headers.get("origin")
+            if origin:
+                try:
+                    allowed = {
+                        entry.strip().lower() for entry in config.cors_origins()
+                    }
+                except RuntimeError:
+                    allowed = set()  # fail closed: no origin is trusted
+                if origin.strip().lower() not in allowed:
+                    response = JSONResponse(
+                        status_code=403, content={"detail": "Origin not allowed"}
+                    )
+                    _apply_security_headers(response)
+                    return response
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# Hardening edge — rate limiting (design §4)
+# ---------------------------------------------------------------------------
+
+_HEALTH_EXEMPT_PATH = "/health"
+
+
+def _rate_limit_bucket(path: str) -> Optional[str]:
+    """Route-class bucket for a path; None = not rate-limited this wave."""
+    if path == "/chat":
+        return "chat"
+    if path == "/calculate":
+        return "calc"
+    if path.startswith("/auth"):
+        # /auth/* limits activate with the auth-wave routes; the class is
+        # wired now so the posture exists before credentials land.
+        return "auth"
+    return None
+
+
+_RATE_LIMIT_ACCESSORS = {
+    "chat": config.rate_limit_chat_per_min,
+    "calc": config.rate_limit_calc_per_min,
+    "auth": config.rate_limit_auth_per_min,
+}
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-client-IP sliding-window limits (per-user keys land with auth).
+
+    A limited request consumes BOTH its route-class bucket and the shared
+    global bucket (design §4: "global 120/min/IP"), each keyed per IP for
+    the current single-user deployment; /health is explicitly exempt.
+    Limits are read at request time so the TAX_RATE_LIMIT_* envs can be
+    tuned without a restart. In-memory only — the documented deployment
+    is exactly one uvicorn worker (audit lock + SQLite correctness).
+    """
+
+    def __init__(self, app: ASGIApp, limiter: RateLimiter) -> None:
+        super().__init__(app)
+        self._limiter = limiter
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> JSONResponse:
+        path = request.url.path
+        if path == _HEALTH_EXEMPT_PATH or request.method.upper() not in (
+            _STATE_CHANGING_METHODS
+        ):
+            return await call_next(request)
+        bucket = _rate_limit_bucket(path)
+        if bucket is None:
+            return await call_next(request)
+        client = request.scope.get("client")
+        ip = client[0] if client and client[0] else "unknown"
+        allowed, retry_after = self._limiter.check(
+            f"{bucket}:{ip}", _RATE_LIMIT_ACCESSORS[bucket](), 60.0
+        )
+        if not allowed:
+            return self._too_many_requests(retry_after)
+        allowed, retry_after = self._limiter.check(
+            f"global:{ip}", config.rate_limit_global_per_min(), 60.0
+        )
+        if not allowed:
+            return self._too_many_requests(retry_after)
+        return await call_next(request)
+
+    @staticmethod
+    def _too_many_requests(retry_after: int) -> JSONResponse:
+        response = JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Rate limit exceeded",
+                "retry_after_seconds": retry_after,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+        _apply_security_headers(response)
+        return response
+
+
+# ---------------------------------------------------------------------------
+# Health checks (design §3)
+# ---------------------------------------------------------------------------
+
+
+def _check_db(db_path: str) -> bool:
+    """True iff the database can be opened AND answers SELECT 1.
+
+    NEVER creates the file or its directory: a not-yet-provisioned
+    database is precisely the degradation /health must report. The sqlite
+    URI uses ``mode=rw`` (fails when the file is missing) and the parent
+    directory must exist with write permission (os.access W_OK).
+    """
+    try:
+        parent = os.path.dirname(os.path.abspath(db_path))
+        if not os.path.isdir(parent) or not os.access(parent, os.W_OK):
+            return False
+        # as_uri() keeps Windows drive letters URI-safe; mode=rw never
+        # creates the file (plain connect() would — that is why it exists).
+        uri = Path(db_path).resolve().as_uri() + "?mode=rw"
+        con = sqlite3.connect(uri, uri=True, timeout=2)
+        try:
+            con.execute("SELECT 1")
+        finally:
+            con.close()
+        return True
+    except (OSError, ValueError, sqlite3.Error):
+        return False
+
+
+def _check_audit_dir(audit_dir: str) -> bool:
+    """True iff the append-only audit stream's directory exists+writable."""
+    return os.path.isdir(audit_dir) and os.access(audit_dir, os.W_OK)
+
+
+def _build_health_payload(app_env_value: str, verbose: bool) -> Dict[str, Any]:
+    db_ok = _check_db(config.tax_db_path())
+    audit_ok = _check_audit_dir(audit.audit_dir)
+    checks = {
+        "db": "ok" if db_ok else "degraded",
+        "audit": "ok" if audit_ok else "degraded",
+    }
+    payload: Dict[str, Any] = {
+        "status": "ok" if db_ok and audit_ok else "degraded",
+        "checks": checks,
+        "app_env": app_env_value,
+        "version": APP_VERSION,
+    }
+    if verbose and app_env_value == "dev":
+        # Dev-only diagnostics: process uptime + the registered tax-year
+        # rule-set keys (never exposed in prod responses).
+        payload["uptime_seconds"] = round(time.monotonic() - _STARTED_AT, 3)
+        payload["registry"] = sorted(REGISTRY)
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Session payload validation (Sprint 1+2 controls — unchanged)
+# ---------------------------------------------------------------------------
 
 # Income/deduction keys the engine reads numerically (N1): a client-supplied
 # non-numeric value here used to 500 inside float() before the try block.
@@ -240,6 +501,7 @@ class ChatRequest(BaseModel):
         _validate_session_payload(session)
         return session
 
+
 def clean_json(obj):
     if hasattr(obj, "__dict__"): return clean_json(obj.__dict__)
     if isinstance(obj, dict): return {k: clean_json(v) for k, v in obj.items()}
@@ -247,110 +509,6 @@ def clean_json(obj):
     if hasattr(obj, "item"): return obj.item() # numpy handle
     return obj
 
-@app.post("/chat")
-async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks):
-    # 1. Process Message
-    result = nlp.process_message(request.message, request.session)
-    
-    # 2. Real-time Calculation (Insights)
-    tax_result = None
-    has_income = any(
-        float(result["session"].get(k, 0) or 0) > 0
-        for k in ["salary", "business", "rental", "other_income", "agriculture"]
-    )
-    if has_income:
-        try:
-            # ADR-008: the session may pin the tax year (validated above);
-            # None falls back to the registry default.
-            tax_result = engine.calculate_tax_advanced(
-                result["session"], result["session"].get("tax_year")
-            )
-        except Exception as e:
-            print(f"Calculation Error: {e}")
-
-    # 3. Schedule Background Audit Log
-    sid = request.session.get("id", "default")
-    background_tasks.add_task(
-        audit.log_interaction,
-        session_id=sid,
-        input_text=request.message,
-        response=result["response"],
-        session_state=result["session"],
-        tax_results=tax_result,
-        extracted=result.get("extracted"),
-        plan=result.get("plan"),
-    )
-    
-    # 4. Record to Industrial Black Box for Regression Auditing
-    lab.record_turn(sid, {
-        "input": request.message,
-        "response": result["response"],
-        "extracted": result.get("extracted"),
-        "plan": result.get("plan"),
-        "state": result["session"],
-        "audit": tax_result
-    })
-    
-    # Return everything for the frontend to render real-time
-    return clean_json({**result, "tax_report": tax_result})
-
-@app.get("/history/{sid}")
-async def get_history(
-    sid: str,
-    limit: int = Query(50, ge=1, le=200, description="Entries per page (hard max 200)"),
-    offset: int = Query(0, ge=0, description="Entries to skip before the page"),
-):
-    """C5 interim: history browsing is disabled by default (the audit log
-    itself keeps being written regardless). Opt in explicitly by setting
-    TAX_ENABLE_HISTORY to 1 / true / True. Read at request time so the
-    flag can be flipped without a restart.
-
-    Sprint 2 Step F: when enabled, serves the append-only JSONL global
-    stream (logs/audit/session_audit.jsonl) line-by-line, filtered by the
-    sanitized session id and paginated (limit default 50, hard max 200,
-    offset). Response envelope: {entries, corrupt_lines_skipped, has_more};
-    the entry schema fields are unchanged (timestamp, session_id,
-    user_input/ai_response — now correlation/structured records per the
-    write-time PII minimization, internal_state, tax_calculation).
-
-    Read-only compat fallback: if the JSONL stream does not exist but the
-    legacy logs/session_audit.json does, serve from it as before. The
-    per-session blackbox streams are NEVER served here.
-    """
-    if os.environ.get("TAX_ENABLE_HISTORY") not in {"1", "true", "True"}:
-        raise HTTPException(status_code=404, detail="Not found")
-    safe = safe_session_id(sid)
-    empty: Dict[str, Any] = {"entries": [], "corrupt_lines_skipped": 0, "has_more": False}
-    if not os.path.exists(audit.log_file):
-        legacy = getattr(audit, "legacy_file", None)
-        if legacy and os.path.exists(legacy):
-            try:
-                with open(legacy, "r", encoding="utf-8") as fh:
-                    logs = json.load(fh)
-            except (OSError, ValueError) as exc:
-                logger.warning("legacy audit log %s unreadable (%s)", legacy, exc)
-                return empty
-            if not isinstance(logs, list):
-                return empty
-            matches = [
-                entry
-                for entry in logs
-                if isinstance(entry, dict) and entry.get("session_id") == safe
-            ]
-            return {
-                "entries": matches[offset:offset + limit],
-                "corrupt_lines_skipped": 0,
-                "has_more": len(matches) > offset + limit,
-            }
-        return empty
-    entries, corrupt_lines, has_more = audit.read_session_entries(
-        safe, limit=limit, offset=offset
-    )
-    return {
-        "entries": entries,
-        "corrupt_lines_skipped": corrupt_lines,
-        "has_more": has_more,
-    }
 
 class CapitalGainItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -527,20 +685,233 @@ class CalculateRequest(BaseModel):
         return value
 
 
-@app.post("/calculate")
-async def calculate_endpoint(req: CalculateRequest):
-    # Maintain existing calculator endpoint for the UI.
-    # by_alias → the engine sees its original keys ("80c", "24b", ...).
-    # exclude_unset → keys the client never sent stay absent, so the engine's
-    # own defaults keep applying exactly as before validation existed (e.g.
-    # the engine's internal professional_tax default of 2500 for salaries);
-    # injecting model defaults instead would silently change results.
-    results = engine.calculate_tax_advanced(
-        req.model_dump(by_alias=True, exclude_unset=True),
-        # ADR-008: honor the client's tax-year pin (None -> registry default).
-        tax_year=req.tax_year,
+# ---------------------------------------------------------------------------
+# Application factory (Sprint 3 Step A)
+# ---------------------------------------------------------------------------
+
+
+def create_app(app_env: str = "dev") -> FastAPI:
+    """Build the FastAPI application for *app_env* ("dev" | "prod").
+
+    - prod: /docs, /redoc and /openapi.json are disabled (attack-surface
+      reduction); dev keeps them enabled (current behavior).
+    - Middleware order (request path, outermost first): body-cap ->
+      security-headers -> origin-check -> rate-limit -> CORS. add_middleware
+      registers innermost-first, so the CORS block comes FIRST here.
+    - The rate limiter is per-app in-memory state, exposed at
+      ``app.state.rate_limiter`` (single-worker deployment is documented).
+    """
+    # Fail-safe normalization: only the explicit "prod" selects prod posture
+    # (same rule as config._normalize_app_env for the APP_ENV env var).
+    env = "prod" if (app_env or "").strip().lower() == "prod" else "dev"
+    docs_enabled = env != "prod"
+
+    app = FastAPI(
+        title="Tax Assist AI - Deep Consultant",
+        version=APP_VERSION,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
-    return clean_json(results)
+
+    limiter = RateLimiter()
+
+    # NOTE (Sprint 3 Step B): CORS stays the Sprint-1 wildcard THIS wave —
+    # no contract change lands before cookies exist. The auth wave (Wave C)
+    # replaces this block with the explicit allowlist from
+    # config.cors_origins() + allow_credentials=True, retiring the wildcard
+    # permanently; production then fails closed at the config layer.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
+    app.add_middleware(OriginCheckMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(BodySizeCapMiddleware)
+
+    app.state.rate_limiter = limiter
+    app.state.app_env = env
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        # N1: never leak stack traces / exception details in the response body.
+        # The full traceback still goes to the server log (auditability).
+        logger.exception(
+            "Unhandled error on %s %s", request.method, request.url.path
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        # Reflection-amplification fix: the default handler echoes each error's
+        # 'input' field verbatim (a 100KB padded session came back as a ~100KB
+        # body), and it 500s outright when 'input' is inf/nan because
+        # JSONResponse refuses non-finite floats. Respond with loc/msg/type
+        # only, loc flattened to strings, capped at 20 entries.
+        errors = [
+            {
+                "loc": [str(part) for part in err.get("loc", ())],
+                "msg": err.get("msg", ""),
+                "type": err.get("type", ""),
+            }
+            for err in exc.errors()[:20]
+        ]
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Validation error", "errors": errors},
+        )
+
+    @app.get("/health")
+    async def health_endpoint(
+        request: Request,
+    ) -> JSONResponse:
+        """Public, rate-limit-exempt liveness/readiness probe (design §3).
+
+        db check: SELECT 1 against TAX_DB_PATH (never creates the file) +
+        data-dir write permission. audit check: logs/audit dir writable.
+        Any failing check -> 503 with the failing check named. ?verbose=1
+        adds uptime + registry keys in dev only.
+        """
+        verbose = request.query_params.get("verbose") in {"1", "true", "True"}
+        payload = _build_health_payload(env, verbose)
+        status_code = 200 if payload["status"] == "ok" else 503
+        return JSONResponse(status_code=status_code, content=payload)
+
+    @app.post("/chat")
+    async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks):
+        # 1. Process Message
+        result = nlp.process_message(request.message, request.session)
+
+        # 2. Real-time Calculation (Insights)
+        tax_result = None
+        has_income = any(
+            float(result["session"].get(k, 0) or 0) > 0
+            for k in ["salary", "business", "rental", "other_income", "agriculture"]
+        )
+        if has_income:
+            try:
+                # ADR-008: the session may pin the tax year (validated above);
+                # None falls back to the registry default.
+                tax_result = engine.calculate_tax_advanced(
+                    result["session"], result["session"].get("tax_year")
+                )
+            except Exception as e:
+                print(f"Calculation Error: {e}")
+
+        # 3. Schedule Background Audit Log
+        sid = request.session.get("id", "default")
+        background_tasks.add_task(
+            audit.log_interaction,
+            session_id=sid,
+            input_text=request.message,
+            response=result["response"],
+            session_state=result["session"],
+            tax_results=tax_result,
+            extracted=result.get("extracted"),
+            plan=result.get("plan"),
+        )
+
+        # 4. Record to Industrial Black Box for Regression Auditing
+        lab.record_turn(sid, {
+            "input": request.message,
+            "response": result["response"],
+            "extracted": result.get("extracted"),
+            "plan": result.get("plan"),
+            "state": result["session"],
+            "audit": tax_result
+        })
+
+        # Return everything for the frontend to render real-time
+        return clean_json({**result, "tax_report": tax_result})
+
+    @app.get("/history/{sid}")
+    async def get_history(
+        sid: str,
+        limit: int = Query(50, ge=1, le=200, description="Entries per page (hard max 200)"),
+        offset: int = Query(0, ge=0, description="Entries to skip before the page"),
+    ):
+        """C5 interim: history browsing is disabled by default (the audit log
+        itself keeps being written regardless). Opt in explicitly by setting
+        TAX_ENABLE_HISTORY to 1 / true / True. Read at request time so the
+        flag can be flipped without a restart.
+
+        Sprint 2 Step F: when enabled, serves the append-only JSONL global
+        stream (logs/audit/session_audit.jsonl) line-by-line, filtered by the
+        sanitized session id and paginated (limit default 50, hard max 200,
+        offset). Response envelope: {entries, corrupt_lines_skipped, has_more};
+        the entry schema fields are unchanged (timestamp, session_id,
+        user_input/ai_response — now correlation/structured records per the
+        write-time PII minimization, internal_state, tax_calculation).
+
+        Read-only compat fallback: if the JSONL stream does not exist but the
+        legacy logs/session_audit.json does, serve from it as before. The
+        per-session blackbox streams are NEVER served here.
+        """
+        if os.environ.get("TAX_ENABLE_HISTORY") not in {"1", "true", "True"}:
+            raise HTTPException(status_code=404, detail="Not found")
+        safe = safe_session_id(sid)
+        empty: Dict[str, Any] = {"entries": [], "corrupt_lines_skipped": 0, "has_more": False}
+        if not os.path.exists(audit.log_file):
+            legacy = getattr(audit, "legacy_file", None)
+            if legacy and os.path.exists(legacy):
+                try:
+                    with open(legacy, "r", encoding="utf-8") as fh:
+                        logs = json.load(fh)
+                except (OSError, ValueError) as exc:
+                    logger.warning("legacy audit log %s unreadable (%s)", legacy, exc)
+                    return empty
+                if not isinstance(logs, list):
+                    return empty
+                matches = [
+                    entry
+                    for entry in logs
+                    if isinstance(entry, dict) and entry.get("session_id") == safe
+                ]
+                return {
+                    "entries": matches[offset:offset + limit],
+                    "corrupt_lines_skipped": 0,
+                    "has_more": len(matches) > offset + limit,
+                }
+            return empty
+        entries, corrupt_lines, has_more = audit.read_session_entries(
+            safe, limit=limit, offset=offset
+        )
+        return {
+            "entries": entries,
+            "corrupt_lines_skipped": corrupt_lines,
+            "has_more": has_more,
+        }
+
+    @app.post("/calculate")
+    async def calculate_endpoint(req: CalculateRequest):
+        # Maintain existing calculator endpoint for the UI.
+        # by_alias → the engine sees its original keys ("80c", "24b", ...).
+        # exclude_unset → keys the client never sent stay absent, so the engine's
+        # own defaults keep applying exactly as before validation existed (e.g.
+        # the engine's internal professional_tax default of 2500 for salaries);
+        # injecting model defaults instead would silently change results.
+        results = engine.calculate_tax_advanced(
+            req.model_dump(by_alias=True, exclude_unset=True),
+            # ADR-008: honor the client's tax-year pin (None -> registry default).
+            tax_year=req.tax_year,
+        )
+        return clean_json(results)
+
+    return app
+
+
+app = create_app(os.environ.get("APP_ENV", "dev"))
+
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Dev bind safety: TAX_HOST/TAX_PORT (defaults 127.0.0.1:8000) — the
+    # server never defaults to a routable interface. TAX_LOG_LEVEL sets
+    # the root logging level for the entry point.
+    logging.basicConfig(level=config.tax_log_level())
+    uvicorn.run(app, host=config.tax_host(), port=config.tax_port())
