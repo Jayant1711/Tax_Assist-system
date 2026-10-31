@@ -335,12 +335,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 def _check_db(db_path: str) -> bool:
-    """True iff the database can be opened AND answers SELECT 1.
+    """True iff the database can be opened AND answers a header read.
 
     NEVER creates the file or its directory: a not-yet-provisioned
     database is precisely the degradation /health must report. The sqlite
     URI uses ``mode=rw`` (fails when the file is missing) and the parent
     directory must exist with write permission (os.access W_OK).
+
+    The probe is ``PRAGMA schema_version`` — NOT ``SELECT 1``: a constant
+    expression never touches the file, so a corrupt/non-sqlite file would
+    answer ``SELECT 1`` on Linux (platform bug caught by CI); the pragma
+    reads the database header and fails on any non-sqlite file.
     """
     try:
         parent = os.path.dirname(os.path.abspath(db_path))
@@ -351,7 +356,7 @@ def _check_db(db_path: str) -> bool:
         uri = Path(db_path).resolve().as_uri() + "?mode=rw"
         con = sqlite3.connect(uri, uri=True, timeout=2)
         try:
-            con.execute("SELECT 1")
+            con.execute("PRAGMA schema_version")
         finally:
             con.close()
         return True
