@@ -37,15 +37,39 @@ response to 503 while naming the check. ``?verbose=1`` adds uptime +
 registry keys in dev only. Prod also disables /docs, /redoc and
 /openapi.json via the factory.
 
-Sprint 3 Wave C (auth core, ADR-012) adds the /auth/* endpoints on top
-of auth.py + db.py: register (scrypt passwords), login (opaque
-HttpOnly-cookie sessions, server-side rows in SQLite, lockout after 5
-failures), logout (row revoke), /auth/me and per-session management.
-Auth lifecycle events are appended to the existing JSONL audit stream
-via AuditLogger.log_event, sanitized to sha256[:16] correlation hashes
-(never raw emails, tokens or passwords). /chat, /calculate and
-/history are UNCHANGED this wave (the app_sessions contract swap is
-Wave D).
+Sprint 3 Wave D (server-side sessions, ADR-013) swaps the wire contract:
+the client no longer carries session state. ``app_sessions`` rows in the
+SQLite store own the state ({message, session_id} in, projection out):
+
+- POST /sessions bootstraps a server-uuid session ({id, phase:
+  PROFILING, history: []} bootstrap state); GET /sessions lists the
+  caller's rows; GET/DELETE /sessions/{id} are owner-checked.
+- POST /chat takes {message, session_id}; the handler resolves the actor
+  (auth cookie, or anonymous ONLY under TAX_ENABLE_ANON_DEMO=1), loads
+  the OWNED state (foreign/unknown -> 404), runs the UNCHANGED
+  nlp.process_message(message, state), the income gate, the engine,
+  re-validates the mutated state (Sprint-1+2 validator — defense in
+  depth on the server-side write path), persists it and responds with
+  the read-only PROJECTION (audit scrub semantics: history/_last_*/
+  memory dropped; every frontend key kept). An old-style session-dict
+  body -> 422.
+- POST /calculate takes {session_id, tax_year?} and computes the full
+  report from the server-side state (explicit tax_year override, else
+  the state's own pin, else the registry default).
+- GET /history/{sid} requires auth + ownership and the TAX_ENABLE_HISTORY
+  default flips to ON: the Sprint-1 interim C5 measure (opt-in gate) is
+  superseded by auth + per-session ownership (design §2); the env stays
+  as an explicit kill-switch (0/false/False).
+- /chat-turn audit + blackbox records gain an additive user_id field
+  (the app_sessions owner; omitted for anonymous demo turns).
+
+Wave C (auth core, ADR-012) underneath: /auth/* endpoints on auth.py +
+db.py — register (scrypt passwords), login (opaque HttpOnly-cookie
+sessions, server-side rows in SQLite, lockout after 5 failures), logout
+(row revoke), /auth/me and per-session management. Auth lifecycle events
+are appended to the same JSONL audit stream via AuditLogger.log_event,
+sanitized to sha256[:16] correlation hashes (never raw emails, tokens or
+passwords).
 """
 import json
 import logging
@@ -53,9 +77,8 @@ import math
 import os
 import sqlite3
 import time
-from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 import uvicorn
 from fastapi import (
@@ -76,7 +99,8 @@ from starlette.types import ASGIApp
 
 import auth
 import config
-from audit_logger import AuditLogger
+import db
+from audit_logger import AuditLogger, scrub_state
 from nlp_engine import NLPEngine
 from rate_limit import RateLimiter
 from session_lab import SessionLab
@@ -225,6 +249,11 @@ def _rate_limit_bucket(path: str) -> Optional[str]:
         # /auth/* limits activate with the auth-wave routes; the class is
         # wired now so the posture exists before credentials land.
         return "auth"
+    if path == "/sessions" or path.startswith("/sessions/"):
+        # Wave D: the app-session endpoints share the /chat bucket (the
+        # design §4 class list names /chat for the conversation surface;
+        # the bootstrap/list/delete family belongs to it).
+        return "chat"
     return None
 
 
@@ -508,18 +537,64 @@ def _validate_session_payload(session: Dict[str, Any]) -> None:
             )
 
 
-class ChatRequest(BaseModel):
-    message: str = Field(max_length=4000)
-    session: Dict[str, Any]
+def _validate_loaded_state(state: Dict[str, Any]) -> None:
+    """422-map the Sprint-1+2 validator onto SERVER-side state (Wave D).
 
-    @field_validator("session", mode="after")
+    The client can no longer supply state (ADR-013), so the H5/N1 rows
+    now defend the server-side write path: a stored state that fails
+    validation is refused at the load boundary — before NLP/engine see
+    it — and the post-NLP state is re-checked before persisting. In
+    production only validated states are ever written; a failure means a
+    store/validator regression and must fail closed, never compute.
+    """
+    try:
+        _validate_session_payload(state)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"Session state rejected: {exc}"
+        ) from exc
+
+
+def session_projection(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Read-only response projection of the server-side state (ADR-013).
+
+    Reuses the audit logger's scrub semantics (audit_logger.scrub_state):
+    the internal keys — ``history``, ``_last_question``, ``_last_val``,
+    ``_prev_salary``, ``memory`` — are dropped recursively, while every
+    key the frontend reads survives: id, phase, profile, the income and
+    deduction numbers, and the collected flags/categories.
+    """
+    scrubbed = scrub_state(state)
+    return scrubbed if isinstance(scrubbed, dict) else {}
+
+
+class ChatRequest(BaseModel):
+    """Sprint 3 Wave D contract (ADR-013): ``{message, session_id}``.
+
+    The client-authored ``session`` dict is GONE from the wire — state
+    lives in app_sessions rows and only the server-issued id travels.
+    An old-style body is rejected with an explicit migration message
+    (no dual contract: one frontend, one deploy unit). The Sprint-1+2
+    payload validator (``_validate_session_payload``) still runs — on the
+    SERVER-side state, at both boundaries (load + post-NLP persist).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(max_length=4000)
+    session_id: str = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="before")
     @classmethod
-    def _validate_session(cls, session: Dict[str, Any]) -> Dict[str, Any]:
-        # C6: reject traversal/absolute/non-ASCII ids at the API boundary
-        # (→ 422). session_lab still sanitizes as defense-in-depth, and the
-        # audit logger records the (sanitized) id either way.
-        _validate_session_payload(session)
-        return session
+    def _reject_legacy_session_dict(cls, data: Any) -> Any:
+        # Breaking-contract guard (ADR-013): an old client sending the
+        # pre-Wave-D session dict gets a 422 that says WHY, instead of a
+        # generic unknown-field/missing-field error.
+        if isinstance(data, dict) and "session" in data:
+            raise ValueError(
+                "Session state is now server-side; send session_id"
+            )
+        return data
 
 
 def clean_json(obj):
@@ -530,146 +605,40 @@ def clean_json(obj):
     return obj
 
 
-class CapitalGainItem(BaseModel):
+class CalculateRequest(BaseModel):
+    """Sprint 3 Wave D contract (ADR-013): ``{session_id, tax_year?}``.
+
+    The full engine payload the client used to send is GONE — the numbers
+    now come from the owned app_sessions state (validated by
+    ``_validate_session_payload`` at the load boundary, which carries the
+    same rows the old model enforced: numeric/finite/bounded incomes,
+    enum-strict CG types + categories, bool-strict flags, registered
+    tax_year). An old-style full-dict body -> 422 (session_id required).
+    """
+
     model_config = ConfigDict(extra="ignore")
 
-    # Sprint 2 Step D2/G (V-2 closure): enum-strict via Literal — any other
-    # value (e.g. "crypto", which the engine would book as untaxed income)
-    # is a 422. Required: an entry with no type is the same hole (the
-    # engine taxes by type and would let it through untaxed).
-    type: Literal["equity_ltcg", "equity_stcg", "property_cg"]
-    amount: float = Field(0.0, ge=0, le=1e11)
-    holding: str = Field("unknown", max_length=32)
-    # Sprint 2 Step C (ruling R-e): ISO date (yyyy-mm-dd) of the transfer.
-    # A plain pydantic date — parse failures 422 at the boundary; no further
-    # bounds are needed (any valid date is accepted; the transfer-date
-    # ROUTING/advisory is keyed on the tri-state
-    # cg_transfer_before_2024_07_23 flag, and the 20%-with-indexation
-    # election itself is out of scope — never fabricated).
-    transfer_date: Optional[date] = None
+    session_id: str = Field(min_length=1, max_length=64)
 
-    @field_validator("amount")
-    @classmethod
-    def _validate_amount_finite(cls, value: float) -> float:
-        # The ge/le constraints already reject inf/nan; this keeps the
-        # guarantee if the bounds are ever relaxed (non-finite engine input
-        # must never pass validation).
-        if not math.isfinite(value):
-            raise ValueError("amount must be a finite number")
-        return value
-
-
-class CalculateRequest(BaseModel):
-    """Validated /calculate payload (H5).
-
-    Aliases mirror the engine's raw dict keys ("80c", "24b", ...) so
-    model_dump(by_alias=True) hands TaxEngine exactly the key names it reads.
-    All fields are optional with neutral defaults so partial payloads keep
-    working as they did before validation existed.
-    """
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
-
-    salary: float = Field(0.0, ge=0, le=1e11)
-    business: float = Field(0.0, ge=0, le=1e11)
-    rental: float = Field(0.0, ge=0, le=1e11)
-    other_income: float = Field(0.0, ge=0, le=1e11)
-    agriculture: float = Field(0.0, ge=0, le=1e11)
-    age: Optional[int] = Field(None, ge=0, le=120)
-    capital_gains: List[CapitalGainItem] = Field(default_factory=list)
-
-    # Deduction fields — dumped back under the engine's original key names.
-    # Sprint 2 Step D: the "80eea" alias is REMOVED (the section is
-    # discontinued); a client-supplied 80eea key is rejected outright by
-    # the mode="before" model validator below instead of being ignored.
-    c80: float = Field(0.0, ge=0, le=1e11, alias="80c")
-    d80: float = Field(0.0, ge=0, le=1e11, alias="80d")
-    d80_parents: float = Field(0.0, ge=0, le=1e11, alias="80d_parents")
-    e80: float = Field(0.0, ge=0, le=1e11, alias="80e")
-    g80: float = Field(0.0, ge=0, le=1e11, alias="80g")
-    nps: float = Field(0.0, ge=0, le=1e11)
-    tta80: float = Field(0.0, ge=0, le=1e11, alias="80tta")
-    ttb80: float = Field(0.0, ge=0, le=1e11, alias="80ttb")
-    gg80: float = Field(0.0, ge=0, le=1e11, alias="80gg")
-    u80_dd80: float = Field(0.0, ge=0, le=1e11, alias="80u_80dd")
-    ddb80: float = Field(0.0, ge=0, le=1e11, alias="80ddb")
-    b24: float = Field(0.0, ge=0, le=1e11, alias="24b")
-    hra: float = Field(0.0, ge=0, le=1e11)
-    # Sprint 2 Step B: the three Rule 2A inputs with identical bounds; the
-    # legacy "hra" key above keeps its numeric row. is_metro is bool
-    # strictly (the mode="before" validator below rejects the values
-    # pydantic lax mode would coerce, e.g. "yes" / 1 — mirroring the
-    # session validator).
-    hra_received: float = Field(0.0, ge=0, le=1e11)
-    rent_paid: float = Field(0.0, ge=0, le=1e11)
-    is_metro: Optional[bool] = None
-    professional_tax: float = Field(0.0, ge=0, le=1e11)
-    # Sprint 2 Step D mirrors: the 80DDB expenditure input (bounded like
-    # the other numerics) and the two enum-strict category keys (None =
-    # not yet collected; the engine applies its disclosed defaults).
-    ddb_expenditure: float = Field(0.0, ge=0, le=1e11, alias="80ddb_expenditure")
-    u80_dd_category: Optional[str] = Field(None, alias="80u_80dd_category")
-    g80_category: Optional[str] = Field(None, alias="80g_category")
-
-    profile: Optional[str] = Field(None, max_length=64)
-    has_parents: Optional[bool] = None
-    has_home_loan: Optional[bool] = None
-    pays_rent: Optional[bool] = None
-    # Sprint 2 Step C (ruling R-e): tri-state property transfer-date flag —
-    # True = transferred before 23-Jul-2024, False = on/after, None/absent =
-    # unknown. Bool strictly per the security table (the validator below
-    # rejects the values pydantic lax mode would coerce, e.g. "yes" / 1).
-    cg_transfer_before_2024_07_23: Optional[bool] = None
-    id: Optional[str] = None
-
-    # ADR-008: optional tax-year pin; None keeps the registry default
-    # (fy_2025_26 since Step A3). Both registered keys — fy_2024_25 and
-    # fy_2025_26 — validate via REGISTRY, which is also the 422 message's
-    # single source for the supported list.
+    # ADR-008: optional tax-year OVERRIDE; None falls back to the state's
+    # own pin (if any), then the registry default (fy_2025_26 since Step
+    # A3). Registered keys validate via REGISTRY, which is also the 422
+    # message's single source for the supported list.
     tax_year: Optional[str] = Field(None, max_length=32)
 
     @model_validator(mode="before")
     @classmethod
     def _reject_removed_80eea(cls, data: Any) -> Any:
-        # Sprint 2 Step D: the 80eea field was REMOVED from this model —
-        # but extra="ignore" would silently swallow the key, so its
-        # presence is rejected outright (any value, even null) with the
-        # discontinuation message, mirroring the session validator.
+        # Sprint 2 Step D control kept on the shrunk model: the section is
+        # DISCONTINUED — extra="ignore" must not silently swallow the key
+        # (any value, even null, is rejected with the discontinuation
+        # message, mirroring the session validator).
         if isinstance(data, dict) and "80eea" in data:
             raise ValueError(
                 "80eea is no longer accepted: Section 80EEA was discontinued "
                 "— only loans sanctioned before 1 April 2022 qualified."
             )
         return data
-
-    @field_validator("u80_dd_category")
-    @classmethod
-    def _validate_u80_dd_category(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if value not in _80U_80DD_CATEGORIES:
-            raise ValueError(
-                "80u_80dd_category must be one of: "
-                f"{', '.join(_80U_80DD_CATEGORIES)}"
-            )
-        return value
-
-    @field_validator("g80_category")
-    @classmethod
-    def _validate_g80_category(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if value not in _80G_CATEGORIES:
-            raise ValueError(
-                "80g_category must be one of: " + ", ".join(_80G_CATEGORIES)
-            )
-        return value
-
-    @field_validator("id")
-    @classmethod
-    def _validate_id(cls, value: Optional[str]) -> Optional[str]:
-        if value is not None and not is_valid_session_id(value):
-            raise ValueError("id must match [A-Za-z0-9_-]{4,64}")
-        return value
 
     @field_validator("tax_year")
     @classmethod
@@ -680,28 +649,6 @@ class CalculateRequest(BaseModel):
             raise ValueError(
                 f"tax_year must be one of: {', '.join(REGISTRY)}"
             )
-        return value
-
-    @field_validator("cg_transfer_before_2024_07_23", mode="before")
-    @classmethod
-    def _validate_transfer_flag_strict_bool(cls, value: Any) -> Any:
-        # Tri-state bool strictly (security table): pydantic lax mode would
-        # coerce "yes"/"1"/1 to a bool — reject anything that is not a real
-        # bool or null so the API boundary matches the session validator.
-        # mode="before" sees the RAW wire value, before coercion.
-        if value is not None and not isinstance(value, bool):
-            raise ValueError(
-                "cg_transfer_before_2024_07_23 must be a boolean or null"
-            )
-        return value
-
-    @field_validator("is_metro", mode="before")
-    @classmethod
-    def _validate_is_metro_strict_bool(cls, value: Any) -> Any:
-        # Sprint 2 Step B (security table): bool strictly, same pattern as
-        # the transfer flag above and the session validator.
-        if value is not None and not isinstance(value, bool):
-            raise ValueError("is_metro must be a boolean or null")
         return value
 
 
@@ -820,6 +767,46 @@ def create_app(app_env: str = "dev") -> FastAPI:
         # endpoints use. The global is resolved at call time, so tests can
         # swap the stream per fixture.
         return auth.require_user(request, audit=audit)
+
+    def _resolve_actor(request: Request) -> Optional[auth.CurrentUser]:
+        """Auth dependency for the Wave D protected surface.
+
+        Cookie present -> the FULL ADR-012 chain (401 on ANY failure —
+        never bypassed, a stale cookie never silently downgrades to the
+        demo posture). No cookie -> anonymous ONLY when the deny-by-default
+        demo opt-in (TAX_ENABLE_ANON_DEMO=1) is set: the endpoint then
+        operates on user_id NULL app sessions. Returns None for the demo
+        branch, a CurrentUser otherwise. /history never takes this
+        dependency (the demo flag never unlocks history).
+        """
+        if request.cookies.get(auth.session_cookie_name()) is None:
+            if config.tax_enable_anon_demo():
+                return None
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return auth.require_user(request, audit=audit)
+
+    def _owned_session_or_404(
+        session_id: str, actor: Optional[auth.CurrentUser]
+    ) -> sqlite3.Row:
+        """Ownership resolution for {session_id} endpoints (ADR-013).
+
+        get_owned returns None for a foreign AND an unknown id — both map
+        to the same 404 (the IDOR posture: no existence oracle). Demo
+        (actor None) matches only user_id NULL rows.
+        """
+        row = db.get_owned(
+            session_id, actor.user_id if actor is not None else None
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return row
+
+    def _load_owned_state(session_id: str, actor: Optional[auth.CurrentUser]):
+        """Owned app_sessions row + its parsed, validated state."""
+        row = _owned_session_or_404(session_id, actor)
+        state = json.loads(row["state"])
+        _validate_loaded_state(state)  # defense-in-depth: refuse forged rows
+        return row, state
 
     def _client_ip(request: Request) -> str:
         client = request.scope.get("client")
@@ -1035,6 +1022,67 @@ def create_app(app_env: str = "dev") -> FastAPI:
         )
         return Response(status_code=204)
 
+    # ------------------------------------------------------------------
+    # /sessions (Sprint 3 Wave D — ADR-013 app-session bootstrap + CRUD)
+    # ------------------------------------------------------------------
+
+    @app.post("/sessions")
+    async def create_app_session_endpoint(
+        actor: Optional[auth.CurrentUser] = Depends(_resolve_actor),
+    ) -> Dict[str, Any]:
+        """Bootstrap one server-side session. 200 {session_id, session}.
+
+        Authenticated by default; under the deny-by-default anonymous demo
+        opt-in (TAX_ENABLE_ANON_DEMO=1) a cookie-less request creates a
+        user_id NULL row. The state starts as the fixed bootstrap {id,
+        phase: PROFILING, history: []}; the response `session` is its
+        read-only projection (the empty history is internal).
+        """
+        user_id = actor.user_id if actor is not None else None
+        row = db.create_session(user_id)
+        state = json.loads(row["state"])
+        return {
+            "session_id": row["id"],
+            "session": session_projection(state),
+        }
+
+    @app.get("/sessions")
+    async def list_app_sessions_endpoint(
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> List[Dict[str, Any]]:
+        """The calling user's app sessions (id + timestamps, newest use
+        first). Anonymous demo callers have no listable identity — auth
+        only, even with the demo flag on."""
+        return [
+            {
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            for row in db.list_sessions(user.user_id)
+        ]
+
+    @app.get("/sessions/{session_id}")
+    async def get_app_session_endpoint(
+        session_id: str,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, Any]:
+        """The owned session's read-only projection (404 foreign/unknown)."""
+        _row, state = _load_owned_state(session_id, user)
+        return session_projection(state)
+
+    @app.delete("/sessions/{session_id}", status_code=204)
+    async def delete_app_session_endpoint(
+        session_id: str,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Response:
+        """Delete one of the caller's app sessions (owner-checked; 404
+        foreign/unknown). Cascading FKs also remove the row when the
+        owning user is deleted."""
+        if not db.delete_owned_session(session_id, user.user_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+        return Response(status_code=204)
+
     @app.get("/health")
     async def health_endpoint(
         request: Request,
@@ -1052,9 +1100,21 @@ def create_app(app_env: str = "dev") -> FastAPI:
         return JSONResponse(status_code=status_code, content=payload)
 
     @app.post("/chat")
-    async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks):
-        # 1. Process Message
-        result = nlp.process_message(request.message, request.session)
+    async def chat_endpoint(
+        request: ChatRequest,
+        background_tasks: BackgroundTasks,
+        actor: Optional[auth.CurrentUser] = Depends(_resolve_actor),
+    ):
+        # Wave D handler flow (ADR-013): resolve actor -> load OWNED state
+        # -> NLP (unchanged signature) -> income gate -> engine -> re-valid-
+        # ate -> persist -> audit/blackbox -> respond with the projection.
+        # 0. Ownership: a foreign/unknown session id is a 404 (no oracle).
+        row, state = _load_owned_state(request.session_id, actor)
+        session_id = row["id"]
+        user_id = actor.user_id if actor is not None else None
+
+        # 1. Process Message (server-side state; NLP unchanged)
+        result = nlp.process_message(request.message, state)
 
         # 2. Real-time Calculation (Insights)
         tax_result = None
@@ -1064,66 +1124,99 @@ def create_app(app_env: str = "dev") -> FastAPI:
         )
         if has_income:
             try:
-                # ADR-008: the session may pin the tax year (validated above);
-                # None falls back to the registry default.
+                # ADR-008: the state may pin the tax year (validator-checked
+                # at load); None falls back to the registry default.
                 tax_result = engine.calculate_tax_advanced(
                     result["session"], result["session"].get("tax_year")
                 )
             except Exception as e:
-                print(f"Calculation Error: {e}")
+                # Graceful degradation: the chat continues with a null tax
+                # report; the failure goes to the server log (never the
+                # client response).
+                logger.warning("chat calculation error: %s", e)
 
-        # 3. Schedule Background Audit Log
-        sid = request.session.get("id", "default")
+        # 3. Validate the mutated state before persisting (defense-in-depth:
+        # the ONLY writer is NLP, and its output must keep satisfying the
+        # Sprint-1+2 rows; a failure fails closed — nothing is persisted).
+        _validate_loaded_state(result["session"])
+        if not db.save_state(session_id, result["session"]):
+            # The row vanished between the ownership check and the write
+            # (deleted concurrently): nothing was persisted.
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # 4. Schedule Background Audit Log (user_id is the Wave D additive
+        # field — the app_sessions owner; None for anonymous demo turns).
         background_tasks.add_task(
             audit.log_interaction,
-            session_id=sid,
+            session_id=session_id,
             input_text=request.message,
             response=result["response"],
             session_state=result["session"],
             tax_results=tax_result,
             extracted=result.get("extracted"),
             plan=result.get("plan"),
+            user_id=user_id,
         )
 
-        # 4. Record to Industrial Black Box for Regression Auditing
-        lab.record_turn(sid, {
+        # 5. Record to Industrial Black Box for Regression Auditing (keyed
+        # by the server-issued session id).
+        lab.record_turn(session_id, {
             "input": request.message,
             "response": result["response"],
             "extracted": result.get("extracted"),
             "plan": result.get("plan"),
             "state": result["session"],
-            "audit": tax_result
+            "audit": tax_result,
+            "user_id": user_id,
         })
 
-        # Return everything for the frontend to render real-time
-        return clean_json({**result, "tax_report": tax_result})
+        # Return everything for the frontend to render real-time. `session`
+        # is the READ-ONLY projection (internal keys dropped); the full
+        # state stays server-side.
+        return clean_json({
+            "response": result["response"],
+            "session_id": session_id,
+            "session": session_projection(result["session"]),
+            "extracted": result.get("extracted"),
+            "plan": result.get("plan"),
+            "tax_report": tax_result,
+        })
 
     @app.get("/history/{sid}")
     async def get_history(
         sid: str,
         limit: int = Query(50, ge=1, le=200, description="Entries per page (hard max 200)"),
         offset: int = Query(0, ge=0, description="Entries to skip before the page"),
+        user: auth.CurrentUser = Depends(_current_user),
     ):
-        """C5 interim: history browsing is disabled by default (the audit log
-        itself keeps being written regardless). Opt in explicitly by setting
-        TAX_ENABLE_HISTORY to 1 / true / True. Read at request time so the
-        flag can be flipped without a restart.
+        """Own-session history browsing (auth + ownership; Wave D).
 
-        Sprint 2 Step F: when enabled, serves the append-only JSONL global
-        stream (logs/audit/session_audit.jsonl) line-by-line, filtered by the
-        sanitized session id and paginated (limit default 50, hard max 200,
-        offset). Response envelope: {entries, corrupt_lines_skipped, has_more};
-        the entry schema fields are unchanged (timestamp, session_id,
-        user_input/ai_response — now correlation/structured records per the
-        write-time PII minimization, internal_state, tax_calculation).
+        Sprint-1 interim C5 measure SUPERSEDED (design §2): the endpoint
+        used to be disabled by default because it served audit entries by a
+        client-chosen id to anyone. It now requires an authenticated user
+        AND an app session they own (foreign/unknown -> 404, anonymous ->
+        401), so TAX_ENABLE_HISTORY defaults to ON — the variable survives
+        as an explicit kill-switch (0/false/False), read at request time.
 
-        Read-only compat fallback: if the JSONL stream does not exist but the
-        legacy logs/session_audit.json does, serve from it as before. The
-        per-session blackbox streams are NEVER served here.
+        Serves the append-only JSONL global stream
+        (logs/audit/session_audit.jsonl) line-by-line, filtered by the
+        owned session id and paginated (limit default 50, hard max 200,
+        offset). Response envelope: {entries, corrupt_lines_skipped,
+        has_more}; the entry schema fields are unchanged (timestamp,
+        session_id, user_input/ai_response — correlation/structured records
+        per the write-time PII minimization, internal_state,
+        tax_calculation — plus the Wave D additive user_id owner field).
+
+        Read-only compat fallback: if the JSONL stream does not exist but
+        the legacy logs/session_audit.json does, serve from it as before.
+        The per-session blackbox streams are NEVER served here.
         """
-        if os.environ.get("TAX_ENABLE_HISTORY") not in {"1", "true", "True"}:
+        row = _owned_session_or_404(sid, user)
+        if not config.tax_enable_history():
+            # Kill-switch: same 404 shape as the pre-Wave-D disabled gate
+            # (never reveals whether the id exists).
             raise HTTPException(status_code=404, detail="Not found")
-        safe = safe_session_id(sid)
+        safe = safe_session_id(row["id"])  # server-issued id — passes through
         empty: Dict[str, Any] = {"entries": [], "corrupt_lines_skipped": 0, "has_more": False}
         if not os.path.exists(audit.log_file):
             legacy = getattr(audit, "legacy_file", None)
@@ -1157,18 +1250,18 @@ def create_app(app_env: str = "dev") -> FastAPI:
         }
 
     @app.post("/calculate")
-    async def calculate_endpoint(req: CalculateRequest):
-        # Maintain existing calculator endpoint for the UI.
-        # by_alias → the engine sees its original keys ("80c", "24b", ...).
-        # exclude_unset → keys the client never sent stay absent, so the engine's
-        # own defaults keep applying exactly as before validation existed (e.g.
-        # the engine's internal professional_tax default of 2500 for salaries);
-        # injecting model defaults instead would silently change results.
-        results = engine.calculate_tax_advanced(
-            req.model_dump(by_alias=True, exclude_unset=True),
-            # ADR-008: honor the client's tax-year pin (None -> registry default).
-            tax_year=req.tax_year,
-        )
+    async def calculate_endpoint(
+        req: CalculateRequest,
+        actor: Optional[auth.CurrentUser] = Depends(_resolve_actor),
+    ):
+        # Wave D: the calculator computes from the OWNED server-side state
+        # (the full engine payload the client used to send is gone — the
+        # state was validated at the load boundary by _load_owned_state).
+        _row, state = _load_owned_state(req.session_id, actor)
+        # ADR-008: an explicit tax_year override wins over the state's own
+        # pin; both are registry-validated (request model + state validator).
+        tax_year = req.tax_year if req.tax_year is not None else state.get("tax_year")
+        results = engine.calculate_tax_advanced(state, tax_year=tax_year)
         return clean_json(results)
 
     return app

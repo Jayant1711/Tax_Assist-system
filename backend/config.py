@@ -182,8 +182,24 @@ def tax_cookie_secure() -> bool:
 
 
 def tax_enable_anon_demo() -> bool:
-    """Anonymous demo opt-in (deny-by-default; auth wave consumes this)."""
+    """Anonymous demo opt-in (deny-by-default; Wave D consumes this)."""
     return os.environ.get("TAX_ENABLE_ANON_DEMO", "") in _TRUTHY_ENV_VALUES
+
+
+def tax_enable_history() -> bool:
+    """/history gate, read at request time (Wave D default: ON).
+
+    Sprint 1 landed /history behind an opt-in flag as the INTERIM C5
+    measure (unauthenticated history serving was the C5 hole). Wave D
+    SUPERSEDES that measure: /history now requires an authenticated user
+    AND an owned app session (ADR-013 ownership, foreign/unknown -> 404),
+    which closes C5 properly — so the documented default is ON.
+
+    The variable is retained strictly as a kill-switch: only an explicit
+    0 / false / False turns the endpoint off. Unset (and any other value)
+    keeps it on.
+    """
+    return os.environ.get("TAX_ENABLE_HISTORY", "") not in _FALSY_ENV_VALUES
 
 
 def tax_max_body_bytes() -> int:

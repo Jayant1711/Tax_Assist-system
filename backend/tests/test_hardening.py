@@ -1,4 +1,4 @@
-"""Hardening-edge tests (Sprint 3 Step B) — red first.
+"""Hardening-edge tests (Sprint 3 Step B) — middleware stack order.
 
 Covers the middleware stack added in create_app, in the documented
 request order: body-cap -> security-headers -> origin-check -> rate-limit
@@ -6,14 +6,19 @@ request order: body-cap -> security-headers -> origin-check -> rate-limit
 full security-header set — the headers control applies to every response
 the app emits, not only to ones that reach a route.
 
-Scope guards for this wave (no contract change): CORS itself stays the
-Sprint-1 wildcard (allowlist + credentials land with the auth wave), and
-rate-limit keys are client IPs (user-id keys land with auth).
+Wave D adaptation (mechanical, documented — design §10): /chat and
+/calculate are behind the ADR-012 auth dependency, so happy-path rows
+(200) register + log in via the shared tests.conftest helpers and carry a
+server-issued session id; short-circuit rows (413/403/429) are unchanged
+because the middleware runs BEFORE auth/routing and never sees identity.
+The limiter-unit tests are untouched (no wire involvement).
 """
 import os
 import time
 
 import pytest
+
+from tests.conftest import make_session, register_and_login
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -37,30 +42,47 @@ def assert_security_headers(response) -> None:
 
 @pytest.fixture()
 def client():
-    """Fresh app per test (own rate-limiter state, dev docs)."""
+    """Fresh app per test (own rate-limiter state, dev docs).
+
+    Wave D: also re-anchors the store (earlier suite modules re-point
+    TAX_DB_PATH at deleted tmp paths) so registration on the shared db
+    works regardless of module order.
+    """
     previous_cwd = os.getcwd()
     os.chdir(BACKEND_DIR)
     try:
+        import db as db_module
         from fastapi.testclient import TestClient
 
         from main import create_app
 
+        db_module.init_db()
         with TestClient(create_app("dev")) as test_client:
             yield test_client
     finally:
         os.chdir(previous_cwd)
 
 
-def _chat_payload(sid: str = "sid_hard1") -> dict:
-    return {"message": "hi", "session": {"id": sid}}
+@pytest.fixture()
+def authed(client):
+    """The fresh-app client, registered + logged in (cookie retained)."""
+    register_and_login(client)
+    return client
+
+
+def _chat_payload(sid: str = "0" * 32) -> dict:
+    # Wave D contract: {message, session_id} (was {message, session}).
+    return {"message": "hi", "session_id": sid}
 
 
 class TestBodyCap:
     def test_oversized_body_is_413(self, client) -> None:
         # Content-Length (~1.1 MB) exceeds the documented 1 MB default.
+        # The cap is the OUTERMOST middleware: it fires before auth sees
+        # the request, so the anonymous request is still a clean 413.
         response = client.post(
             "/chat",
-            json={"message": "x" * 1_100_000, "session": {"id": "sid_cap1"}},
+            json={"message": "x" * 1_100_000, "session_id": "0" * 32},
         )
         assert response.status_code == 413
         assert response.json() == {"detail": "Request body too large"}
@@ -68,22 +90,24 @@ class TestBodyCap:
     def test_oversized_body_response_carries_security_headers(self, client) -> None:
         response = client.post(
             "/chat",
-            json={"message": "x" * 1_100_000, "session": {"id": "sid_cap1"}},
+            json={"message": "x" * 1_100_000, "session_id": "0" * 32},
         )
         assert response.status_code == 413
         assert_security_headers(response)
 
-    def test_body_under_cap_passes(self, client) -> None:
-        # A padded-but-legal session (~50 KB, under the 100 KB session cap)
-        # sails through the body-cap middleware untouched.
-        response = client.post(
+    def test_body_under_cap_passes(self, authed) -> None:
+        # A padded-but-legal body (~50 KB, far under the 1 MB cap) sails
+        # through the body-cap middleware untouched and reaches the route
+        # layer. Wave D mechanical change: the old row padded the session
+        # dict (no longer on the wire), so the pad rides on `message` and
+        # the route layer rejects it with its own 422 (message max length);
+        # the assertion that matters here is "past the cap, not 413".
+        response = authed.post(
             "/chat",
-            json={
-                "message": "hi",
-                "session": {"id": "sid_cap2", "pad": "x" * 50_000},
-            },
+            json={"message": "x" * 50_000, "session_id": "0" * 32},
         )
-        assert response.status_code == 200
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Validation error"
 
 
 class TestSecurityHeaders:
@@ -95,14 +119,17 @@ class TestSecurityHeaders:
     def test_headers_on_404(self, client) -> None:
         assert_security_headers(client.get("/definitely-not-a-route"))
 
-    def test_headers_on_chat(self, client) -> None:
-        response = client.post("/chat", json=_chat_payload())
+    def test_headers_on_chat(self, authed) -> None:
+        sid = make_session(authed)
+        response = authed.post("/chat", json=_chat_payload(sid))
         assert response.status_code == 200
         assert_security_headers(response)
 
 
 class TestOriginCheck:
     def test_foreign_origin_on_chat_is_403(self, client) -> None:
+        # The origin check sits ahead of auth: the cross-site request is
+        # 403 before identity is even considered.
         response = client.post(
             "/chat", json=_chat_payload(), headers={"Origin": "https://evil.example"}
         )
@@ -119,24 +146,27 @@ class TestOriginCheck:
     def test_foreign_origin_on_calculate_is_403(self, client) -> None:
         response = client.post(
             "/calculate",
-            json={"salary": 100000},
+            json={"session_id": "0" * 32},
             headers={"Origin": "https://evil.example"},
         )
         assert response.status_code == 403
 
-    def test_allowlisted_origin_passes(self, client) -> None:
+    def test_allowlisted_origin_passes(self, authed) -> None:
         # Dev default allowlist (config.cors_origins) is localhost:3000.
-        response = client.post(
+        # Wave D: reaching the route (200) requires the authed session.
+        sid = make_session(authed)
+        response = authed.post(
             "/chat",
-            json=_chat_payload(),
+            json=_chat_payload(sid),
             headers={"Origin": "http://localhost:3000"},
         )
         assert response.status_code == 200
 
-    def test_absent_origin_passes(self, client) -> None:
-        # Same-origin / non-browser clients send no Origin — permitted THIS
-        # wave; cookie hardening arrives with the auth wave.
-        response = client.post("/chat", json=_chat_payload())
+    def test_absent_origin_passes(self, authed) -> None:
+        # Same-origin / non-browser clients send no Origin — permitted
+        # (CSRF posture: SameSite=Lax + JSON bodies + allowlisted CORS).
+        sid = make_session(authed)
+        response = authed.post("/chat", json=_chat_payload(sid))
         assert response.status_code == 200
 
     def test_get_requests_are_never_origin_checked(self, client) -> None:
@@ -194,15 +224,17 @@ class TestRateLimiting:
         limiter.reset()
         assert limiter.check("k", 1, 60.0)[0] is True
 
-    def test_integration_429_with_retry_after_header(self, client, monkeypatch) -> None:
+    def test_integration_429_with_retry_after_header(self, authed, monkeypatch) -> None:
         # Small limits via env (read at request time); the fresh app in the
         # fixture has its own limiter so no other test's traffic leaks in.
         monkeypatch.setenv("TAX_RATE_LIMIT_CHAT_PER_MIN", "1")
         monkeypatch.setenv("TAX_RATE_LIMIT_GLOBAL_PER_MIN", "1000")
         # 422 bodies still consume budget (the limiter runs before routing).
-        first = client.post("/chat", json={"message": "hi", "session": {"id": "bad!!"}})
+        # Wave D: the 422 trigger is the missing session_id (the old
+        # client-chosen "bad!!" id is not part of the contract anymore).
+        first = authed.post("/chat", json={"message": "hi"})
         assert first.status_code == 422
-        second = client.post("/chat", json={"message": "hi", "session": {"id": "bad!!"}})
+        second = authed.post("/chat", json={"message": "hi"})
         assert second.status_code == 429
         body = second.json()
         assert body["detail"] == "Rate limit exceeded"
@@ -211,15 +243,20 @@ class TestRateLimiting:
         assert second.headers.get("Retry-After") == str(body["retry_after_seconds"])
         assert_security_headers(second)
 
-    def test_integration_global_bucket_is_shared(self, client, monkeypatch) -> None:
+    def test_integration_global_bucket_is_shared(self, authed, monkeypatch) -> None:
         # One /chat then one /calculate: distinct class buckets, shared
         # global bucket — a global limit of 1 stops the second request.
         monkeypatch.setenv("TAX_RATE_LIMIT_GLOBAL_PER_MIN", "1")
         monkeypatch.setenv("TAX_RATE_LIMIT_CHAT_PER_MIN", "1000")
         monkeypatch.setenv("TAX_RATE_LIMIT_CALC_PER_MIN", "1000")
-        first = client.post("/chat", json={"message": "hi", "session": {"id": "bad!!"}})
+        # Wave D artifact: the register+login requests consumed the shared
+        # global bucket too (auth requests are globally limited), so the
+        # limiter is reset after the auth dance to isolate exactly the two
+        # data-plane requests this test is about.
+        authed.app.state.rate_limiter.reset()
+        first = authed.post("/chat", json={"message": "hi"})
         assert first.status_code == 422
-        second = client.post("/calculate", json={"salary": "abc"})
+        second = authed.post("/calculate", json={"salary": "abc"})
         assert second.status_code == 429
 
     def test_health_is_rate_limit_exempt(self, client, monkeypatch) -> None:

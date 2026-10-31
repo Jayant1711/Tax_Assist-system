@@ -300,34 +300,44 @@ def test_80g_new_regime_zero_with_advisory() -> None:
 
 # =========================================================================
 # 4. Section 80EEA — removed (engine + both endpoints + chat advisory)
+#
+#    Wave D adaptation (mechanical, documented — design §10 / ADR-013):
+#    session state is SERVER-SIDE, so the state-key rows seed the store
+#    (tests are trusted writers) and hit the SAME validator rows at the
+#    load boundary; /chat + /calculate take {message, session_id} /
+#    {session_id, tax_year?} with an AUTHED user (ADR-012). Every bound,
+#    enum and expected value below is unchanged.
 # =========================================================================
 
-@pytest.fixture(scope="module")
-def client():
-    previous_cwd = os.getcwd()
-    os.chdir(BACKEND_DIR)
-    try:
-        from fastapi.testclient import TestClient
+import json as _json
 
-        from main import app
-
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        os.chdir(previous_cwd)
+import db as _db
 
 
-def test_80eea_session_key_rejected_by_chat_422(client) -> None:
-    response = client.post(
+def _seed_state(session_id: str, state: Dict[str, Any]) -> None:
+    seeded = {"id": session_id, **state}
+    _db.execute(
+        "UPDATE app_sessions SET state = ? WHERE id = ?",
+        (_json.dumps(seeded, default=str), session_id),
+    )
+
+
+def test_80eea_session_key_rejected_by_chat_422(authed_client, session_id) -> None:
+    _seed_state(session_id, {"80eea": 150_000})
+    response = authed_client.post(
         "/chat",
-        json={"message": "hi", "session": {"id": "sid_80eea", "80eea": 150_000}},
+        json={"message": "hi", "session_id": session_id},
     )
     assert response.status_code == 422
     assert "discontinued" in response.text
 
 
-def test_80eea_rejected_by_calculate_422(client) -> None:
-    response = client.post("/calculate", json={"80eea": 150_000})
+def test_80eea_rejected_by_calculate_422(authed_client, session_id) -> None:
+    # The shrunk request model keeps the removed-section guard: extra=
+    # "ignore" must never silently swallow the discontinued key.
+    response = authed_client.post(
+        "/calculate", json={"session_id": session_id, "80eea": 150_000}
+    )
     assert response.status_code == 422
     assert "discontinued" in response.text
 
@@ -351,67 +361,70 @@ def test_80eea_chat_mention_gets_advisory_without_state_mutation() -> None:
 
 class TestNewKeyValidationRows:
     """Step D scope item 6: the new session keys carry their security-table
-    rows (enum-strict categories, bounded 80ddb_expenditure) and the
-    CalculateRequest mirrors round-trip them to the engine."""
+    rows (enum-strict categories, bounded 80ddb_expenditure) and they
+    round-trip to the engine through the server-side state."""
 
-    def test_chat_rejects_bad_80u_80dd_category(self, client) -> None:
+    def test_chat_rejects_bad_80u_80dd_category(self, authed_client, session_id) -> None:
         for bad in ("severe", "40-79", 2, True):
-            response = client.post(
+            _seed_state(session_id, {"80u_80dd_category": bad})
+            response = authed_client.post(
                 "/chat",
-                json={"message": "hi",
-                      "session": {"id": "sid_cat1", "80u_80dd_category": bad}},
+                json={"message": "hi", "session_id": session_id},
             )
             assert response.status_code == 422, bad
 
-    def test_chat_accepts_the_three_80u_80dd_categories(self, client) -> None:
+    def test_chat_accepts_the_three_80u_80dd_categories(self, authed_client, session_id) -> None:
         for cat in ("none", "40_79", "80_plus", None):
-            response = client.post(
+            _seed_state(session_id, {"80u_80dd_category": cat})
+            response = authed_client.post(
                 "/chat",
-                json={"message": "hi",
-                      "session": {"id": "sid_cat2", "80u_80dd_category": cat}},
+                json={"message": "hi", "session_id": session_id},
             )
             assert response.status_code == 200, cat
 
-    def test_chat_rejects_bad_80g_category(self, client) -> None:
+    def test_chat_rejects_bad_80g_category(self, authed_client, session_id) -> None:
         for bad in ("cat_90_no_limit", "100_no_limit", 4):
-            response = client.post(
+            _seed_state(session_id, {"80g_category": bad})
+            response = authed_client.post(
                 "/chat",
-                json={"message": "hi",
-                      "session": {"id": "sid_cat3", "80g_category": bad}},
+                json={"message": "hi", "session_id": session_id},
             )
             assert response.status_code == 422, bad
 
-    def test_chat_accepts_the_four_80g_categories(self, client) -> None:
+    def test_chat_accepts_the_four_80g_categories(self, authed_client, session_id) -> None:
         for cat in ("cat_100_no_limit", "cat_50_no_limit",
                     "cat_100_qualifying_limit", "cat_50_qualifying_limit", None):
-            response = client.post(
+            _seed_state(session_id, {"80g_category": cat})
+            response = authed_client.post(
                 "/chat",
-                json={"message": "hi",
-                      "session": {"id": "sid_cat4", "80g_category": cat}},
+                json={"message": "hi", "session_id": session_id},
             )
             assert response.status_code == 200, cat
 
-    def test_chat_80ddb_expenditure_bounded_numeric_row(self, client) -> None:
-        ok = client.post(
-            "/chat",
-            json={"message": "hi",
-                  "session": {"id": "sid_ddb1", "80ddb_expenditure": 1e11}},
+    def test_chat_80ddb_expenditure_bounded_numeric_row(self, authed_client, session_id) -> None:
+        _seed_state(session_id, {"80ddb_expenditure": 1e11})
+        ok = authed_client.post(
+            "/chat", json={"message": "hi", "session_id": session_id}
         )
         assert ok.status_code == 200  # le=1e11 inclusive
         for bad in ("abc", -1, True, 1e11 + 1):
-            response = client.post(
+            _seed_state(session_id, {"80ddb_expenditure": bad})
+            response = authed_client.post(
                 "/chat",
-                json={"message": "hi",
-                      "session": {"id": "sid_ddb2", "80ddb_expenditure": bad}},
+                json={"message": "hi", "session_id": session_id},
             )
             assert response.status_code == 422, bad
 
-    def test_calculate_mirrors_reach_the_engine(self, client) -> None:
-        # End-to-end: the aliased mirrors dump into the engine's raw keys.
-        response = client.post("/calculate", json={
+    def test_calculate_mirrors_reach_the_engine(self, authed_client, session_id) -> None:
+        # End-to-end: the state keys feed the engine's raw keys (the old
+        # aliased request payload is now the seeded server-side state).
+        _seed_state(session_id, {
             "age": 65, "80ddb_expenditure": 20_000,
             "80u_80dd_category": "40_79", "80g": 100_000,
-            "80g_category": "cat_50_qualifying_limit", "tax_year": YEAR,
+            "80g_category": "cat_50_qualifying_limit",
+        })
+        response = authed_client.post("/calculate", json={
+            "session_id": session_id, "tax_year": YEAR,
         })
         assert response.status_code == 200
         body = response.json()
@@ -426,28 +439,31 @@ class TestNewKeyValidationRows:
         assert "80DDB" in sections and "80U/80DD" in sections
         assert "80G" not in sections  # QL 0 at zero GTI — nothing booked
 
-    def test_calculate_rejects_bad_mirrors(self, client) -> None:
-        response = client.post(
-            "/calculate", json={"80u_80dd_category": "severe"},
-        )
-        assert response.status_code == 422
-        response = client.post("/calculate", json={"80g_category": "cat_9"})
-        assert response.status_code == 422
-        response = client.post("/calculate", json={"80ddb_expenditure": -5})
-        assert response.status_code == 422
+    def test_calculate_rejects_bad_mirrors(self, authed_client, session_id) -> None:
+        for bad in (
+            {"80u_80dd_category": "severe"},
+            {"80g_category": "cat_9"},
+            {"80ddb_expenditure": -5},
+        ):
+            _seed_state(session_id, bad)
+            response = authed_client.post(
+                "/calculate", json={"session_id": session_id}
+            )
+            assert response.status_code == 422, bad
 
-    def test_calculate_request_mirror_round_trip(self) -> None:
-        from main import CalculateRequest
+    def test_session_validator_accepts_the_three_mirrors(self) -> None:
+        # Was: the CalculateRequest alias round-trip (the client payload is
+        # gone — ADR-013). The surviving semantic is that the SAME values
+        # pass the state validator (the endpoint wiring is pinned by
+        # test_calculate_mirrors_reach_the_engine above); the shrunk
+        # request model is pinned in test_validation.TestCalculateRequestModel.
+        from main import _validate_session_payload
 
-        req = CalculateRequest(**{
+        _validate_session_payload({
             "80u_80dd_category": "80_plus",
             "80g_category": "cat_50_no_limit",
             "80ddb_expenditure": 5_000,
-        })
-        dumped = req.model_dump(by_alias=True)
-        assert dumped["80u_80dd_category"] == "80_plus"
-        assert dumped["80g_category"] == "cat_50_no_limit"
-        assert dumped["80ddb_expenditure"] == 5_000.0
+        })  # no raise
 
     def test_calculate_request_rejects_80eea_alias(self) -> None:
         from pydantic import ValidationError
@@ -455,7 +471,7 @@ class TestNewKeyValidationRows:
         from main import CalculateRequest
 
         with pytest.raises(ValidationError) as exc_info:
-            CalculateRequest(**{"80eea": 150_000})
+            CalculateRequest(**{"session_id": "0" * 32, "80eea": 150_000})
         assert "discontinued" in str(exc_info.value)
 
 

@@ -70,6 +70,11 @@ class SessionLab:
         }
         if turn_data.get("audit") is not None:
             entry["final_audit"] = compact_tax_summary(turn_data.get("audit"))
+        # Sprint 3 Wave D (additive): the app_sessions owner id rides on
+        # the blackbox record when the turn was authenticated (mirrors the
+        # audit stream's user_id field); omitted for anonymous demo turns.
+        if turn_data.get("user_id") is not None:
+            entry["user_id"] = turn_data.get("user_id")
         # Legacy compat: callers may pass arbitrary extras in turn_data
         # (e.g. tests); only recognized keys are persisted, and an
         # unserializable value routes to the redacted fallback line.

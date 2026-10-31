@@ -455,7 +455,10 @@ class TestMigrations:
             rows = con.execute(
                 "SELECT version, name FROM schema_migrations ORDER BY version"
             ).fetchall()
-            assert rows == [(1, "users_auth_sessions")]
+            # Wave D adaptation (mechanical — design §2): the app_sessions
+            # migration joins the registry; idempotency itself is unchanged
+            # (init twice, no duplicate rows).
+            assert rows == [(1, "users_auth_sessions"), (2, "app_sessions")]
         finally:
             con.close()
 

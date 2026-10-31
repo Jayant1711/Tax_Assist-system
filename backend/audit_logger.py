@@ -370,12 +370,19 @@ class AuditLogger:
         tax_results: Any = None,
         extracted: Any = None,
         plan: Any = None,
+        user_id: Any = None,
     ) -> None:
         """Append one minimized interaction record. Never raises to the caller.
 
         PII minimization at write: raw input/response text and the dropped
         state keys never reach disk; a correlation hash + char length does.
         An unserializable value produces the minimal redacted record.
+
+        Sprint 3 Wave D (additive): *user_id* — the app_sessions owner when
+        the turn was authenticated — is recorded when known and omitted
+        for anonymous demo turns. The field is the opaque user row id
+        (already the sanitization unit the auth events carry); nothing
+        else about the record shape changes.
         """
         safe = safe_session_id(session_id)
         store = self._store_text()
@@ -391,6 +398,8 @@ class AuditLogger:
         }
         if isinstance(plan, str):
             entry["plan"] = plan
+        if user_id is not None:
+            entry["user_id"] = user_id
 
         with _WRITE_LOCK:
             _append_entry_unlocked(self.log_file, entry, safe)

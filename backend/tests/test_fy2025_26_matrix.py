@@ -363,28 +363,32 @@ def test_prof_tax_advisory_absent_when_explicit_or_no_salary() -> None:
         assert PROF_TAX_ADVISORY not in no_salary[regime].audit_observations
 
 
-# ── 9. API surface — /calculate and /chat (client fixture mirrors
-#    tests/test_api.py: the app resolves "logs" against the process cwd) ──
+# ── 9. API surface — /calculate and /chat ────────────────────────────────
+#
+#    Wave D adaptation (mechanical, documented — design §10 / ADR-013):
+#    the state (salary + the optional tax_year pin) lives SERVER-SIDE, so
+#    the rows seed the store (tests are trusted writers); /calculate takes
+#    {session_id, tax_year?} and /chat takes {message, session_id} with an
+#    AUTHED user (ADR-012). Every pinned label and 422 below is unchanged.
 
-@pytest.fixture(scope="module")
-def client():
-    previous_cwd = os.getcwd()
-    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    try:
-        from fastapi.testclient import TestClient
+import json as _json
 
-        from main import app
-
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        os.chdir(previous_cwd)
+import db as _db
 
 
-def test_calculate_fy_2025_26_label(client) -> None:
-    response = client.post(
+def _seed_state(session_id: str, state: Dict[str, Any]) -> None:
+    seeded = {"id": session_id, **state}
+    _db.execute(
+        "UPDATE app_sessions SET state = ? WHERE id = ?",
+        (_json.dumps(seeded, default=str), session_id),
+    )
+
+
+def test_calculate_fy_2025_26_label(authed_client, session_id) -> None:
+    _seed_state(session_id, {"salary": 1_200_000})
+    response = authed_client.post(
         "/calculate",
-        json={"salary": 1_200_000, "tax_year": "fy_2025_26"},
+        json={"session_id": session_id, "tax_year": "fy_2025_26"},
     )
     assert response.status_code == 200
     body = response.json()
@@ -393,37 +397,37 @@ def test_calculate_fy_2025_26_label(client) -> None:
     assert body["fy_label"] == "FY 2025-26 (AY 2026-27)"
 
 
-def test_calculate_default_year_is_fy_2025_26(client) -> None:
+def test_calculate_default_year_is_fy_2025_26(authed_client, session_id) -> None:
     """Step A3 flips the registry default — an unpinned /calculate call now
     resolves FY 2025-26."""
-    response = client.post("/calculate", json={"salary": 500_000})
+    _seed_state(session_id, {"salary": 500_000})
+    response = authed_client.post(
+        "/calculate", json={"session_id": session_id}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["tax_year"] == "2025-26"
     assert body["fy_label"] == "FY 2025-26 (AY 2026-27)"
 
 
-def test_calculate_unknown_year_422_lists_both(client) -> None:
-    response = client.post(
+def test_calculate_unknown_year_422_lists_both(authed_client, session_id) -> None:
+    _seed_state(session_id, {"salary": 500_000})
+    response = authed_client.post(
         "/calculate",
-        json={"salary": 500_000, "tax_year": "fy_2023_24"},
+        json={"session_id": session_id, "tax_year": "fy_2023_24"},
     )
     assert response.status_code == 422
     messages = [err["msg"] for err in response.json()["errors"]]
     assert any("fy_2024_25" in msg and "fy_2025_26" in msg for msg in messages)
 
 
-def test_chat_accepts_fy_2025_26_session_year(client) -> None:
-    response = client.post(
+def test_chat_accepts_fy_2025_26_session_year(authed_client, session_id) -> None:
+    # The state tax_year pin is a state key now (validator-checked at the
+    # load boundary); the chat income gate computes with it.
+    _seed_state(session_id, {"tax_year": "fy_2025_26", "salary": 1_500_000})
+    response = authed_client.post(
         "/chat",
-        json={
-            "message": "hi",
-            "session": {
-                "id": "sid_fy2526a",
-                "tax_year": "fy_2025_26",
-                "salary": 1_500_000,
-            },
-        },
+        json={"message": "hi", "session_id": session_id},
     )
     assert response.status_code == 200
     body = response.json()
@@ -432,13 +436,14 @@ def test_chat_accepts_fy_2025_26_session_year(client) -> None:
     assert tax_report["fy_label"] == "FY 2025-26 (AY 2026-27)"
 
 
-def test_chat_rejects_unknown_year_still_422(client) -> None:
-    response = client.post(
+def test_chat_rejects_unknown_year_still_422(authed_client, session_id) -> None:
+    # Was: the client session dict carried the bad pin -> 422 at the
+    # request model. Wave D: the SAME registry row guards the state key at
+    # the load boundary.
+    _seed_state(session_id, {"tax_year": "fy_2023_24"})
+    response = authed_client.post(
         "/chat",
-        json={
-            "message": "hi",
-            "session": {"id": "sid_fy2526b", "tax_year": "fy_2023_24"},
-        },
+        json={"message": "hi", "session_id": session_id},
     )
     assert response.status_code == 422
 

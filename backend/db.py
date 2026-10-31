@@ -1,15 +1,17 @@
 # Summer internship project
-"""SQLite store for server-side sessions (Sprint 3 Wave C — design §2, ADR-013).
+"""SQLite store for server-side sessions (Sprint 3 Waves C+D — design §2, ADR-013).
 
-The persistence layer for the auth core: users + auth_sessions tables in
-a single SQLite database at ``TAX_DB_PATH`` (default ``data/taxassist.db``).
+The persistence layer for the auth core (users + auth_sessions) AND for
+the application session state (app_sessions) in a single SQLite database
+at ``TAX_DB_PATH`` (default ``data/taxassist.db``).
 
 Design rules (Sprint 3 design §2):
 
 - **WAL** journal mode, **foreign_keys ON** (the ``ON DELETE CASCADE``
-  from auth_sessions to users is real), **busy_timeout 5000 ms** — the
-  documented deployment is exactly one uvicorn worker (audit lock +
-  SQLite correctness), so WAL + short transactions are sufficient.
+  from auth_sessions/app_sessions to users is real), **busy_timeout
+  5000 ms** — the documented deployment is exactly one uvicorn worker
+  (audit lock + SQLite correctness), so WAL + short transactions are
+  sufficient.
 - **Thread-local connections**: uvicorn serves sync endpoints from a
   threadpool, so every thread gets its own connection, created lazily by
   :func:`get_connection` against the currently-initialized path and
@@ -33,23 +35,35 @@ Schema (Sprint 3 design §2, verbatim columns):
     auth_sessions(token_hash TEXT PK, user_id TEXT REFERENCES users ON DELETE CASCADE,
           created_at, last_used_at, expires_at, absolute_expires_at, revoked_at,
           ua_hash TEXT, ip_hash TEXT);
+    app_sessions(id TEXT PK, user_id TEXT REFERENCES users ON DELETE CASCADE,
+          state TEXT NOT NULL /* JSON <=100KB */, created_at, updated_at);
 
-``app_sessions`` belongs to Wave D and is intentionally NOT created here.
+Naming note: :func:`create_session` here bootstraps an APPLICATION
+session row (app_sessions, Wave D / ADR-013); ``auth.create_session``
+issues an auth token row (auth_sessions, Wave C / ADR-012). The two
+operate on different tables and are always called module-qualified.
 Timestamps are timezone-aware ISO-8601 UTC strings, so lexicographic
 comparison in SQL matches chronological order.
 """
+import json
 import logging
 import os
 import sqlite3
 import threading
+import uuid
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import config
 
 logger = logging.getLogger(__name__)
 
 BUSY_TIMEOUT_MS = 5000
+
+# Design §2: app_sessions.state is a JSON document capped at 100KB (the
+# same bound the Sprint-1+2 session validator enforces; this store-side
+# row is the last line of defense before it hits disk).
+MAX_APP_SESSION_STATE_BYTES = 100_000
 
 # Migration 1 (Wave C): users + auth_sessions exactly per the design §2
 # schema. Each migration is a tuple of statements applied atomically in
@@ -84,6 +98,24 @@ _MIGRATIONS: Tuple[Tuple[int, str, Tuple[str, ...]], ...] = (
                 revoked_at TEXT NULL,
                 ua_hash TEXT,
                 ip_hash TEXT
+            )
+            """,
+        ),
+    ),
+    # Migration 2 (Wave D): app_sessions per the design §2 schema. user_id
+    # is nullable by design — the TAX_ENABLE_ANON_DEMO posture stores
+    # anonymous demo sessions with a NULL owner (design §1).
+    (
+        2,
+        "app_sessions",
+        (
+            """
+            CREATE TABLE IF NOT EXISTS app_sessions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+                state TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
             """,
         ),
@@ -215,6 +247,124 @@ def query_all(statement: str, parameters: tuple = ()) -> List[sqlite3.Row]:
     """All rows of a SELECT."""
     cursor = get_connection().execute(statement, parameters)
     return cursor.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# app_sessions (Sprint 3 Wave D — ADR-013 server-side session state)
+#
+# The application session state lives HERE, server-side; the client only
+# ever carries the id (ADR-013 contract swap). Rows are created with a
+# uuid4-hex id (unguessable — the ownership check below plus random ids is
+# the IDOR posture from the design threat model) and a fixed bootstrap
+# state; foreign/unknown ids are indistinguishable (both None) so the
+# caller can 404 without leaking existence.
+# ---------------------------------------------------------------------------
+
+
+def _bootstrap_state(session_id: str) -> Dict[str, Any]:
+    """The empty starting state of every app session (design §2).
+
+    ``history`` is the NLP conversation log the engine appends to; it is
+    internal state and never projected back to the client.
+    """
+    return {"id": session_id, "phase": "PROFILING", "history": []}
+
+
+def create_session(user_id: Optional[str]) -> sqlite3.Row:
+    """Insert one app_sessions row; returns the inserted row.
+
+    *user_id* may be None ONLY for the anonymous-demo posture
+    (TAX_ENABLE_ANON_DEMO=1 — the caller owns that decision); the FK keeps
+    the row cascade-deleted with its owner otherwise.
+    """
+    session_id = uuid.uuid4().hex
+    now = utcnow_iso()
+    execute(
+        "INSERT INTO app_sessions (id, user_id, state, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (session_id, user_id, json.dumps(_bootstrap_state(session_id)), now, now),
+    )
+    row = query_one("SELECT * FROM app_sessions WHERE id = ?", (session_id,))
+    assert row is not None  # the INSERT above just created it
+    return row
+
+
+def get_owned(
+    session_id: str, user_id: Optional[str]
+) -> Optional[sqlite3.Row]:
+    """The app_sessions row for *session_id* iff *user_id* owns it.
+
+    Foreign AND unknown ids return None — the caller maps that to 404 and
+    the response never distinguishes the two. ``user_id=None`` (anonymous
+    demo) matches only user_id IS NULL rows; a NULL row is therefore
+    unreachable for authenticated callers (their ids never match NULL),
+    which keeps demo sessions invisible to real accounts.
+    """
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    if user_id is None:
+        return query_one(
+            "SELECT * FROM app_sessions WHERE id = ? AND user_id IS NULL",
+            (session_id,),
+        )
+    return query_one(
+        "SELECT * FROM app_sessions WHERE id = ? AND user_id = ?",
+        (session_id, user_id),
+    )
+
+
+def save_state(session_id: str, state: Dict[str, Any]) -> bool:
+    """Persist the session state JSON (capped at 100KB) and bump updated_at.
+
+    Returns True when the row was updated; False when the row vanished
+    (deleted between the caller's ownership check and this write), so the
+    caller can still 404 instead of silently dropping the turn.
+
+    Raises ValueError when the serialized state exceeds the documented
+    100KB cap — the /chat handler validates before calling, so in practice
+    this is the store-side backstop against validator regressions.
+    """
+    serialized = json.dumps(state, default=str)
+    if len(serialized) > MAX_APP_SESSION_STATE_BYTES:
+        raise ValueError("session state too large")
+    conn = get_connection()
+    with conn:
+        cursor = conn.execute(
+            "UPDATE app_sessions SET state = ?, updated_at = ? WHERE id = ?",
+            (serialized, utcnow_iso(), session_id),
+        )
+        return cursor.rowcount > 0
+
+
+def touch(session_id: str) -> bool:
+    """Bump updated_at without changing the state; False for unknown ids."""
+    conn = get_connection()
+    with conn:
+        cursor = conn.execute(
+            "UPDATE app_sessions SET updated_at = ? WHERE id = ?",
+            (utcnow_iso(), session_id),
+        )
+        return cursor.rowcount > 0
+
+
+def list_sessions(user_id: str) -> List[sqlite3.Row]:
+    """The user's app sessions, most recently active first."""
+    return query_all(
+        "SELECT id, created_at, updated_at FROM app_sessions"
+        " WHERE user_id = ? ORDER BY updated_at DESC, created_at DESC",
+        (user_id,),
+    )
+
+
+def delete_owned_session(session_id: str, user_id: str) -> bool:
+    """Delete the caller's app session (owner-checked); True iff deleted."""
+    conn = get_connection()
+    with conn:
+        cursor = conn.execute(
+            "DELETE FROM app_sessions WHERE id = ? AND user_id = ?",
+            (session_id, user_id),
+        )
+        return cursor.rowcount > 0
 
 
 # init at import: the store always exists before the first request.

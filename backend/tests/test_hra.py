@@ -393,32 +393,38 @@ def test_attention_split_resolutions() -> None:
 # =========================================================================
 # 6. API validation rows (security table: bool-strict is_metro; numeric
 #    0..1e11 non-finite-reject hra_received/rent_paid)
+#
+#    Wave D adaptation (mechanical, documented — design §10 / ADR-013):
+#    the HRA state now lives SERVER-SIDE. The rows that used to POST the
+#    state inline seed it through the store (tests are trusted writers)
+#    and hit the same validator rows at the load boundary; /calculate
+#    takes {session_id}; /chat takes {message, session_id} with an AUTHED
+#    user (ADR-012). Every bound and expected value below is unchanged.
 # =========================================================================
 
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import json as _json
+
+import db as _db
+from tests.conftest import make_session
 
 
-@pytest.fixture(scope="module")
-def client():
-    previous_cwd = os.getcwd()
-    os.chdir(BACKEND_DIR)
-    try:
-        from fastapi.testclient import TestClient
-
-        from main import app
-
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        os.chdir(previous_cwd)
+def _seed_state(session_id: str, state: Dict[str, Any]) -> None:
+    seeded = {"id": session_id, **state}
+    _db.execute(
+        "UPDATE app_sessions SET state = ? WHERE id = ?",
+        (_json.dumps(seeded, default=str), session_id),
+    )
 
 
 class TestCalculateRequestHraFields:
-    def test_gt10_via_calculate_endpoint(self, client) -> None:
-        response = client.post("/calculate", json={
+    def test_gt10_via_calculate_endpoint(self, authed_client, session_id) -> None:
+        _seed_state(session_id, {
             "salary": 1_800_000, "hra_received": 300_000, "rent_paid": 400_000,
             "is_metro": True, "professional_tax": 0,
         })
+        response = authed_client.post(
+            "/calculate", json={"session_id": session_id}
+        )
         assert response.status_code == 200
         assert response.json()["old_regime"]["total_tax"] == 282_360.0
 
@@ -436,16 +442,24 @@ class TestCalculateRequestHraFields:
         ids=["metro-yes", "metro-1", "metro-true-str", "hra-negative",
              "hra-string", "rent-over-1e11", "rent-negative"],
     )
-    def test_rejects_invalid_rows(self, client, payload) -> None:
-        response = client.post("/calculate", json=payload)
+    def test_rejects_invalid_rows(self, authed_client, session_id, payload) -> None:
+        # Was: the request-model ge/le + strict-bool rows. Wave D: the SAME
+        # _validate_session_payload rows guard the server-state boundary.
+        _seed_state(session_id, payload)
+        response = authed_client.post(
+            "/calculate", json={"session_id": session_id}
+        )
         assert response.status_code == 422, payload
 
-    def test_plain_numeric_string_hra_coerces_like_other_fields(self, client) -> None:
-        # Documented pydantic lax-mode behavior for /calculate numeric
-        # fields (mirrors capital_gains amount coercion in test_validation):
-        # "300000" -> 300000.0. (String rejection is the SESSION rows'
-        # job — covered in TestChatSessionHraRows.)
-        response = client.post("/calculate", json={"hra_received": "300000"})
+    def test_numeric_hra_rows_compute_like_other_fields(self, authed_client, session_id) -> None:
+        # Was: pydantic lax-mode coercion "300000" -> 300000.0 on the client
+        # payload (documented). Wave D: the payload is gone — string rows
+        # are rejected at the load boundary (row above) and the numeric
+        # value computes identically, which is what this row pins.
+        _seed_state(session_id, {"hra_received": 300000})
+        response = authed_client.post(
+            "/calculate", json={"session_id": session_id}
+        )
         assert response.status_code == 200
 
     @pytest.mark.parametrize(
@@ -461,67 +475,77 @@ class TestCalculateRequestHraFields:
         ids=["metro-true", "metro-false", "metro-null", "hra-zero",
              "rent-at-cap", "both-valid"],
     )
-    def test_accepts_valid_rows(self, client, payload) -> None:
-        response = client.post("/calculate", json=payload)
+    def test_accepts_valid_rows(self, authed_client, session_id, payload) -> None:
+        _seed_state(session_id, payload)
+        response = authed_client.post(
+            "/calculate", json={"session_id": session_id}
+        )
         assert response.status_code == 200, payload
 
-    def test_rejects_infinite_hra_received(self, client) -> None:
-        # Raw body: 1e309 parses to inf server-side (bounds reject it).
-        response = client.post(
-            "/calculate",
-            content='{"salary": 1800000, "hra_received": 1e309}',
-            headers={"Content-Type": "application/json"},
+    def test_rejects_infinite_hra_received(self, authed_client, session_id) -> None:
+        # Was: raw body 1e309 parsed to inf server-side (bounds reject it).
+        # Wave D: the same finite row rejects the seeded inf at the load
+        # boundary (json round-trips Infinity).
+        _seed_state(session_id, {"salary": 1800000, "hra_received": 1e309})
+        response = authed_client.post(
+            "/calculate", json={"session_id": session_id}
         )
         assert response.status_code == 422
 
 
 class TestChatSessionHraRows:
-    def _chat(self, client, session: Dict[str, Any]):
-        return client.post("/chat", json={"message": "hi", "session": session})
+    def _chat(self, authed_client, session_id: str, state: Dict[str, Any]):
+        _seed_state(session_id, state)
+        return authed_client.post(
+            "/chat", json={"message": "hi", "session_id": session_id}
+        )
 
     @pytest.mark.parametrize(
         "session",
         [
-            {"id": "sid_hra_val1", "is_metro": "yes"},
-            {"id": "sid_hra_val1", "is_metro": 1},
-            {"id": "sid_hra_val1", "hra_received": -5},
-            {"id": "sid_hra_val1", "rent_paid": 1e12},
-            {"id": "sid_hra_val1", "hra_received": "abc"},
+            {"is_metro": "yes"},
+            {"is_metro": 1},
+            {"hra_received": -5},
+            {"rent_paid": 1e12},
+            {"hra_received": "abc"},
         ],
         ids=["metro-yes", "metro-1", "hra-negative", "rent-over-1e11",
              "hra-string"],
     )
-    def test_rejects_invalid_session_rows(self, client, session) -> None:
-        assert self._chat(client, session).status_code == 422, session
+    def test_rejects_invalid_session_rows(self, authed_client, session_id, session) -> None:
+        assert self._chat(authed_client, session_id, session).status_code == 422, session
 
     @pytest.mark.parametrize(
         "session",
         [
-            {"id": "sid_hra_ok1", "is_metro": True},
-            {"id": "sid_hra_ok1", "is_metro": False},
-            {"id": "sid_hra_ok1", "is_metro": None},
-            {"id": "sid_hra_ok1", "hra_received": 0},
-            {"id": "sid_hra_ok1", "rent_paid": 1e11},
+            {"is_metro": True},
+            {"is_metro": False},
+            {"is_metro": None},
+            {"hra_received": 0},
+            {"rent_paid": 1e11},
         ],
         ids=["metro-true", "metro-false", "metro-null", "hra-zero",
              "rent-at-cap"],
     )
-    def test_accepts_valid_session_rows(self, client, session) -> None:
-        assert self._chat(client, session).status_code == 200, session
+    def test_accepts_valid_session_rows(self, authed_client, session_id, session) -> None:
+        assert self._chat(authed_client, session_id, session).status_code == 200, session
 
-    def test_legacy_hra_key_keeps_numeric_row(self, client) -> None:
+    def test_legacy_hra_key_keeps_numeric_row(self, authed_client, session_id) -> None:
         assert self._chat(
-            client, {"id": "sid_hra_ok1", "hra": 300_000}
+            authed_client, session_id, {"hra": 300_000}
         ).status_code == 200
 
-    def test_metro_advisory_reaches_chat_response(self, client) -> None:
+    def test_metro_advisory_reaches_chat_response(self, authed_client, session_id) -> None:
         """The response must state the non-metro assumption (the engine's
-        audit observation rides inside the chat tax_report)."""
-        response = client.post(
+        audit observation rides inside the chat tax_report). Wave D: the
+        salary is seeded server-side and the response session is the
+        read-only projection (the HRA keys the frontend reads survive)."""
+        _seed_state(session_id, {"salary": 1_800_000})
+        response = authed_client.post(
             "/chat",
             json={
                 "message": "I get 3l hra and pay 4l rent yearly",
-                "session": {"id": "sid_hra_adv1", "salary": 1_800_000},
+                "session_id": session_id,
             },
         )
         assert response.status_code == 200
