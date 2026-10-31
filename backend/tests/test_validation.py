@@ -106,9 +106,13 @@ class TestCalculateEndpointValidation:
         # Numeric parity: the endpoint must compute exactly what the engine
         # computes on the raw payload (guards the engine-default handling,
         # e.g. the internal professional_tax default for salaried users).
+        # Sprint 2 (ADR-008): the reference is pinned to the pre-Sprint-2
+        # default tax year so the parity check survives the Step A3 flip.
         from main import engine
 
-        reference = engine.calculate_tax_advanced(dict(payload))
+        reference = engine.calculate_tax_advanced(
+            dict(payload), tax_year="fy_2024_25"
+        )
         assert body["old_regime"]["total_tax"] == reference["old_regime"].total_tax
         assert body["new_regime"]["total_tax"] == reference["new_regime"].total_tax
         assert body["recommendation"] == reference["recommendation"]
@@ -373,6 +377,56 @@ class TestCalculateRequestModel:
         assert CalculateRequest(id="sid_ok").id == "sid_ok"
         with pytest.raises(ValidationError):
             CalculateRequest(id="../evil")
+
+
+class TestTaxYearValidation:
+    """Sprint 2 (ADR-008): the optional tax_year pin must reject unknown
+    registry keys with a clean 422 (no silent fallback) and round-trip a
+    valid key into the response's rule-set identity fields."""
+
+    def test_calculate_rejects_unknown_tax_year(self, client) -> None:
+        response = client.post(
+            "/calculate",
+            json={"salary": 500000, "tax_year": "fy_1999_00"},
+        )
+        assert response.status_code == 422
+        body = response.json()
+        assert any("fy_2024_25" in err["msg"] for err in body["errors"])
+
+    def test_calculate_accepts_registered_tax_year(self, client) -> None:
+        response = client.post(
+            "/calculate",
+            json={"salary": 500000, "tax_year": "fy_2024_25"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["tax_year"] == "2024-25"
+        assert body["fy_label"] == "FY 2024-25 (AY 2025-26)"
+
+    def test_calculate_without_tax_year_keeps_default(self, client) -> None:
+        response = client.post("/calculate", json={"salary": 500000})
+        assert response.status_code == 200
+        assert response.json()["tax_year"] == "2024-25"
+
+    def test_chat_rejects_unknown_tax_year_in_session(self, client) -> None:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "hi",
+                "session": {"id": "sid_ok", "tax_year": "fy_1999_00"},
+            },
+        )
+        assert response.status_code == 422
+
+    def test_chat_accepts_null_tax_year_in_session(self, client) -> None:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "hi",
+                "session": {"id": "sid_ok", "tax_year": None},
+            },
+        )
+        assert response.status_code == 200
 
 
 class TestHistoryEndpointGate:

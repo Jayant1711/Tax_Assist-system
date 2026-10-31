@@ -8,15 +8,27 @@ Fixes:
 - Applied statutory 30% standard deduction on rental income (Sec 24a) uniformly
 - Added Section 87A marginal relief at the ₹7 Lakh boundary in New Regime
 - Enhanced itemized Computation Statement for CA-level reporting
+
+Sprint 2 (ADR-008): all FY 2024-25 constants now load from the versioned
+registry in the tax_rules package; calculate_tax_advanced accepts a tax_year
+key (default "fy_2024_25") and results report top-level tax_year /
+assessment_year / fy_label. Behavior is byte-identical to the pre-registry
+engine for FY 2024-25 — proven by tests/fixtures/parity_fy2425.json
+(generated with tests/tools/generate_parity_snapshot.py).
 """
 
+import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional, Tuple
 try:
     import numpy as np
 except ImportError:
     np = None
+import tax_rules
+from tax_rules.schema import SlabBand
 from ai_models import ANFIS
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Explanation:
@@ -48,7 +60,15 @@ class TaxEngine:
     def __init__(self):
         self.anfis = ANFIS()
 
-    def calculate_tax_advanced(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_tax_advanced(self, data: Dict[str, Any], tax_year: Optional[str] = None) -> Dict[str, Any]:
+        # ADR-008: resolve the versioned rule set. None selects the registry
+        # default; an unknown key raises UnknownTaxYearError — never a
+        # silent fallback.
+        rules = tax_rules.get_rules(
+            tax_year if tax_year is not None else tax_rules.DEFAULT_TAX_YEAR
+        )
+        logger.debug("TaxEngine computing with rules %s", rules.label)
+
         # Basic Inputs
         salary       = float(data.get("salary", 0) or 0)
         business     = float(data.get("business", 0) or 0)
@@ -63,31 +83,32 @@ class TaxEngine:
         is_senior = age >= 60
         is_vsr    = age >= 80
 
-        # Deductions & Caps (FY 2024-25)
-        sec_80d_self_limit = 50000 if is_senior else 25000
-        sec_80d_parents_limit = 50000
+        # Deductions & Caps (FY 2024-25, from the registry rules)
+        caps = rules.deduction_caps
+        sec_80d_self_limit = caps.sec_80d_self_senior if is_senior else caps.sec_80d_self
+        sec_80d_parents_limit = caps.sec_80d_parents
 
         ded = {
-            "80c":   min(float(data.get("80c", 0) or 0), 150000),
+            "80c":   min(float(data.get("80c", 0) or 0), caps.sec_80c),
             "80d":   min(float(data.get("80d", 0) or 0), sec_80d_self_limit),
             "80d_p": min(float(data.get("80d_parents", 0) or 0), sec_80d_parents_limit),
             "80e":   float(data.get("80e", 0) or 0), # No upper limit on interest
             "80g":   float(data.get("80g", 0) or 0),
             "hra":   float(data.get("hra", 0) or 0),
-            "24b":   min(float(data.get("24b", 0) or 0), 200000), # Max 2L for self-occupied
-            "80eea": min(float(data.get("80eea", 0) or 0), 150000),
-            "nps":   min(float(data.get("nps", 0) or 0), 50000), # 80CCD(1B) extra 50k
-            "80tta": min(float(data.get("80tta", 0) or 0), 10000) if not is_senior else 0,
-            "80ttb": min(float(data.get("80ttb", 0) or 0), 50000) if is_senior else 0,
+            "24b":   min(float(data.get("24b", 0) or 0), caps.sec_24b), # Max 2L for self-occupied
+            "80eea": min(float(data.get("80eea", 0) or 0), caps.sec_80eea),
+            "nps":   min(float(data.get("nps", 0) or 0), caps.sec_80ccd_1b), # 80CCD(1B) extra 50k
+            "80tta": min(float(data.get("80tta", 0) or 0), caps.sec_80tta) if not is_senior else 0,
+            "80ttb": min(float(data.get("80ttb", 0) or 0), caps.sec_80ttb) if is_senior else 0,
             "80gg":  float(data.get("80gg", 0) or 0),
             "80u":   float(data.get("80u_80dd", 0) or 0),
             "80ddb": float(data.get("80ddb", 0) or 0),
         }
 
-        prof_tax = float(data.get("professional_tax", 2500 if salary > 0 else 0) or 0)
+        prof_tax = float(data.get("professional_tax", rules.professional_tax_default if salary > 0 else 0) or 0)
 
-        old_res = self._calc_old(salary, business, agri, rental_gross, other_income, cg_data, ded, prof_tax, is_senior, is_vsr)
-        new_res = self._calc_new(salary, business, agri, rental_gross, other_income, cg_data, is_senior)
+        old_res = self._calc_old(salary, business, agri, rental_gross, other_income, cg_data, ded, prof_tax, is_senior, is_vsr, rules)
+        new_res = self._calc_new(salary, business, agri, rental_gross, other_income, cg_data, is_senior, rules)
 
         # Optimizer Logic
         rec     = "New Regime" if new_res.total_tax <= old_res.total_tax else "Old Regime"
@@ -131,7 +152,7 @@ class TaxEngine:
             + (round(rental_gross * 0.7, 2) if rental_gross > 0 else 0)
             + other_income
         )
-        if agri > 0 and non_agri_income > 250000:
+        if agri > 0 and non_agri_income > rules.agri.integration_threshold_non_agri:
             observations.append(
                 "Agricultural income is exempt under Section 10(1). Partial integration "
                 "with non-agricultural income may apply — verify with a tax professional."
@@ -162,6 +183,9 @@ class TaxEngine:
             pass
 
         return {
+            "tax_year": rules.tax_year,
+            "assessment_year": rules.assessment_year,
+            "fy_label": rules.label,
             "old_regime": old_res,
             "new_regime": new_res,
             "recommendation": rec,
@@ -169,10 +193,10 @@ class TaxEngine:
             "efficiency_score": round(eff_score, 1),
         }
 
-    def _calc_old(self, salary, business, agri, rental, other, cg_data, ded, prof_tax, is_senior, is_vsr) -> TaxResult:
+    def _calc_old(self, salary, business, agri, rental, other, cg_data, ded, prof_tax, is_senior, is_vsr, rules) -> TaxResult:
         res = TaxResult()
-        std_ded = 50000 if salary > 0 else 0
-        hra_ex  = self._calc_hra(salary, ded["hra"])
+        std_ded = rules.standard_deduction["old"] if salary > 0 else 0
+        hra_ex  = self._calc_hra(salary, ded["hra"], rules)
 
         # Net rental income after 30% statutory deduction under Section 24(a)
         net_rental = round(rental * 0.7, 2) if rental > 0 else 0
@@ -185,7 +209,7 @@ class TaxEngine:
         res.gross_total_income = round(gross, 2)
 
         # Calculate 80GG if applicable (rent paid without HRA)
-        ded_80gg = self._calc_80gg(ded["80gg"], gross, hra_ex)
+        ded_80gg = self._calc_80gg(ded["80gg"], gross, hra_ex, rules)
 
         # Full Chapter VI-A + Section 24(b) deductions
         total_ded = (
@@ -206,17 +230,18 @@ class TaxEngine:
         res.total_deductions = round(total_ded, 2)
 
         taxable = max(0.0, gross - total_ded)
-        cg_tax, cg_inc = self._calc_cg(cg_data, regime="old")
+        cg_tax, cg_inc = self._calc_cg(cg_data, "old", rules)
 
-        tax_norm, slabs = self._slab_old(taxable, is_senior, is_vsr)
+        tax_norm, slabs = self._slab_old(taxable, is_senior, is_vsr, rules)
         res.slabs_breakdown = slabs
 
         # Section 87A rebate (Up to 12,500 if taxable income <= 5L)
-        rebate = min(tax_norm, 12500) if taxable <= 500000 else 0
+        rebate_rule = rules.rebate["old"]
+        rebate = min(tax_norm, rebate_rule.max_amount) if taxable <= rebate_rule.income_cap else 0
         tax_norm = max(0.0, tax_norm - rebate)
 
-        surcharge = self._apply_marginal_relief(tax_norm, cg_tax, taxable + cg_inc, "old")
-        total_tax = (tax_norm + cg_tax + surcharge) * 1.04
+        surcharge = self._apply_marginal_relief(tax_norm, cg_tax, taxable + cg_inc, "old", rules)
+        total_tax = (tax_norm + cg_tax + surcharge) * (1 + rules.cess_rate)
 
         res.total_tax = round(total_tax, 2)
         res.taxable_income = round(taxable + cg_inc, 2)
@@ -263,11 +288,11 @@ class TaxEngine:
 
         return res
 
-    def _calc_new(self, salary, business, agri, rental, other, cg_data, is_senior) -> TaxResult:
+    def _calc_new(self, salary, business, agri, rental, other, cg_data, is_senior, rules) -> TaxResult:
         res = TaxResult()
         # Budget 2024: Standard deduction increased to ₹75,000 for New Tax Regime
-        std_ded = 75000 if salary > 0 else 0
-        cg_tax, cg_inc = self._calc_cg(cg_data, regime="new")
+        std_ded = rules.standard_deduction["new"] if salary > 0 else 0
+        cg_tax, cg_inc = self._calc_cg(cg_data, "new", rules)
 
         net_rental = round(rental * 0.7, 2) if rental > 0 else 0
         gross = salary + business + net_rental + other
@@ -276,22 +301,25 @@ class TaxEngine:
         taxable = max(0.0, gross - std_ded)
         res.total_deductions = round(std_ded, 2)
 
-        tax, slabs = self._slab_new(taxable)
+        tax, slabs = self._slab_new(taxable, rules)
         res.slabs_breakdown = slabs
 
         # Section 87A Rebate in New Regime:
         # Full rebate if taxable income <= 7,00,000 (Tax = 0)
         # Marginal relief if taxable income is slightly above 7,00,000:
         # The tax payable cannot exceed (Taxable Income - 7,00,000)
-        if taxable <= 700000:
+        # (Crude band method preserved as-is in Step A1 — caps read from the
+        # registry rebate rule; the statutory method lands in Step A2/E.)
+        rebate_rule = rules.rebate["new"]
+        if taxable <= rebate_rule.income_cap:
             tax = 0.0
-        elif taxable <= 727777:
+        elif rebate_rule.band_upper_bound is not None and taxable <= rebate_rule.band_upper_bound:
             # Marginal relief under Sec 87A: tax is capped at the excess income over 7L
-            excess_over_7l = taxable - 700000
+            excess_over_7l = taxable - rebate_rule.income_cap
             tax = min(tax, excess_over_7l)
 
-        surcharge = self._apply_marginal_relief(tax, cg_tax, taxable + cg_inc, "new")
-        res.total_tax = round((tax + cg_tax + surcharge) * 1.04, 2)
+        surcharge = self._apply_marginal_relief(tax, cg_tax, taxable + cg_inc, "new", rules)
+        res.total_tax = round((tax + cg_tax + surcharge) * (1 + rules.cess_rate), 2)
         res.taxable_income = round(taxable + cg_inc, 2)
 
         # New Regime Breakdown
@@ -312,89 +340,144 @@ class TaxEngine:
 
         return res
 
-    def _apply_marginal_relief(self, tax, cg_tax, income, regime) -> float:
+    def _apply_marginal_relief(self, tax, cg_tax, income, regime, rules) -> float:
         total_tax_base = tax + cg_tax
-        if income <= 5000000:
+        surcharge_rule = rules.surcharge
+        first_threshold = surcharge_rule.bands[0][0]
+        if income <= first_threshold:
             return 0.0
 
-        rate = 0.10 if income <= 10000000 else 0.15 if income <= 20000000 else 0.25 if (regime == "new" or income <= 50000000) else 0.37
-        surcharge = total_tax_base * rate
+        # Band walk: the applicable rate is the first band (from the top)
+        # whose threshold is strictly below the income. income >
+        # first_threshold guarantees a band matches.
+        rate = None
+        for threshold, band_rate in reversed(surcharge_rule.bands):
+            if income > threshold:
+                rate = band_rate
+                break
+        # Section 115BAC(6): the new regime caps the effective surcharge rate.
+        cap = surcharge_rule.new_regime_cap if regime == "new" else surcharge_rule.old_regime_cap
+        effective_rate = min(rate, cap)  # type: ignore[type-var]  (rate is not None here)
+        surcharge = total_tax_base * effective_rate
 
         # Marginal Relief Check at 50 Lakhs surcharge threshold
-        return min(surcharge, max(0.0, income - 5000000))
+        return min(surcharge, max(0.0, income - first_threshold))
 
-    def _calc_cg(self, cg_data: list, regime: str):
+    def _calc_cg(self, cg_data: list, regime: str, rules) -> Tuple[float, float]:
         tax, inc = 0.0, 0.0
+        cg_rules = rules.cg
         for cg in cg_data:
             a = float(cg.get("amount", 0) or 0)
             inc += a
             t = cg.get("type", "")
             if t == "equity_ltcg":
                 # Budget 2024: LTCG on equity shares/equity mutual funds increased from 10% to 12.5% (exemption raised to ₹1.25L)
-                tax += max(0.0, a - 125000) * 0.125
+                tax += max(0.0, a - cg_rules.ltcg_112a_exemption) * cg_rules.ltcg_112a_rate
             elif t == "equity_stcg":
                 # Budget 2024: STCG on equity shares increased to 20%
-                tax += a * 0.20
+                tax += a * cg_rules.stcg_111a_rate
             elif t == "property_cg":
-                tax += a * (0.125 if regime == "new" else 0.20)
+                tax += a * cg_rules.property_rate_by_regime[regime]
         return tax, inc
 
-    def _calc_80gg(self, ded_80gg, adj_total, hra_claimed):
+    def _calc_80gg(self, ded_80gg, adj_total, hra_claimed, rules) -> float:
         if hra_claimed > 0 or ded_80gg <= 0:
             return 0.0
+        caps = rules.deduction_caps
         # Least of: ₹5,000/month (₹60,000/yr), 25% of total income, rent paid minus 10% of total income
-        return max(0.0, min(60000.0, 0.25 * adj_total, ded_80gg - 0.1 * adj_total))
+        return max(0.0, min(caps.sec_80gg_annual_max, caps.sec_80gg_income_pct * adj_total, ded_80gg - caps.sec_80gg_rent_excess_pct * adj_total))
 
-    def _calc_hra(self, salary, hra_claimed):
+    def _calc_hra(self, salary, hra_claimed, rules) -> float:
         if salary <= 0 or hra_claimed <= 0:
             return 0.0
         # Baseline non-metro: 40% of salary
-        baseline = salary * 0.4
-        return max(0.0, min(baseline, hra_claimed, hra_claimed - 0.1 * salary))
+        baseline = salary * rules.hra.non_metro_pct
+        return max(0.0, min(baseline, hra_claimed, hra_claimed - rules.hra.salary_pct * salary))
 
-    def _slab_old(self, v, senior, vsr):
-        slabs = []
+    def _slab_old(self, v, senior, vsr, rules) -> Tuple[float, List[Dict[str, Any]]]:
+        exemption_by_age = rules.old_regime_exemption_by_age
+        ex = exemption_by_age[80] if vsr else exemption_by_age[60] if senior else exemption_by_age[0]
+        return self._slab_from_bands(v, rules.old_regime_slabs, ex)
+
+    def _slab_new(self, v, rules) -> Tuple[float, List[Dict[str, Any]]]:
+        # FY 2024-25 Budget updated slabs: the registry bands carry the nil
+        # band as the leading 0% slice and the walk floor is 0.
+        return self._slab_from_bands(v, rules.new_regime_slabs, 0)
+
+    def _slab_from_bands(self, values, bands: Tuple[SlabBand, ...], floor) -> Tuple[float, List[Dict[str, Any]]]:
+        """Unified slab walk (consolidates the legacy _slab_old/_slab_new
+        loops) producing the IDENTICAL slabs_breakdown dicts, including the
+        legacy "range" string formats.
+
+        bands are (upper_bound, rate) slices: band i taxes the slice from
+        the previous band's upper_bound (or `floor` for the first band) up
+        to its own upper_bound at `rate`; upper_bound None is the top band.
+        A leading 0%-rate band is the nil band (new regime, floor 0). When
+        the list has none (old regime), the region [0, floor] — floor being
+        the age-dependent basic exemption — is emitted as the nil band.
+
+        Label formats preserved exactly for FY 2024-25: new regime
+        "0 - 3L", "3L - 7L", ..., "Above 15L"; old regime "0 - 2.5L",
+        "2.5L - 5L", "5L - 10L", "Above 10L". Legacy interpolates the
+        exemption `ex` with f"{ex/100000:.1f}L" into exactly two edges —
+        the FIRST positive band's lower edge and the nil band's upper edge
+        — while every other bound (including a deeper band whose lower edge
+        numerically equals a 500000 very-senior exemption, legacy-hardcoded
+        "5L - 10L") uses the compact f"{v/100000:g}L" lakh form.
+        """
+        slabs: List[Dict[str, Any]] = []
         t = 0.0
-        rem = v
-        ex = 500000 if vsr else 300000 if senior else 250000
+        rem = values
+        has_nil_band = bool(bands) and bands[0].rate == 0.0
 
-        if rem > 1000000:
-            tax = (rem - 1000000) * 0.3
-            t += tax
-            slabs.append({"range": "Above 10L", "rate": "30%", "income": rem - 1000000, "tax": tax})
-            rem = 1000000
-        if rem > 500000:
-            tax = (rem - 500000) * 0.2
-            t += tax
-            slabs.append({"range": "5L - 10L", "rate": "20%", "income": rem - 500000, "tax": tax})
-            rem = 500000
-        if rem > ex:
-            tax = (rem - ex) * 0.05
-            t += tax
-            slabs.append({"range": f"{ex/100000:.1f}L - 5L", "rate": "5%", "income": rem - ex, "tax": tax})
-            rem = ex
-        slabs.append({"range": f"0 - {ex/100000:.1f}L", "rate": "0%", "income": rem, "tax": 0.0})
+        # Index of the first positive-rate band; its lower edge is the
+        # exemption floor and keeps the one-decimal lakh formatting.
+        first_positive = next(
+            (i for i, band in enumerate(bands) if band.rate > 0.0), None
+        )
 
-        return t, slabs
+        def fmt_bound(amount: float, exemption_edge: bool = False) -> str:
+            if exemption_edge:
+                return f"{amount / 100000:.1f}L"
+            return f"{amount / 100000:g}L"
 
-    def _slab_new(self, v):
-        slabs = []
-        t = 0.0
-        rem = v
-        # FY 2024-25 Budget updated slabs:
-        levels = [
-            (1500000, 0.30, "Above 15L"),
-            (1200000, 0.20, "12L - 15L"),
-            (1000000, 0.15, "10L - 12L"),
-            (700000,  0.10, "7L - 10L"),
-            (300000,  0.05, "3L - 7L"),
-        ]
+        # Lower edge of each slice: the previous band's upper bound, or the
+        # floor for the first band.
+        lower_edges: List[float] = []
+        prev = floor
+        for band in bands:
+            lower_edges.append(prev)
+            prev = float("inf") if band.upper_bound is None else band.upper_bound
 
-        for limit, rate, label in levels:
-            if rem > limit:
-                tax = (rem - limit) * rate
+        for index in range(len(bands) - 1, -1, -1):
+            band = bands[index]
+            lower = lower_edges[index]
+            upper = band.upper_bound
+            if band.rate == 0.0:
+                # Nil band: always emitted (legacy behavior), "0 - X" label.
+                # Its upper edge carries the exemption formatting when the
+                # nil region is the exemption floor (old regime).
+                slabs.append({
+                    "range": f"0 - {fmt_bound(upper, exemption_edge=floor > 0)}",
+                    "rate": "0%",
+                    "income": rem,
+                    "tax": 0.0,
+                })
+                rem = 0.0
+                continue
+            if rem > lower:
+                tax = (rem - lower) * band.rate
                 t += tax
-                slabs.append({"range": label, "rate": f"{int(rate*100)}%", "income": rem - limit, "tax": tax})
-                rem = limit
-        slabs.append({"range": "0 - 3L", "rate": "0%", "income": rem, "tax": 0.0})
+                is_exemption_edge = index == first_positive and lower == floor
+                if upper is None:
+                    label = f"Above {fmt_bound(lower, is_exemption_edge)}"
+                else:
+                    label = f"{fmt_bound(lower, is_exemption_edge)} - {fmt_bound(upper)}"
+                slabs.append({"range": label, "rate": f"{int(band.rate * 100)}%", "income": rem - lower, "tax": tax})
+                rem = lower
+
+        if not has_nil_band:
+            # Old regime: the region below the exemption floor is untaxed.
+            slabs.append({"range": f"0 - {fmt_bound(floor, exemption_edge=floor > 0)}", "rate": "0%", "income": rem, "tax": 0.0})
+
         return t, slabs

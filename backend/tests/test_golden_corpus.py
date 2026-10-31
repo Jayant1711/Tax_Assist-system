@@ -174,9 +174,13 @@ def test_agricultural_income_exempt_in_old_regime() -> None:
 
     Verified 2026-10-31 post-fix: gross_total_income == 3,000,000.0 and
     total_tax == 724,620.0 with agriculture added.
+
+    Sprint 2 (ADR-008): tax_year pinned to the pre-Sprint-2 default
+    ("fy_2024_25") so the exact-rupee expectations survive the Step A3
+    default flip.
     """
     result = engine.calculate_tax_advanced(
-        {"salary": 3_000_000, "agriculture": 500_000}
+        {"salary": 3_000_000, "agriculture": 500_000}, tax_year="fy_2024_25"
     )
     old = result["old_regime"]
     assert old.gross_total_income == 3_000_000

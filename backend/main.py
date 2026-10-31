@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Dict, Any, List, Optional
 from tax_engine import TaxEngine
+from tax_rules import REGISTRY
 from nlp_engine import NLPEngine
 from audit_logger import AuditLogger
 from session_lab import SessionLab
@@ -124,6 +125,15 @@ def _validate_session_payload(session: Dict[str, Any]) -> None:
         if isinstance(age, bool) or not isinstance(age, int) or not (0 <= age <= 120):
             raise ValueError("session.age must be an integer between 0 and 120")
 
+    if "tax_year" in session:
+        # ADR-008: the session may pin the tax year for the real-time
+        # computation; it must be None or a registered registry key.
+        tax_year = session["tax_year"]
+        if tax_year is not None and (not isinstance(tax_year, str) or tax_year not in REGISTRY):
+            raise ValueError(
+                f"session.tax_year must be one of: {', '.join(REGISTRY)}"
+            )
+
 
 class ChatRequest(BaseModel):
     message: str = Field(max_length=4000)
@@ -158,7 +168,11 @@ async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks)
     )
     if has_income:
         try:
-            tax_result = engine.calculate_tax_advanced(result["session"])
+            # ADR-008: the session may pin the tax year (validated above);
+            # None falls back to the registry default.
+            tax_result = engine.calculate_tax_advanced(
+                result["session"], result["session"].get("tax_year")
+            )
         except Exception as e:
             print(f"Calculation Error: {e}")
 
@@ -264,11 +278,26 @@ class CalculateRequest(BaseModel):
     pays_rent: Optional[bool] = None
     id: Optional[str] = None
 
+    # ADR-008: optional tax-year pin; None keeps the registry default
+    # (fy_2024_25). Step A3 adds the fy_2025_26 key to the registry.
+    tax_year: Optional[str] = Field(None, max_length=32)
+
     @field_validator("id")
     @classmethod
     def _validate_id(cls, value: Optional[str]) -> Optional[str]:
         if value is not None and not is_valid_session_id(value):
             raise ValueError("id must match [A-Za-z0-9_-]{4,64}")
+        return value
+
+    @field_validator("tax_year")
+    @classmethod
+    def _validate_tax_year(cls, value: Optional[str]) -> Optional[str]:
+        # None or a registered registry key, else ValueError -> 422 listing
+        # the supported keys (single source of truth: tax_rules.REGISTRY).
+        if value is not None and value not in REGISTRY:
+            raise ValueError(
+                f"tax_year must be one of: {', '.join(REGISTRY)}"
+            )
         return value
 
 
@@ -281,7 +310,9 @@ async def calculate_endpoint(req: CalculateRequest):
     # the engine's internal professional_tax default of 2500 for salaries);
     # injecting model defaults instead would silently change results.
     results = engine.calculate_tax_advanced(
-        req.model_dump(by_alias=True, exclude_unset=True)
+        req.model_dump(by_alias=True, exclude_unset=True),
+        # ADR-008: honor the client's tax-year pin (None -> registry default).
+        tax_year=req.tax_year,
     )
     return clean_json(results)
 

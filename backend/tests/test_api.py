@@ -54,3 +54,7 @@ def test_calculate_happy_path(client) -> None:
     assert "old_regime" in body
     assert "new_regime" in body
     assert "recommendation" in body
+    # Sprint 2 (ADR-008): results report the resolved rule-set identity.
+    assert body["tax_year"] == "2024-25"
+    assert body["assessment_year"] == "2025-26"
+    assert body["fy_label"] == "FY 2024-25 (AY 2025-26)"
