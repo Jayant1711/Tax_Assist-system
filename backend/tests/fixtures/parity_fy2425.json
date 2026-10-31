@@ -57,6 +57,10 @@
       ]
     },
     "note": "Outputs include the current crude 87A/surcharge relief-zone results; Step A2 updates those cells deliberately with citations. Hand edits to this file are rejected.",
+    "s2c_update": {
+      "commit": "91c7ea0",
+      "description": "Step C (tax-expert rulings R-e/R-f, 2026-10-31): only the annotated cells were re-pinned \u2014 the Section 112A \u20b91,25,000 exemption is now deducted ONCE across the AGGREGATE of all equity_ltcg entries (12.5% on the excess) instead of per entry. STCG/property cells and every CG-income-derived pin are byte-identical to the A2 snapshot; verify with git diff."
+    },
     "scenario_count": 300,
     "seed": 24252025
   },
@@ -787,7 +791,7 @@
           ],
           "taxable_income": 1070000.0,
           "total_deductions": 0,
-          "total_tax": 38740.0
+          "total_tax": 54990.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -802,7 +806,7 @@
           ],
           "taxable_income": 870000.0,
           "total_deductions": 200000.0,
-          "total_tax": 19500.0
+          "total_tax": 35750.0
         },
         "recommendation": "Old Regime",
         "savings": 19240.0
@@ -825,7 +829,7 @@
         "other_income": 250000,
         "rental": 600000
       },
-      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT)"
+      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -1977,7 +1981,7 @@
           ],
           "taxable_income": 1800000.0,
           "total_deductions": 0,
-          "total_tax": 144300.0
+          "total_tax": 160550.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -2006,7 +2010,7 @@
           ],
           "taxable_income": 1575000.0,
           "total_deductions": 225000.0,
-          "total_tax": 191100.0
+          "total_tax": 207350.0
         },
         "recommendation": "New Regime",
         "savings": 46800.0
@@ -2029,7 +2033,8 @@
         ],
         "nps": 50000,
         "other_income": 400000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -2276,7 +2281,7 @@
           ],
           "taxable_income": 1800000.0,
           "total_deductions": 0,
-          "total_tax": 144300.0
+          "total_tax": 160550.0
         },
         "old_regime": {
           "explanation_sections": [],
@@ -2297,7 +2302,7 @@
           ],
           "taxable_income": 1800000.0,
           "total_deductions": 0.0,
-          "total_tax": 248300.0
+          "total_tax": 264550.0
         },
         "recommendation": "New Regime",
         "savings": 104000.0
@@ -2317,7 +2322,8 @@
           }
         ],
         "other_income": 400000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -2615,7 +2621,7 @@
           ],
           "taxable_income": 2225000.0,
           "total_deductions": 75000,
-          "total_tax": 266500.0
+          "total_tax": 282750.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -2646,7 +2652,7 @@
           ],
           "taxable_income": 2022500.0,
           "total_deductions": 277500.0,
-          "total_tax": 328120.0
+          "total_tax": 344370.0
         },
         "recommendation": "New Regime",
         "savings": 61620.0
@@ -2669,7 +2675,8 @@
         "nps": 50000,
         "other_income": 400000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -2765,7 +2772,7 @@
           ],
           "taxable_income": 1225000.0,
           "total_deductions": 75000,
-          "total_tax": 53300.0
+          "total_tax": 69550.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -2788,7 +2795,7 @@
           ],
           "taxable_income": 1022500.0,
           "total_deductions": 277500.0,
-          "total_tax": 44980.0
+          "total_tax": 61230.0
         },
         "recommendation": "Old Regime",
         "savings": 8320.0
@@ -2811,7 +2818,8 @@
         "nps": 50000,
         "other_income": 400000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -3213,7 +3221,7 @@
           ],
           "taxable_income": 900000.0,
           "total_deductions": 0,
-          "total_tax": 29900.0
+          "total_tax": 46150.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -3228,7 +3236,7 @@
           ],
           "taxable_income": 700000.0,
           "total_deductions": 200000.0,
-          "total_tax": 19500.0
+          "total_tax": 35750.0
         },
         "recommendation": "Old Regime",
         "savings": 10400.0
@@ -3250,7 +3258,7 @@
         "hra": 300000,
         "other_income": 500000
       },
-      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT)"
+      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -3361,7 +3369,7 @@
           ],
           "taxable_income": 1900000.0,
           "total_deductions": 0,
-          "total_tax": 165100.0
+          "total_tax": 181350.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -3388,7 +3396,7 @@
           ],
           "taxable_income": 1700000.0,
           "total_deductions": 200000.0,
-          "total_tax": 227500.0
+          "total_tax": 243750.0
         },
         "recommendation": "New Regime",
         "savings": 62400.0
@@ -3410,7 +3418,8 @@
         ],
         "hra": 300000,
         "other_income": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -3511,7 +3520,7 @@
           ],
           "taxable_income": 1320000.0,
           "total_deductions": 0,
-          "total_tax": 63180.0
+          "total_tax": 79430.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -3534,7 +3543,7 @@
           ],
           "taxable_income": 1220000.0,
           "total_deductions": 100000.0,
-          "total_tax": 99060.0
+          "total_tax": 115310.0
         },
         "recommendation": "New Regime",
         "savings": 35880.0
@@ -3555,7 +3564,8 @@
         ],
         "other_income": 500000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -3576,7 +3586,7 @@
           ],
           "taxable_income": 900000.0,
           "total_deductions": 0,
-          "total_tax": 29900.0
+          "total_tax": 46150.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -3591,7 +3601,7 @@
           ],
           "taxable_income": 700000.0,
           "total_deductions": 200000.0,
-          "total_tax": 19500.0
+          "total_tax": 35750.0
         },
         "recommendation": "Old Regime",
         "savings": 10400.0
@@ -3613,7 +3623,7 @@
         "hra": 300000,
         "other_income": 500000
       },
-      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT)"
+      "note": "changed by S2-A2: harmonized 87A band / TI-keyed eligibility (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -4197,7 +4207,7 @@
           ],
           "taxable_income": 1470000.0,
           "total_deductions": 0,
-          "total_tax": 82420.0
+          "total_tax": 98670.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -4216,7 +4226,7 @@
           ],
           "taxable_income": 1270000.0,
           "total_deductions": 200000.0,
-          "total_tax": 96460.0
+          "total_tax": 112710.0
         },
         "recommendation": "New Regime",
         "savings": 14040.0
@@ -4238,7 +4248,8 @@
         "hra": 300000,
         "other_income": 650000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -5044,7 +5055,7 @@
           ],
           "taxable_income": 1525000.0,
           "total_deductions": 75000,
-          "total_tax": 91000.0
+          "total_tax": 107250.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -5070,7 +5081,7 @@
           ],
           "taxable_income": 1147500.0,
           "total_deductions": 452500.0,
-          "total_tax": 81380.0
+          "total_tax": 97630.0
         },
         "recommendation": "Old Regime",
         "savings": 9620.0
@@ -5092,7 +5103,8 @@
         "hra": 300000,
         "other_income": 700000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -5336,7 +5348,7 @@
           ],
           "taxable_income": 1520000.0,
           "total_deductions": 0,
-          "total_tax": 90220.0
+          "total_tax": 106470.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -5363,7 +5375,7 @@
           ],
           "taxable_income": 1420000.0,
           "total_deductions": 100000.0,
-          "total_tax": 142740.0
+          "total_tax": 158990.0
         },
         "recommendation": "New Regime",
         "savings": 52520.0
@@ -5384,7 +5396,8 @@
         ],
         "other_income": 700000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -5615,7 +5628,7 @@
           ],
           "taxable_income": 2100000.0,
           "total_deductions": 0,
-          "total_tax": 227500.0
+          "total_tax": 243750.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -5642,7 +5655,7 @@
           ],
           "taxable_income": 1900000.0,
           "total_deductions": 200000.0,
-          "total_tax": 289900.0
+          "total_tax": 306150.0
         },
         "recommendation": "New Regime",
         "savings": 62400.0
@@ -5664,7 +5677,8 @@
         ],
         "hra": 300000,
         "other_income": 700000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -5853,7 +5867,7 @@
           ],
           "taxable_income": 1542222.0,
           "total_deductions": 0,
-          "total_tax": 93686.63
+          "total_tax": 109936.63
         },
         "old_regime": {
           "explanation_sections": [
@@ -5874,7 +5888,7 @@
           ],
           "taxable_income": 1317222.0,
           "total_deductions": 225000.0,
-          "total_tax": 106282.18
+          "total_tax": 122532.18
         },
         "recommendation": "New Regime",
         "savings": 12595.55
@@ -5897,7 +5911,8 @@
         "nps": 50000,
         "other_income": 722222,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -5993,7 +6008,7 @@
           ],
           "taxable_income": 2547222.0,
           "total_deductions": 75000,
-          "total_tax": 367033.26
+          "total_tax": 383283.26
         },
         "old_regime": {
           "explanation_sections": [
@@ -6023,7 +6038,7 @@
           ],
           "taxable_income": 2219722.0,
           "total_deductions": 402500.0,
-          "total_tax": 389653.26
+          "total_tax": 405903.26
         },
         "recommendation": "New Regime",
         "savings": 22620.0
@@ -6045,7 +6060,8 @@
         "hra": 300000,
         "other_income": 722222,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -6499,7 +6515,7 @@
           ],
           "taxable_income": 1547222.0,
           "total_deductions": 75000,
-          "total_tax": 94466.63
+          "total_tax": 110716.63
         },
         "old_regime": {
           "explanation_sections": [
@@ -6526,7 +6542,7 @@
           ],
           "taxable_income": 1344722.0,
           "total_deductions": 277500.0,
-          "total_tax": 125002.18
+          "total_tax": 141252.18
         },
         "recommendation": "New Regime",
         "savings": 30535.55
@@ -6549,7 +6565,8 @@
         "nps": 50000,
         "other_income": 722222,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -6976,7 +6993,7 @@
           ],
           "taxable_income": 2552777.0,
           "total_deductions": 75000,
-          "total_tax": 368766.42
+          "total_tax": 385016.42
         },
         "old_regime": {
           "explanation_sections": [
@@ -7007,7 +7024,7 @@
           ],
           "taxable_income": 2350277.0,
           "total_deductions": 277500.0,
-          "total_tax": 430386.42
+          "total_tax": 446636.42
         },
         "recommendation": "New Regime",
         "savings": 61620.0
@@ -7030,7 +7047,8 @@
         "nps": 50000,
         "other_income": 727777,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -7140,7 +7158,7 @@
           ],
           "taxable_income": 2127777.0,
           "total_deductions": 0,
-          "total_tax": 236166.42
+          "total_tax": 252416.42
         },
         "old_regime": {
           "explanation_sections": [
@@ -7167,7 +7185,7 @@
           ],
           "taxable_income": 2027777.0,
           "total_deductions": 100000.0,
-          "total_tax": 332366.42
+          "total_tax": 348616.42
         },
         "recommendation": "New Regime",
         "savings": 96200.0
@@ -7188,7 +7206,8 @@
           }
         ],
         "other_income": 727777
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -7434,7 +7453,7 @@
           ],
           "taxable_income": 2127777.0,
           "total_deductions": 0,
-          "total_tax": 236166.42
+          "total_tax": 252416.42
         },
         "old_regime": {
           "explanation_sections": [
@@ -7463,7 +7482,7 @@
           ],
           "taxable_income": 1902777.0,
           "total_deductions": 225000.0,
-          "total_tax": 293366.42
+          "total_tax": 309616.42
         },
         "recommendation": "New Regime",
         "savings": 57200.0
@@ -7486,7 +7505,8 @@
         ],
         "nps": 50000,
         "other_income": 727777
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -7678,7 +7698,7 @@
           ],
           "taxable_income": 2127777.0,
           "total_deductions": 0,
-          "total_tax": 236166.42
+          "total_tax": 252416.42
         },
         "old_regime": {
           "explanation_sections": [
@@ -7707,7 +7727,7 @@
           ],
           "taxable_income": 1902777.0,
           "total_deductions": 225000.0,
-          "total_tax": 290766.42
+          "total_tax": 307016.42
         },
         "recommendation": "New Regime",
         "savings": 54600.0
@@ -7730,7 +7750,8 @@
         ],
         "nps": 50000,
         "other_income": 727777
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -8492,7 +8513,7 @@
           ],
           "taxable_income": 1620000.0,
           "total_deductions": 0,
-          "total_tax": 106860.0
+          "total_tax": 123110.0
         },
         "old_regime": {
           "explanation_sections": [],
@@ -8517,7 +8538,7 @@
           ],
           "taxable_income": 1620000.0,
           "total_deductions": 0.0,
-          "total_tax": 202540.0
+          "total_tax": 218790.0
         },
         "recommendation": "New Regime",
         "savings": 95680.0
@@ -8537,7 +8558,8 @@
         ],
         "other_income": 800000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -9066,7 +9088,7 @@
           ],
           "taxable_income": 1400000.0,
           "total_deductions": 0,
-          "total_tax": 71500.0
+          "total_tax": 87750.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -9085,7 +9107,7 @@
           ],
           "taxable_income": 1200000.0,
           "total_deductions": 200000.0,
-          "total_tax": 81900.0
+          "total_tax": 98150.0
         },
         "recommendation": "New Regime",
         "savings": 10400.0
@@ -9106,7 +9128,8 @@
         ],
         "hra": 300000,
         "other_income": 1000000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -9790,7 +9813,7 @@
           ],
           "taxable_income": 1820000.0,
           "total_deductions": 0,
-          "total_tax": 148460.0
+          "total_tax": 164710.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -9819,7 +9842,7 @@
           ],
           "taxable_income": 1595000.0,
           "total_deductions": 225000.0,
-          "total_tax": 194740.0
+          "total_tax": 210990.0
         },
         "recommendation": "New Regime",
         "savings": 46280.0
@@ -9842,7 +9865,8 @@
         "nps": 50000,
         "other_income": 1000000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -10346,7 +10370,7 @@
           ],
           "taxable_income": 2600000.0,
           "total_deductions": 0,
-          "total_tax": 383500.0
+          "total_tax": 399750.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -10369,7 +10393,7 @@
           ],
           "taxable_income": 2400000.0,
           "total_deductions": 200000.0,
-          "total_tax": 435500.0
+          "total_tax": 451750.0
         },
         "recommendation": "New Regime",
         "savings": 52000.0
@@ -10391,7 +10415,8 @@
         ],
         "hra": 300000,
         "other_income": 1200000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -11350,7 +11375,7 @@
           ],
           "taxable_income": 1900000.0,
           "total_deductions": 0,
-          "total_tax": 165100.0
+          "total_tax": 181350.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -11379,7 +11404,7 @@
           ],
           "taxable_income": 1675000.0,
           "total_deductions": 225000.0,
-          "total_tax": 219700.0
+          "total_tax": 235950.0
         },
         "recommendation": "New Regime",
         "savings": 54600.0
@@ -11401,7 +11426,8 @@
         ],
         "nps": 50000,
         "other_income": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -11578,7 +11604,7 @@
           ],
           "taxable_income": 1900000.0,
           "total_deductions": 0,
-          "total_tax": 165100.0
+          "total_tax": 181350.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -11605,7 +11631,7 @@
           ],
           "taxable_income": 1700000.0,
           "total_deductions": 200000.0,
-          "total_tax": 230100.0
+          "total_tax": 246350.0
         },
         "recommendation": "New Regime",
         "savings": 65000.0
@@ -11626,7 +11652,8 @@
         ],
         "hra": 300000,
         "other_income": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -12791,7 +12818,7 @@
           ],
           "taxable_income": 3825000.0,
           "total_deductions": 75000,
-          "total_tax": 765700.0
+          "total_tax": 781950.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -12819,7 +12846,7 @@
           ],
           "taxable_income": 3847500.0,
           "total_deductions": 52500.0,
-          "total_tax": 900120.0
+          "total_tax": 916370.0
         },
         "recommendation": "New Regime",
         "savings": 134420.0
@@ -12839,7 +12866,8 @@
         ],
         "other_income": 2000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -13264,7 +13292,7 @@
           ],
           "taxable_income": 3825000.0,
           "total_deductions": 75000,
-          "total_tax": 765700.0
+          "total_tax": 781950.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -13288,7 +13316,7 @@
           ],
           "taxable_income": 3847500.0,
           "total_deductions": 52500.0,
-          "total_tax": 887120.0
+          "total_tax": 903370.0
         },
         "recommendation": "New Regime",
         "savings": 121420.0
@@ -13308,7 +13336,8 @@
         ],
         "other_income": 2000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -13660,7 +13689,7 @@
           ],
           "taxable_income": 3800000.0,
           "total_deductions": 0,
-          "total_tax": 757900.0
+          "total_tax": 774150.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -13687,7 +13716,7 @@
           ],
           "taxable_income": 3700000.0,
           "total_deductions": 100000.0,
-          "total_tax": 851500.0
+          "total_tax": 867750.0
         },
         "recommendation": "New Regime",
         "savings": 93600.0
@@ -13708,7 +13737,8 @@
           }
         ],
         "other_income": 2400000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -13900,7 +13930,7 @@
           ],
           "taxable_income": 3225000.0,
           "total_deductions": 75000,
-          "total_tax": 578500.0
+          "total_tax": 594750.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -13930,7 +13960,7 @@
           ],
           "taxable_income": 2847500.0,
           "total_deductions": 452500.0,
-          "total_tax": 585520.0
+          "total_tax": 601770.0
         },
         "recommendation": "New Regime",
         "savings": 7020.0
@@ -13952,7 +13982,8 @@
         "hra": 300000,
         "other_income": 2400000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -13989,7 +14020,7 @@
           ],
           "taxable_income": 3220000.0,
           "total_deductions": 0,
-          "total_tax": 576940.0
+          "total_tax": 593190.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -14016,7 +14047,7 @@
           ],
           "taxable_income": 3020000.0,
           "total_deductions": 200000.0,
-          "total_tax": 639340.0
+          "total_tax": 655590.0
         },
         "recommendation": "New Regime",
         "savings": 62400.0
@@ -14038,7 +14069,8 @@
         "hra": 300000,
         "other_income": 2400000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -14322,7 +14354,7 @@
           ],
           "taxable_income": 3225000.0,
           "total_deductions": 75000,
-          "total_tax": 578500.0
+          "total_tax": 594750.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -14346,7 +14378,7 @@
           ],
           "taxable_income": 3247500.0,
           "total_deductions": 52500.0,
-          "total_tax": 699920.0
+          "total_tax": 716170.0
         },
         "recommendation": "New Regime",
         "savings": 121420.0
@@ -14366,7 +14398,8 @@
         ],
         "other_income": 2400000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -14492,7 +14525,7 @@
           ],
           "taxable_income": 5825000.0,
           "total_deductions": 75000,
-          "total_tax": 1528670.0
+          "total_tax": 1546545.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -14518,7 +14551,7 @@
           ],
           "taxable_income": 5447500.0,
           "total_deductions": 452500.0,
-          "total_tax": 1524952.0
+          "total_tax": 1542827.0
         },
         "recommendation": "Old Regime",
         "savings": 3718.0
@@ -14540,7 +14573,8 @@
         "hra": 300000,
         "other_income": 5000000,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -15058,7 +15092,7 @@
           ],
           "taxable_income": 5820000.0,
           "total_deductions": 0,
-          "total_tax": 1526954.0
+          "total_tax": 1544829.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -15081,7 +15115,7 @@
           ],
           "taxable_income": 5720000.0,
           "total_deductions": 100000.0,
-          "total_tax": 1618474.0
+          "total_tax": 1636349.0
         },
         "recommendation": "New Regime",
         "savings": 91520.0
@@ -15102,7 +15136,8 @@
         ],
         "other_income": 5000000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -15220,7 +15255,7 @@
           ],
           "taxable_income": 6825000.0,
           "total_deductions": 75000,
-          "total_tax": 1871870.0
+          "total_tax": 1889745.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -15248,7 +15283,7 @@
           ],
           "taxable_income": 6847500.0,
           "total_deductions": 52500.0,
-          "total_tax": 2016872.0
+          "total_tax": 2034747.0
         },
         "recommendation": "New Regime",
         "savings": 145002.0
@@ -15268,7 +15303,8 @@
         ],
         "other_income": 5000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -16021,7 +16057,7 @@
           ],
           "taxable_income": 5825001.0,
           "total_deductions": 75000,
-          "total_tax": 1528670.34
+          "total_tax": 1546545.34
         },
         "old_regime": {
           "explanation_sections": [
@@ -16051,7 +16087,7 @@
           ],
           "taxable_income": 5447501.0,
           "total_deductions": 452500.0,
-          "total_tax": 1539252.34
+          "total_tax": 1557127.34
         },
         "recommendation": "New Regime",
         "savings": 10582.0
@@ -16073,7 +16109,8 @@
         "hra": 300000,
         "other_income": 5000001,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -16276,7 +16313,7 @@
           ],
           "taxable_income": 5825001.0,
           "total_deductions": 75000,
-          "total_tax": 1528670.34
+          "total_tax": 1546545.34
         },
         "old_regime": {
           "explanation_sections": [
@@ -16305,7 +16342,7 @@
           ],
           "taxable_income": 5747501.0,
           "total_deductions": 152500.0,
-          "total_tax": 1642212.34
+          "total_tax": 1660087.34
         },
         "recommendation": "New Regime",
         "savings": 113542.0
@@ -16326,7 +16363,8 @@
         ],
         "other_income": 5000001,
         "salary": 500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -16527,7 +16565,7 @@
           ],
           "taxable_income": 6825001.0,
           "total_deductions": 75000,
-          "total_tax": 1871870.34
+          "total_tax": 1889745.34
         },
         "old_regime": {
           "explanation_sections": [
@@ -16554,7 +16592,7 @@
           ],
           "taxable_income": 6622501.0,
           "total_deductions": 277500.0,
-          "total_tax": 1928212.34
+          "total_tax": 1946087.34
         },
         "recommendation": "New Regime",
         "savings": 56342.0
@@ -16577,7 +16615,8 @@
         "nps": 50000,
         "other_income": 5000001,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -16614,7 +16653,7 @@
           ],
           "taxable_income": 5820001.0,
           "total_deductions": 0,
-          "total_tax": 1526954.34
+          "total_tax": 1544829.34
         },
         "old_regime": {
           "explanation_sections": [
@@ -16641,7 +16680,7 @@
           ],
           "taxable_income": 5620001.0,
           "total_deductions": 200000.0,
-          "total_tax": 1598454.34
+          "total_tax": 1616329.34
         },
         "recommendation": "New Regime",
         "savings": 71500.0
@@ -16663,7 +16702,8 @@
         "hra": 300000,
         "other_income": 5000001,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -17496,7 +17536,7 @@
           ],
           "taxable_income": 11825000.0,
           "total_deductions": 75000,
-          "total_tax": 3750955.0
+          "total_tax": 3769642.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -17521,7 +17561,7 @@
           ],
           "taxable_income": 11747500.0,
           "total_deductions": 152500.0,
-          "total_tax": 3854708.0
+          "total_tax": 3873395.5
         },
         "recommendation": "New Regime",
         "savings": 103753.0
@@ -17542,7 +17582,8 @@
         ],
         "other_income": 10000000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -17830,7 +17871,7 @@
           ],
           "taxable_income": 11400000.0,
           "total_deductions": 0,
-          "total_tax": 3598465.0
+          "total_tax": 3617152.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -17853,7 +17894,7 @@
           ],
           "taxable_income": 11300000.0,
           "total_deductions": 100000.0,
-          "total_tax": 3694145.0
+          "total_tax": 3712832.5
         },
         "recommendation": "New Regime",
         "savings": 95680.0
@@ -17874,7 +17915,8 @@
           }
         ],
         "other_income": 10000000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -18217,7 +18259,7 @@
           ],
           "taxable_income": 10820001.0,
           "total_deductions": 0,
-          "total_tax": 3390361.36
+          "total_tax": 3409048.86
         },
         "old_regime": {
           "explanation_sections": [
@@ -18244,7 +18286,7 @@
           ],
           "taxable_income": 10720001.0,
           "total_deductions": 100000.0,
-          "total_tax": 3498001.36
+          "total_tax": 3516688.86
         },
         "recommendation": "New Regime",
         "savings": 107640.0
@@ -18265,7 +18307,8 @@
         ],
         "other_income": 10000001,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -18964,7 +19007,7 @@
           ],
           "taxable_income": 10400001.0,
           "total_deductions": 0,
-          "total_tax": 3239665.36
+          "total_tax": 3258352.86
         },
         "old_regime": {
           "explanation_sections": [],
@@ -18989,7 +19032,7 @@
           ],
           "taxable_income": 10400001.0,
           "total_deductions": 0.0,
-          "total_tax": 3383185.36
+          "total_tax": 3401872.86
         },
         "recommendation": "New Regime",
         "savings": 143520.0
@@ -19008,7 +19051,8 @@
           }
         ],
         "other_income": 10000001
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -19045,7 +19089,7 @@
           ],
           "taxable_income": 21400000.0,
           "total_deductions": 0,
-          "total_tax": 7809425.0
+          "total_tax": 7828112.5
         },
         "old_regime": {
           "explanation_sections": [],
@@ -19070,10 +19114,10 @@
           ],
           "taxable_income": 21400000.0,
           "total_deductions": 0.0,
-          "total_tax": 7970625.0
+          "total_tax": 7990937.5
         },
         "recommendation": "New Regime",
-        "savings": 161200.0
+        "savings": 162825.0
       },
       "id": "oi20000000_a30_biz1000k_cgEL200k_x2_dedNone",
       "input": {
@@ -19091,7 +19135,7 @@
         ],
         "other_income": 20000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -19293,7 +19337,7 @@
           ],
           "taxable_income": 20400000.0,
           "total_deductions": 0,
-          "total_tax": 7100145.0
+          "total_tax": 7118832.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -19316,7 +19360,7 @@
           ],
           "taxable_income": 20200000.0,
           "total_deductions": 200000.0,
-          "total_tax": 7023705.0
+          "total_tax": 7042392.5
         },
         "recommendation": "Old Regime",
         "savings": 76440.0
@@ -19338,7 +19382,7 @@
         "hra": 300000,
         "other_income": 20000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -19706,7 +19750,7 @@
           ],
           "taxable_income": 20820000.0,
           "total_deductions": 0,
-          "total_tax": 7536945.0
+          "total_tax": 7555632.5
         },
         "old_regime": {
           "explanation_sections": [],
@@ -19731,7 +19775,7 @@
           ],
           "taxable_income": 20820000.0,
           "total_deductions": 0.0,
-          "total_tax": 7680465.0
+          "total_tax": 7699152.5
         },
         "recommendation": "New Regime",
         "savings": 143520.0
@@ -19752,7 +19796,7 @@
         "other_income": 20000000,
         "rental": 600000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -20666,7 +20710,7 @@
           ],
           "taxable_income": 51825000.0,
           "total_deductions": 75000,
-          "total_tax": 19675175.0
+          "total_tax": 19693862.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -20690,10 +20734,10 @@
           ],
           "taxable_income": 51847500.0,
           "total_deductions": 52500.0,
-          "total_tax": 21029775.0
+          "total_tax": 21050087.5
         },
         "recommendation": "New Regime",
-        "savings": 1354600.0
+        "savings": 1356225.0
       },
       "id": "oi50000000_a82_sal1500k_cgEL200k_x2_dedNone",
       "input": {
@@ -20711,7 +20755,7 @@
         "other_income": 50000000,
         "salary": 1500000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -20911,7 +20955,7 @@
           ],
           "taxable_income": 50825000.0,
           "total_deductions": 75000,
-          "total_tax": 19285175.0
+          "total_tax": 19303862.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -20940,10 +20984,10 @@
           ],
           "taxable_income": 50747500.0,
           "total_deductions": 152500.0,
-          "total_tax": 19902025.0
+          "total_tax": 19922337.5
         },
         "recommendation": "New Regime",
-        "savings": 616850.0
+        "savings": 618475.0
       },
       "id": "oi50000000_a30_sal500k_cgEL200k_x2_ded80g",
       "input": {
@@ -20962,7 +21006,7 @@
         "other_income": 50000000,
         "salary": 500000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -21074,7 +21118,7 @@
           ],
           "taxable_income": 51400000.0,
           "total_deductions": 0,
-          "total_tax": 19509425.0
+          "total_tax": 19528112.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -21097,10 +21141,10 @@
           ],
           "taxable_income": 51300000.0,
           "total_deductions": 100000.0,
-          "total_tax": 20460375.0
+          "total_tax": 20480687.5
         },
         "recommendation": "New Regime",
-        "savings": 950950.0
+        "savings": 952575.0
       },
       "id": "oi50000000_a82_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -21119,7 +21163,7 @@
         ],
         "other_income": 50000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -21236,7 +21280,7 @@
           ],
           "taxable_income": 50400000.0,
           "total_deductions": 0,
-          "total_tax": 19119425.0
+          "total_tax": 19138112.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -21261,10 +21305,10 @@
           ],
           "taxable_income": 50175000.0,
           "total_deductions": 225000.0,
-          "total_tax": 19290375.0
+          "total_tax": 19310687.5
         },
         "recommendation": "New Regime",
-        "savings": 170950.0
+        "savings": 172575.0
       },
       "id": "oi50000000_a82_none_cgEL200k_x2_dedStd",
       "input": {
@@ -21284,7 +21328,7 @@
         "nps": 50000,
         "other_income": 50000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -21487,7 +21531,7 @@
           ],
           "taxable_income": 50820001.0,
           "total_deductions": 0,
-          "total_tax": 19283225.39
+          "total_tax": 19301912.89
         },
         "old_regime": {
           "explanation_sections": [
@@ -21512,10 +21556,10 @@
           ],
           "taxable_income": 50595001.0,
           "total_deductions": 225000.0,
-          "total_tax": 19727176.04
+          "total_tax": 19747488.54
         },
         "recommendation": "New Regime",
-        "savings": 443950.65
+        "savings": 445575.65
       },
       "id": "oi50000001_a82_rent600k_cgEL200k_x2_dedStd",
       "input": {
@@ -21536,7 +21580,7 @@
         "other_income": 50000001,
         "rental": 600000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -22134,7 +22178,7 @@
           ],
           "taxable_income": 51400001.0,
           "total_deductions": 0,
-          "total_tax": 19509425.39
+          "total_tax": 19528112.89
         },
         "old_regime": {
           "explanation_sections": [
@@ -22161,10 +22205,10 @@
           ],
           "taxable_income": 51300001.0,
           "total_deductions": 100000.0,
-          "total_tax": 20473376.04
+          "total_tax": 20493688.54
         },
         "recommendation": "New Regime",
-        "savings": 963950.65
+        "savings": 965575.65
       },
       "id": "oi50000001_a65_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -22183,7 +22227,7 @@
         ],
         "other_income": 50000001
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -22453,7 +22497,7 @@
           ],
           "taxable_income": 21400000.0,
           "total_deductions": 0,
-          "total_tax": 7809425.0
+          "total_tax": 7828112.5
         },
         "old_regime": {
           "explanation_sections": [
@@ -22480,10 +22524,10 @@
           ],
           "taxable_income": 21300000.0,
           "total_deductions": 100000.0,
-          "total_tax": 7928375.0
+          "total_tax": 7948687.5
         },
         "recommendation": "New Regime",
-        "savings": 118950.0
+        "savings": 120575.0
       },
       "id": "oi20000000_a65_biz1000k_cgEL200k_x2_ded80g",
       "input": {
@@ -22502,7 +22546,7 @@
         ],
         "other_income": 20000000
       },
-      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT)"
+      "note": "changed by S2-A2: statutory marginal relief (tax-expert GT); changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -22598,7 +22642,7 @@
           ],
           "taxable_income": 2125000.0,
           "total_deductions": 75000,
-          "total_tax": 235300.0
+          "total_tax": 251550.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -22629,7 +22673,7 @@
           ],
           "taxable_income": 1922500.0,
           "total_deductions": 277500.0,
-          "total_tax": 296920.0
+          "total_tax": 313170.0
         },
         "recommendation": "New Regime",
         "savings": 61620.0
@@ -22652,7 +22696,8 @@
         "nps": 50000,
         "other_income": 300000,
         "salary": 1500000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -22746,7 +22791,7 @@
           ],
           "taxable_income": 1620000.0,
           "total_deductions": 0,
-          "total_tax": 106860.0
+          "total_tax": 123110.0
         },
         "old_regime": {
           "explanation_sections": [
@@ -22769,7 +22814,7 @@
           ],
           "taxable_income": 1420000.0,
           "total_deductions": 200000.0,
-          "total_tax": 129740.0
+          "total_tax": 145990.0
         },
         "recommendation": "New Regime",
         "savings": 22880.0
@@ -22791,7 +22836,8 @@
         "hra": 300000,
         "other_income": 800000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     },
     {
       "expected": {
@@ -22820,7 +22866,7 @@
           ],
           "taxable_income": 1470000.0,
           "total_deductions": 0,
-          "total_tax": 82420.0
+          "total_tax": 98670.0
         },
         "old_regime": {
           "explanation_sections": [],
@@ -22845,7 +22891,7 @@
           ],
           "taxable_income": 1470000.0,
           "total_deductions": 0.0,
-          "total_tax": 158340.0
+          "total_tax": 174590.0
         },
         "recommendation": "New Regime",
         "savings": 75920.0
@@ -22865,7 +22911,8 @@
         ],
         "other_income": 650000,
         "rental": 600000
-      }
+      },
+      "note": "changed by S2-C: aggregate 112A exemption (H1 fix)"
     }
   ]
 }

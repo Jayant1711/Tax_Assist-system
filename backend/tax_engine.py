@@ -38,6 +38,21 @@ professional-tax input is absent (registry default applied) and salary > 0,
 a state-specific advisory is appended to the audit observations for BOTH
 years (FY 2024-25 keeps its 2,500 default; FY 2025-26 defaults to 0 —
 ruling j). "tax_year": "fy_2024_25" reproduces every pre-A3 figure.
+
+Sprint 2 Step C (capital gains — tax-expert rulings R-e/R-f, 2026-10-31):
+_calc_cg now AGGREGATES every equity_ltcg entry and deducts the Section
+112A ₹1.25L exemption ONCE before applying 12.5% to the excess (the H1
+bug applied it per entry — [2L, 2L] double-dipped to 18,750 instead of
+34,375); 111A STCG remains a full 20% per entry with no exemption share,
+and property gains book per rules.cg.property_rate_by_regime. This
+deliberately changes the FY 2024-25 parity-fixture cells whose scenario
+carries multiple equity_ltcg entries (re-pinned with citations by
+tests/tools/apply_s2c_fixture_updates.py). Property gains additionally
+gain the R-e disclosures: a holding-period assumption line whenever
+property_cg exists, plus a transfer-date note keyed on the tri-state
+flag cg_transfer_before_2024_07_23 (False = post-cutoff note; True/null/
+absent = election advisory — the 20%-with-indexation election is never
+computed or fabricated).
 """
 
 import logging
@@ -52,6 +67,27 @@ from tax_rules.schema import SlabBand
 from ai_models import ANFIS
 
 logger = logging.getLogger(__name__)
+
+# Sprint 2 Step C (tax-expert ruling R-e): property-gains disclosures.
+# The 20%-with-indexation election is NOT built — it is disclosed, never
+# fabricated; evaluating it needs the (uncollected) cost-of-acquisition
+# figures, so the advisory defers to a CA. The holding-period assumption
+# is stated whenever property gains exist (property_cg is booked LTCG;
+# short-term property gains would be slab-taxed).
+PROPERTY_ELECTION_ADVISORY = (
+    "Property gains default to the 12.5% post-23-Jul-2024 route. If the "
+    "property was acquired before 23-Jul-2024 by a resident individual/HUF, "
+    "a 20%-with-indexation election may be available if it yields lower tax "
+    "— this tool cannot evaluate the election; consult a CA with your cost "
+    "figures."
+)
+PROPERTY_POST_CUTOFF_NOTE = (
+    "Transfer on/after 23-Jul-2024: 12.5% without indexation applies."
+)
+PROPERTY_HOLDING_ASSUMPTION = (
+    "Property gains are treated as long-term; short-term property gains "
+    "are taxed at slab rates — verify your holding period."
+)
 
 @dataclass
 class Explanation:
@@ -191,6 +227,21 @@ class TaxEngine:
                 "GAIN (sale price minus cost of acquisition), not the gross sale value, "
                 "before filing."
             )
+
+        # Step C (ruling R-e): property-gains disclosure. The holding-period
+        # assumption is stated whenever property gains exist (they are
+        # booked as LTCG). The tri-state transfer-date flag then selects the
+        # route note: explicitly False (transfer on/after 23-Jul-2024) gets
+        # the post-cutoff note; True (pre-cutoff) and null/absent (unknown —
+        # the default post-cutoff route is booked either way) get the
+        # election advisory. The election itself is NEVER computed or
+        # fabricated — indexation needs the uncollected cost figures.
+        if any(c.get("type") == "property_cg" for c in cg_data):
+            observations.append(PROPERTY_HOLDING_ASSUMPTION)
+            if data.get("cg_transfer_before_2024_07_23") is False:
+                observations.append(PROPERTY_POST_CUTOFF_NOTE)
+            else:
+                observations.append(PROPERTY_ELECTION_ADVISORY)
 
         # Step A3 (ruling j): professional tax is a state levy with no
         # national rate. When the input was never provided (the registry
@@ -510,20 +561,40 @@ class TaxEngine:
         return min(band_surcharge, relief_ceiling)
 
     def _calc_cg(self, cg_data: list, regime: str, rules) -> Tuple[float, float]:
+        """Special-rate capital-gains tax and CG income for one regime.
+
+        Sprint 2 Step C (tax-expert ruling R-f — the documented H1 fix):
+        the Section 112A ₹1,25,000 exemption is an ANNUAL AGGREGATE across
+        ALL equity_ltcg entries — the entries are summed first, the
+        exemption is deducted ONCE, and rules.cg.ltcg_112a_rate applies to
+        the excess. The previous per-entry application double-dipped the
+        exemption on multi-entry portfolios ([2L, 2L] booked 18,750
+        instead of 34,375) and starved partial pairs ([1L, 50k] booked 0
+        instead of 3,125). Section 111A STCG stays a FULL
+        rules.cg.stcg_111a_rate on every entry — the exemption is never
+        shared with (nor diverted to) STCG — and property gains book at
+        rules.cg.property_rate_by_regime (FY 2025-26: 12.5% in both
+        regimes; the 20%-with-indexation election is disclosed as an
+        advisory in calculate_tax_advanced, never fabricated here).
+        """
         tax, inc = 0.0, 0.0
         cg_rules = rules.cg
+        ltcg_112a_total = 0.0
         for cg in cg_data:
             a = float(cg.get("amount", 0) or 0)
             inc += a
             t = cg.get("type", "")
             if t == "equity_ltcg":
-                # Budget 2024: LTCG on equity shares/equity mutual funds increased from 10% to 12.5% (exemption raised to ₹1.25L)
-                tax += max(0.0, a - cg_rules.ltcg_112a_exemption) * cg_rules.ltcg_112a_rate
+                ltcg_112a_total += a
             elif t == "equity_stcg":
-                # Budget 2024: STCG on equity shares increased to 20%
+                # Budget 2024: STCG on equity shares increased to 20% —
+                # taxed in FULL; the 112A exemption is LTCG-only.
                 tax += a * cg_rules.stcg_111a_rate
             elif t == "property_cg":
                 tax += a * cg_rules.property_rate_by_regime[regime]
+        # Budget 2024: LTCG on equity shares/equity mutual funds 12.5% on
+        # the aggregate above the ₹1.25L ANNUAL exemption (deducted ONCE).
+        tax += max(0.0, ltcg_112a_total - cg_rules.ltcg_112a_exemption) * cg_rules.ltcg_112a_rate
         return tax, inc
 
     def _calc_80gg(self, ded_80gg, adj_total, hra_claimed, rules) -> float:

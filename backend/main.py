@@ -1,4 +1,5 @@
 # Summer internship project
+from datetime import date
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -125,6 +126,20 @@ def _validate_session_payload(session: Dict[str, Any]) -> None:
         if isinstance(age, bool) or not isinstance(age, int) or not (0 <= age <= 120):
             raise ValueError("session.age must be an integer between 0 and 120")
 
+    if "cg_transfer_before_2024_07_23" in session:
+        # Sprint 2 Step C (ruling R-e): tri-state property transfer-date
+        # flag — True = transferred before 23-Jul-2024, False = on/after,
+        # null/absent = unknown (the engine then books the default
+        # post-cutoff route and emits the election advisory). Bool strictly
+        # per the security table: 1 and "yes" are NOT bools (isinstance
+        # True of int, so the bool check must come first — as everywhere
+        # else in this validator).
+        flag = session["cg_transfer_before_2024_07_23"]
+        if flag is not None and not isinstance(flag, bool):
+            raise ValueError(
+                "session.cg_transfer_before_2024_07_23 must be a boolean or null"
+            )
+
     if "tax_year" in session:
         # ADR-008: the session may pin the tax year for the real-time
         # computation; it must be None or a registered registry key.
@@ -225,6 +240,13 @@ class CapitalGainItem(BaseModel):
     type: str = Field("", max_length=32)
     amount: float = Field(0.0, ge=0, le=1e11)
     holding: str = Field("unknown", max_length=32)
+    # Sprint 2 Step C (ruling R-e): ISO date (yyyy-mm-dd) of the transfer.
+    # A plain pydantic date — parse failures 422 at the boundary; no further
+    # bounds are needed (any valid date is accepted; the transfer-date
+    # ROUTING/advisory is keyed on the tri-state
+    # cg_transfer_before_2024_07_23 flag, and the 20%-with-indexation
+    # election itself is out of scope — never fabricated).
+    transfer_date: Optional[date] = None
 
     @field_validator("amount")
     @classmethod
@@ -276,6 +298,11 @@ class CalculateRequest(BaseModel):
     has_parents: Optional[bool] = None
     has_home_loan: Optional[bool] = None
     pays_rent: Optional[bool] = None
+    # Sprint 2 Step C (ruling R-e): tri-state property transfer-date flag —
+    # True = transferred before 23-Jul-2024, False = on/after, None/absent =
+    # unknown. Bool strictly per the security table (the validator below
+    # rejects the values pydantic lax mode would coerce, e.g. "yes" / 1).
+    cg_transfer_before_2024_07_23: Optional[bool] = None
     id: Optional[str] = None
 
     # ADR-008: optional tax-year pin; None keeps the registry default
@@ -299,6 +326,19 @@ class CalculateRequest(BaseModel):
         if value is not None and value not in REGISTRY:
             raise ValueError(
                 f"tax_year must be one of: {', '.join(REGISTRY)}"
+            )
+        return value
+
+    @field_validator("cg_transfer_before_2024_07_23", mode="before")
+    @classmethod
+    def _validate_transfer_flag_strict_bool(cls, value: Any) -> Any:
+        # Tri-state bool strictly (security table): pydantic lax mode would
+        # coerce "yes"/"1"/1 to a bool — reject anything that is not a real
+        # bool or null so the API boundary matches the session validator.
+        # mode="before" sees the RAW wire value, before coercion.
+        if value is not None and not isinstance(value, bool):
+            raise ValueError(
+                "cg_transfer_before_2024_07_23 must be a boolean or null"
             )
         return value
 
