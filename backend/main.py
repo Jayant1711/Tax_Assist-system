@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Literal, Optional
 from tax_engine import TaxEngine
 from tax_rules import REGISTRY
 from nlp_engine import NLPEngine
@@ -92,6 +92,12 @@ _80G_CATEGORIES = (
     "cat_50_qualifying_limit",
 )
 
+# Sprint 2 Step D2/G (V-2 closure): capital-gains entries are taxed BY TYPE
+# at the engine — an unknown (or missing) type books income the engine never
+# taxes (the untaxed-income hole). The enum is enforced at both boundaries:
+# the /calculate model (Literal below) and the session validator here.
+_CG_TYPES = ("equity_ltcg", "equity_stcg", "property_cg")
+
 
 def _validate_session_payload(session: Dict[str, Any]) -> None:
     """Hardening for client-supplied session state (H5/N1); raises ValueError."""
@@ -176,6 +182,16 @@ def _validate_session_payload(session: Dict[str, Any]) -> None:
         for entry in cg:
             if not isinstance(entry, dict):
                 raise ValueError("session.capital_gains entries must be objects")
+            # Sprint 2 Step D2/G (V-2 closure): enum-strict type — an
+            # unknown/missing type would book income the engine never
+            # taxes. The NLP engine only ever writes the three enum
+            # values, so legitimate sessions are unaffected.
+            cg_type = entry.get("type")
+            if not isinstance(cg_type, str) or cg_type not in _CG_TYPES:
+                raise ValueError(
+                    "session.capital_gains entries must have a type: "
+                    + ", ".join(_CG_TYPES)
+                )
             amount = entry.get("amount", 0)
             if isinstance(amount, bool) or not isinstance(amount, (int, float)):
                 raise ValueError("session.capital_gains amounts must be numeric")
@@ -298,7 +314,11 @@ async def get_history(sid: str):
 class CapitalGainItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    type: str = Field("", max_length=32)
+    # Sprint 2 Step D2/G (V-2 closure): enum-strict via Literal — any other
+    # value (e.g. "crypto", which the engine would book as untaxed income)
+    # is a 422. Required: an entry with no type is the same hole (the
+    # engine taxes by type and would let it through untaxed).
+    type: Literal["equity_ltcg", "equity_stcg", "property_cg"]
     amount: float = Field(0.0, ge=0, le=1e11)
     holding: str = Field("unknown", max_length=32)
     # Sprint 2 Step C (ruling R-e): ISO date (yyyy-mm-dd) of the transfer.

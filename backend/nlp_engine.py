@@ -6,10 +6,14 @@ Fixes: Duplicate _generate_reply removed, missing return fixed,
        better correction handling, cleaner phase transitions.
 """
 
+import logging
+import math
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from ai_models import SemanticAttention, UniversalParser, ReasoningAgent
 from profession_db import classify_profession
+
+logger = logging.getLogger(__name__)
 
 # Sprint 2 Step B: metro-city detection heuristics (documented).
 # A statutory HRA metro (Sec 10(13A): Delhi/Mumbai/Kolkata/Chennai) named in
@@ -23,6 +27,127 @@ from profession_db import classify_profession
 # negative answer to the metro part of the discovery question.
 _METRO_CITY_RE = re.compile(r"\b(?:delhi|mumbai|kolkata|chennai)\b", re.IGNORECASE)
 _RENT_HRA_CONTEXT_RE = re.compile(r"\brent\w*|\bhra\b|\bkiraya\b", re.IGNORECASE)
+
+# ── Sprint 2 Step D2/G: NLP input guards (docs/sprint2-design.md) ────────
+#
+# V-1 closure: every NLP-written numeric is clamped to 0..1e11 AFTER
+# monthly annualization, at the assignment block (central helper
+# NLPEngine._clamp_amount). Values above the cap surface the advisory
+# below; the session then never holds more than ₹100 crore per key.
+_NLP_AMOUNT_CAP = 1e11
+NLP_CLAMP_ADVISORY = (
+    "Amount exceeds the supported range — clamped to ₹100 crore"
+)
+
+# Objective G / G-1 closure: ages booked as income before the dedicated
+# extractor ("I am 105 years old" -> salary=105; "my age is 150" ->
+# other_income=150 — both verified live 2026-10-31). The extractor runs
+# BEFORE clause parsing on anchored patterns only; every consumed numeric
+# span is blanked (length-preserving) so it can never reach the parser.
+AGE_RANGE_ADVISORY = (
+    "Age must be 0-120 — please provide your age as a whole number of years."
+)
+SENIOR_AGE_NOTE = (
+    "Note: age assumed 60 (senior citizen) — tell me your exact age if "
+    "that is not right."
+)
+
+# Family words whose ages are never the user's OWN age (parent context is
+# out of scope for session["age"] — the numbers are swallowed, G scope).
+_FAMILY_WORDS = (
+    "father|mother|mom|dad|parents?|pita|mata|maa|baap|mummy|papa|pitaji|"
+    "son|daughter|child|kid|beta|beti"
+)
+_FAMILY_WORD_RE = re.compile(r"\b(?:" + _FAMILY_WORDS + r")\b", re.IGNORECASE)
+# family member + copula/age connector + integer -> that member's age
+_FAMILY_AGE_RE = re.compile(
+    r"\b(?:" + _FAMILY_WORDS + r")\b\s*(?:is|are|was|age[d]?|umar|umr)\s*"
+    r"(?P<num>\d{1,3}(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+# anchored age cues: number AFTER the cue word ("age 72", "aged 67",
+# "my age is 150", "umar 45"); word boundaries keep "package"/"percentage"
+# etc. from matching, the boundary assertion keeps the digit run whole and
+# the money-guard rejects "age 45 lakh" style continuations.
+_AGE_CUE_RE = re.compile(
+    r"\b(?:age[d]?|umar|umr)\b[^0-9]{0,8}?(?P<num>\d{1,3}(?:\.\d+)?)(?![\d.])"
+    r"(?!\s*(?:%|percent|lakh|lakhs?|lacs?|crores?|crs?|cr|k\b|thousand|"
+    r"lpa|mn|million|pm|l\b))",
+    re.IGNORECASE,
+)
+# "<n> years old" cue (standalone per the design bullet)
+_YEARS_OLD_RE = re.compile(
+    r"(?P<num>\d{1,3}(?:\.\d+)?)\s*years?\s*old\b", re.IGNORECASE
+)
+# first-person copula + number ("I am 67", "I'm 67", "i m 56"). The first
+# assertion ends the digit run at its FULL length (without it the greedy
+# {1,3} backtracks past the money guard: "I am 45k earner" extracted a
+# truncated age 4); the lookahead then rejects money/percentage
+# continuations ("I am 40 percent disabled", "I am 45 lakh") — not ages.
+_COPIULA_AGE_RE = re.compile(
+    r"\bi\s*(?:am|'m|m)\s*(?P<num>\d{1,3}(?:\.\d+)?)(?![\d.])"
+    r"(?!\s*(?:%|percent|lakh|lakhs?|lacs?|crores?|crs?|cr|k\b|thousand|"
+    r"lpa|mn|million|pm|l\b))",
+    re.IGNORECASE,
+)
+# a percentage is never a monetary amount ("80% plus", "100 percent",
+# "40 percent disabled") — the number is masked before the parser runs
+# (the digit pass only drops <100, so "100 percent" would book 100).
+_PERCENT_RE = re.compile(
+    r"(?P<num>\d[\d,]*(?:\.\d+)?)\s*(?:%|percent(?:age)?\b)", re.IGNORECASE
+)
+# the guard's own clause window (commas count here — sentence splitting
+# skips commas adjacent to digits: "I am 67, my father is 91" is ONE
+# sentence, but the self-age and the parent-age live in different clauses)
+_GUARD_CLAUSE_SPLIT_RE = re.compile(r"\s+(?:and|&)\s+|[,;]", re.IGNORECASE)
+_SENIOR_RE = re.compile(r"senior citizen|super senior", re.IGNORECASE)
+
+# 80U/80DD disability-category collection (heuristic-honest: keywords book
+# the enum value, a bare section mention asks back, nothing is guessed).
+_DISABILITY_WORD_RE = re.compile(r"\bdisab\w*|\bhandicapped\b", re.IGNORECASE)
+_80U_MENTION_RE = re.compile(r"\b80u\b|\b80dd\b", re.IGNORECASE)
+_SEVERE_80_RE = re.compile(r"\bsevere\b|\b(?:80|100)\b", re.IGNORECASE)
+_GENERIC_40_RE = re.compile(r"\bpartial\b|\b40\b|\bpercent(?:age)?\b", re.IGNORECASE)
+ASKBACK_80U = (
+    "For Section 80U/80DD the deduction is a flat amount based on the "
+    "disability category — is it 40-79% (₹75,000) or 80% or more (₹1,25,000)?"
+)
+
+# 80G donee-category collection (R-g). Ordered, most specific first.
+_DONATION_CTX_RE = re.compile(
+    r"\bdonat\w*|\b80g\b|\bcharity\b|\bcharitable\b|\bdaan\b|\bngo\b|"
+    r"\brelief fund\b|\btrust\b",
+    re.IGNORECASE,
+)
+_80G_CATEGORY_KEYWORDS: Tuple[Tuple[str, str], ...] = (
+    ("pm cares", "cat_100_no_limit"),
+    ("pmnrf", "cat_100_no_limit"),
+    ("pm relief fund", "cat_100_no_limit"),
+    ("pm fund", "cat_100_no_limit"),
+    ("cm relief fund", "cat_100_no_limit"),
+    ("cm fund", "cat_100_no_limit"),
+    ("national defence", "cat_100_no_limit"),
+    ("national defense", "cat_100_no_limit"),
+    ("government", "cat_100_qualifying_limit"),
+    ("govt", "cat_100_qualifying_limit"),
+    ("local authority", "cat_100_qualifying_limit"),
+    ("municipal", "cat_100_qualifying_limit"),
+    ("charitable trust", "cat_50_no_limit"),
+    ("ngo", "cat_50_no_limit"),
+    ("hospital", "cat_50_no_limit"),
+    ("temple", "cat_50_qualifying_limit"),
+    ("mosque", "cat_50_qualifying_limit"),
+    ("church", "cat_50_qualifying_limit"),
+    ("gurudwara", "cat_50_qualifying_limit"),
+    ("religious", "cat_50_qualifying_limit"),
+    ("charitable institution", "cat_50_qualifying_limit"),
+)
+ASKBACK_80G = (
+    "For Section 80G, which donee category applies — PM CARES / National "
+    "Defence (100%, no limit), NGO or charitable trust (50%, no limit), "
+    "Government / local authority, or another charitable / religious "
+    "institution?"
+)
 
 
 class NLPEngine:
@@ -48,6 +173,13 @@ class NLPEngine:
             return "80d"
         if any(k in lq for k in ["nps", "pension", "80ccd"]):
             return "nps"
+        # Sprint 2 Step D2/G: the 80U/80DD ask-back mentions "80U/80DD" —
+        # substring matching would read it as "80d" and mis-route a bare
+        # follow-up amount to health insurance. The flat 80U/80DD deduction
+        # is category-driven (no amount is collected), so no asked category
+        # is primed. Word-boundary matching keeps "80ddb" out.
+        if re.search(r"\b80u\b|\b80dd\b", lq):
+            return None
         if any(k in lq for k in ["home loan", "24b", "interest", "ghar ka loan"]):
             return "24b"
         if any(k in lq for k in ["rent", "hra", "80gg", "kiraya"]):
@@ -80,8 +212,190 @@ class NLPEngine:
             r"no investment", r"no insurance", r"no nps", r"no hra",
             r"no rent", r"no donation", r"nahi hai", r"kuch nahi", r"nahi kiya",
             r"not applicable", r"i don'?t", r"i have none", r"i have no",
+            # Sprint 2 Step D2/G: negated disability/donation mentions must
+            # not book a category (the collection heuristics are keyword-
+            # driven; "no disability" is a refusal, not a 40-79% claim).
+            r"no disability", r"not disab\w*", r"no 80u", r"no 80dd",
+            r"no 80g", r"no charity",
         ]
         return any(re.search(p, t) for p in negative_phrases)
+
+    # ------------------------------------------------------------------ #
+    #  Sprint 2 Step D2/G — pre-parse guards                             #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _clamp_amount(value: float) -> Tuple[float, bool]:
+        """V-1 closure: clamp an NLP-written numeric to 0..1e11.
+
+        Applied at every write site in the assignment block AFTER monthly
+        annualization (post-annualization values are the ones that reach
+        the session). Values above the cap come back as ₹100 crore with
+        clamped=True (the caller emits NLP_CLAMP_ADVISORY); negatives
+        clamp to 0 (the digit parser cannot produce them — defensive).
+        Returns (value, clamped).
+        """
+        try:
+            v = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return 0.0, False
+        if not math.isfinite(v):
+            # only float() can be non-finite here; ints are always finite
+            return (_NLP_AMOUNT_CAP if v > 0 else 0.0), True
+        if v < 0:
+            return 0.0, False
+        if v > _NLP_AMOUNT_CAP:
+            return _NLP_AMOUNT_CAP, True
+        return v, False
+
+    @staticmethod
+    def _clause_has_family(text: str, pos: int) -> bool:
+        """True when a family word shares the guard-clause window with the
+        match at pos (the family-context guard for age extraction and the
+        senior-citizen heuristic)."""
+        start = 0
+        for m in _GUARD_CLAUSE_SPLIT_RE.finditer(text, 0, pos):
+            start = m.end()
+        nxt = _GUARD_CLAUSE_SPLIT_RE.search(text, pos)
+        end = nxt.start() if nxt else len(text)
+        return bool(_FAMILY_WORD_RE.search(text[start:end]))
+
+    def _preparse_guard(
+        self,
+        s: str,
+        session: Dict[str, Any],
+        extracted: List[str],
+        notes: List[str],
+        askbacks: List[str],
+        allow_askback: bool,
+    ) -> str:
+        """Step D2/G pre-parse pass over ONE sentence (before clause
+        parsing). Runs, in order:
+
+        1. Age extraction (Objective G / G-1 fix). Anchored patterns only —
+           the cue words age/aged/years old/umar/umr and the "I am <int>"
+           copula; a bare number with no anchor is never an age. Integers
+           0-120 book session["age"] as an int (last explicit age wins);
+           out-of-range ints (121-999) and non-integers (67.5) are
+           swallowed with an advisory. Family-context numbers ("my father
+           is 91") are swallowed silently — parent ages never book the
+           session age. Every consumed numeric span is BLANKED
+           (length-preserving) so it can never reach UniversalParser
+           (G-1: "I am 105 years old" used to book salary=105) and the
+           extractor never touches _last_val/_prev_salary.
+        2. Percentage masking: "<n>%" / "<n> percent" is never a monetary
+           amount (the digit pass only drops <100, so "100 percent" would
+           book ₹100 of income).
+        3. Senior-citizen heuristic: "senior citizen" with no family word
+           in the clause floors session["age"] at 60 — the reply states
+           the assumption (SENIOR_AGE_NOTE) so it can be corrected; an
+           explicit age in the same message wins.
+        4. 80U/80DD disability-category collection: severity keywords book
+           the enum value; a generic disability mention books "40_79"; a
+           bare "80u"/"80dd" mention emits the category ask-back and books
+           nothing. Detection runs on the ORIGINAL sentence so percentage-
+           masked numbers still classify ("80 percent" -> 80_plus).
+        5. 80G donee-category collection: keyword table books the enum
+           value (donation context or an open 80G ask-back required); no
+           keyword match with donation context emits the ask-back and
+           books nothing (heuristic-honest).
+
+        Returns the masked sentence for the normal parse path.
+        """
+        original_lower = s.lower()
+        masked = s
+
+        def _blank(a: int, b: int) -> None:
+            # length-preserving: spans collected from earlier passes stay
+            # valid, and later regex passes see blanks instead of digits
+            nonlocal masked
+            masked = masked[:a] + " " * (b - a) + masked[b:]
+
+        # 1a. family-context ages — swallowed, never the user's own age
+        for m in _FAMILY_AGE_RE.finditer(masked):
+            _blank(m.start("num"), m.end("num"))
+
+        # 1b. anchored age extraction (cue words + first-person copula)
+        for pattern in (_AGE_CUE_RE, _YEARS_OLD_RE, _COPIULA_AGE_RE):
+            for m in pattern.finditer(masked):
+                num_str = m.group("num")
+                if self._clause_has_family(masked, m.start()):
+                    # a family member's age in the same clause — swallow
+                    _blank(m.start(), m.end())
+                    continue
+                if "." in num_str:
+                    # non-integer age: rejected, never booked
+                    extracted.append(AGE_RANGE_ADVISORY)
+                    _blank(m.start(), m.end())
+                    continue
+                age = int(num_str)
+                if 0 <= age <= 120:
+                    session["age"] = age  # int only (validator row)
+                    extracted.append(f"AGE: {age} (years — noted)")
+                    notes.append(f"Noted — your age: {age}.")
+                    logger.info("age extractor: session age set to %d", age)
+                else:
+                    extracted.append(AGE_RANGE_ADVISORY)
+                    logger.info("age extractor: out-of-range age %d swallowed", age)
+                _blank(m.start(), m.end())
+
+        # 2. percentages are never amounts — mask the number
+        for m in _PERCENT_RE.finditer(masked):
+            _blank(m.start("num"), m.end("num"))
+
+        # 3. senior-citizen heuristic (per clause, family-guarded)
+        for m in _SENIOR_RE.finditer(masked):
+            if self._clause_has_family(masked, m.start()):
+                continue  # "my parents are senior citizens" — not the user
+            current = session.get("age")
+            if not isinstance(current, int) or isinstance(current, bool) or current < 60:
+                session["age"] = 60
+                notes.append(SENIOR_AGE_NOTE)
+                logger.info("senior-citizen heuristic: age floored to 60")
+
+        zero_intent = self._is_zero_intent(s)
+        last_q = session.get("_last_question", "") or ""
+
+        # 4. 80U/80DD disability category (heuristic-honest)
+        if not zero_intent:
+            u80_open = "80U/80DD" in last_q and "40-79%" in last_q
+            dis_word = bool(_DISABILITY_WORD_RE.search(original_lower))
+            sec_mention = bool(_80U_MENTION_RE.search(original_lower))
+            severe = bool(_SEVERE_80_RE.search(original_lower))
+            generic = bool(_GENERIC_40_RE.search(original_lower))
+            if dis_word or sec_mention or u80_open:
+                if severe:
+                    session["80u_80dd_category"] = "80_plus"
+                    extracted.append("80U/80DD CATEGORY: 80_plus (flat ₹1,25,000)")
+                    logger.info("80U/80DD category collected: 80_plus")
+                elif generic or dis_word:
+                    session["80u_80dd_category"] = "40_79"
+                    extracted.append("80U/80DD CATEGORY: 40_79 (flat ₹75,000)")
+                    logger.info("80U/80DD category collected: 40_79")
+                elif allow_askback:
+                    # bare section mention: ask the category, book nothing
+                    askbacks.append(ASKBACK_80U)
+
+        # 5. 80G donee category (heuristic-honest)
+        if not zero_intent:
+            donation_ctx = bool(_DONATION_CTX_RE.search(original_lower))
+            category: Optional[str] = None
+            for keyword, cat in _80G_CATEGORY_KEYWORDS:
+                if keyword in original_lower:
+                    category = cat
+                    break
+            if category and (donation_ctx or "donee category" in last_q):
+                session["80g_category"] = category
+                extracted.append(
+                    f"80G CATEGORY: {category} (rate applied at calculation)"
+                )
+                logger.info("80G category collected: %s", category)
+            elif donation_ctx and allow_askback:
+                # donation with no recognizable donee: ask back, book no
+                # category (the engine's disclosed default still applies)
+                askbacks.append(ASKBACK_80G)
+
+        return masked
 
     # ------------------------------------------------------------------ #
     #  Main entry-point
@@ -144,6 +458,13 @@ class NLPEngine:
         sentences = re.split(r'(?<!\d)[,.;!?](?!\d)', text)
         newly_extracted: List[str] = []
         already_mapped_this_turn: set = set()
+        # Sprint 2 Step D2/G: reply notes (age/senior-citizen assumption)
+        # and category ask-backs collected by the pre-parse guard. All
+        # message-scoped locals — the engine is a shared singleton, so no
+        # state may live on self.
+        notes: List[str] = []
+        askbacks: List[str] = []
+        allow_askback = not bare_no
 
         # Sprint 2 Step D: 80EEA advisory-keyword check. The section was
         # DISCONTINUED (loans must have been sanctioned before April 2022),
@@ -160,6 +481,17 @@ class NLPEngine:
             s = sentence.strip()
             if not s:
                 continue
+            s_lower = s.lower()
+
+            # Sprint 2 Step D2/G: pre-parse guard — anchored age extraction
+            # with span masking (Objectives G + G-1), percentage masking,
+            # the senior-citizen heuristic and the 80U/80DD + 80G category
+            # collection. Returns the sentence with consumed numeric spans
+            # blanked (length-preserving) so those numbers never reach
+            # UniversalParser.
+            s = self._preparse_guard(
+                s, session, newly_extracted, notes, askbacks, allow_askback
+            )
             s_lower = s.lower()
 
             # Sprint 2 Step B: metro-city booking (heuristic documented at
@@ -233,9 +565,14 @@ class NLPEngine:
                     if session.get("_prev_salary"):
                         last_val = last_val or session.get("salary")
                         session["salary"] = session.pop("_prev_salary")
-                    if last_val:
-                        session[corr_cat] = round(session.get(corr_cat, 0) + last_val, 2) if isinstance(session.get(corr_cat), (int, float)) else last_val
-                        newly_extracted.append(f"{corr_cat.upper()}: ₹{last_val:,.0f} (CORRECTED)")
+                if last_val:
+                    new_val = round(session.get(corr_cat, 0) + last_val, 2) if isinstance(session.get(corr_cat), (int, float)) else last_val
+                    # V-1: correction re-bookings clamp at the write too.
+                    new_val, clamped = self._clamp_amount(new_val)
+                    if clamped:
+                        newly_extracted.append(NLP_CLAMP_ADVISORY)
+                    session[corr_cat] = new_val
+                    newly_extracted.append(f"{corr_cat.upper()}: ₹{last_val:,.0f} (CORRECTED)")
 
             for clause, matches in clause_match_pairs:
                 for i, m in enumerate(matches):
@@ -263,7 +600,12 @@ class NLPEngine:
                                 continue
                             prev_val = session.get(suspect, 0)
                             if isinstance(prev_val, (int, float)) and prev_val >= val:
-                                session[suspect] = max(0, prev_val - val)
+                                subtracted = max(0, prev_val - val)
+                                # V-1: even correction writes stay bounded.
+                                subtracted, clamped = self._clamp_amount(subtracted)
+                                if clamped:
+                                    newly_extracted.append(NLP_CLAMP_ADVISORY)
+                                session[suspect] = subtracted
                                 break
 
                     # 4d. Monthly → annual conversion (C3: exactly one ×12).
@@ -283,12 +625,30 @@ class NLPEngine:
                     trailing = clause[m["end"]:seg_end].lower()
                     if m.get("annualized"):
                         label += " (ANNUALIZED)"
-                    elif any(kw in trailing for kw in monthly_kws):
+                    elif (any(kw in trailing for kw in monthly_kws if kw != " pm ")
+                          or trailing.lstrip().startswith("pm")):
+                        # Step D2/G: the " pm " token must START the
+                        # trailing segment (the parser's own contract) —
+                        # a bare substring hit annualized donations to the
+                        # PM funds ("donated 1 lakh to PM CARES" booked
+                        # 1,200,000: " pm " matched inside "to PM CARES").
                         val  *= 12
                         label += " (ANNUALIZED)"
 
-                    # 4e. Assignment
-                    OVERWRITE_CATS = ["salary", "business", "rental", "other_income", "age"]
+                    # Sprint 2 Step D2/G (V-1 closure): clamp every
+                    # NLP-written numeric to 0..1e11 AFTER monthly
+                    # annualization. One central helper applied here at the
+                    # write path; the accumulate branches re-clamp their
+                    # sums below (two clamped inputs can still sum over).
+                    val, clamped = self._clamp_amount(val)
+                    if clamped:
+                        newly_extracted.append(NLP_CLAMP_ADVISORY)
+                        logger.info("NLP write clamped to the ₹100 crore cap")
+
+                    # 4e. Assignment. "age" is NOT an overwrite category —
+                    # session["age"] is written only by the pre-parse age
+                    # extractor (Step D2/G).
+                    OVERWRITE_CATS = ["salary", "business", "rental", "other_income"]
 
                     # C4a guard: a profile-default fall-through (no category
                     # scored above threshold) must never OVERWRITE an existing
@@ -325,7 +685,11 @@ class NLPEngine:
                         )
                     elif best_cat in OVERWRITE_CATS and not is_correction:
                         if best_cat in already_mapped_this_turn:
-                            session[best_cat] = round(session.get(best_cat, 0) + val, 2)
+                            summed = round(session.get(best_cat, 0) + val, 2)
+                            summed, sum_clamped = self._clamp_amount(summed)
+                            if sum_clamped:
+                                newly_extracted.append(NLP_CLAMP_ADVISORY)
+                            session[best_cat] = summed
                         else:
                             if best_cat == "salary" and session.get("salary", 0) > 0 and val != session.get("salary"):
                                 session["_prev_salary"] = session["salary"]
@@ -333,9 +697,13 @@ class NLPEngine:
                             already_mapped_this_turn.add(best_cat)
                     else:
                         existing = session.get(best_cat, 0)
-                        session[best_cat] = round(
+                        summed = round(
                             (existing + val) if isinstance(existing, (int, float)) else val, 2
                         )
+                        summed, sum_clamped = self._clamp_amount(summed)
+                        if sum_clamped:
+                            newly_extracted.append(NLP_CLAMP_ADVISORY)
+                        session[best_cat] = summed
 
                     newly_extracted.append(f"{label}: ₹{val:,.0f}")
 
@@ -356,6 +724,14 @@ class NLPEngine:
 
         # ── 6. Generate response ───────────────────────────────────────
         response = self._generate_reply(session, newly_extracted, plan, text_lower, bare_no)
+        # Sprint 2 Step D2/G: surface the age/senior-citizen assumption
+        # notes and the category ask-backs. Appending keeps the discovery
+        # flow intact; the ask-back rides inside _last_question so the
+        # next utterance is classified as its answer.
+        for note in notes:
+            response += "\n" + note
+        for askback in askbacks:
+            response += "\n" + askback
         session["_last_question"] = response
 
         if "history" not in session:
