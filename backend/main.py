@@ -109,6 +109,7 @@ from starlette.types import ASGIApp
 
 import auth
 import config
+import corpus
 import db
 import observability
 from audit_logger import AuditLogger, scrub_state
@@ -1212,6 +1213,24 @@ def create_app(app_env: str = "dev") -> FastAPI:
             "audit": tax_result,
             "user_id": user_id,
         })
+
+        # 6. Full-fidelity corpus capture (Sprint 3 follow-up — the
+        # dataset strategy from Sprint4_AI_Modernization.md). Opt-in via
+        # TAX_CORPUS_CAPTURE: stores the COMPLETE input + output + state
+        # so real conversations become golden regression fixtures. The
+        # certified audit stream (minimized) is untouched. Best-effort,
+        # never fatal (corpus.py contract).
+        background_tasks.add_task(
+            corpus.capture_chat_turn,
+            session_id=session_id,
+            user_id=user_id,
+            user_input=request.message,
+            ai_response=result["response"],
+            extracted=result.get("extracted"),
+            plan=result.get("plan"),
+            state=result["session"],
+            tax_report=tax_result,
+        )
 
         # Return everything for the frontend to render real-time. `session`
         # is the READ-ONLY projection (internal keys dropped); the full
