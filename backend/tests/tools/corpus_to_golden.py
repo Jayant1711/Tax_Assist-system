@@ -50,9 +50,12 @@ def load_records(corpus_path: Path):
             if not line:
                 continue
             try:
-                records.append(json.loads(line))
+                record = json.loads(line)
             except json.JSONDecodeError:
                 corrupt += 1  # skip; never fatal (append-only discipline)
+                continue
+            if isinstance(record, dict):
+                records.append(record)
     return records, corrupt
 
 
