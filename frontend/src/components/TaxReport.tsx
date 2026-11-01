@@ -2,29 +2,36 @@
 
 import React, { useState, useEffect } from 'react';
 import SavingsGraph from './SavingsGraph';
+import { apiFetch } from '../lib/api';
 
+/**
+ * Wave D contract (ADR-013): the report computes from the owned
+ * server-side state — the wire carries {session_id} only. The projection
+ * prop rides along for identity fallbacks; the numbers never come from
+ * the client anymore.
+ */
 interface Props {
-  session: any;
+  sessionId: string | null;
+  projection?: Record<string, any> | null;
   activeView?: string;
-  onUpdateSession?: (session: any) => void;
 }
 
-export default function TaxReport({ session, activeView }: Props) {
+export default function TaxReport({ sessionId, projection }: Props) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'computation' | 'slabs' | 'advice'>('computation');
 
   useEffect(() => {
-    if (!session || Object.keys(session).length === 0) return;
+    if (!sessionId) return;
 
     let isMounted = true;
     setLoading(true);
 
-    fetch('http://localhost:8000/calculate', {
+    apiFetch('/calculate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(session),
+      body: JSON.stringify({ session_id: sessionId }),
     })
       .then((res) => {
         if (!res.ok) throw new Error(`Backend calculation error: ${res.status}`);
@@ -49,7 +56,7 @@ export default function TaxReport({ session, activeView }: Props) {
     return () => {
       isMounted = false;
     };
-  }, [session]);
+  }, [sessionId, projection]);
 
   if (loading) {
     return (
@@ -73,12 +80,12 @@ export default function TaxReport({ session, activeView }: Props) {
 
   if (error) {
     return (
-      <div style={{ padding: '1.5rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-md)' }}>
+      <div role="alert" style={{ padding: '1.5rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-md)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-red)', fontWeight: 700, marginBottom: '0.5rem' }}>
           <span>⚠️</span> Calculation Service Offline
         </div>
         <p style={{ fontSize: '0.82rem', color: 'var(--text-sub)' }}>
-          Could not communicate with the Python backend (`http://localhost:8000/calculate`). Ensure `main.py` is running.
+          Unable to reach the calculation service — please try again in a moment.
         </p>
       </div>
     );
@@ -88,7 +95,6 @@ export default function TaxReport({ session, activeView }: Props) {
 
   const rec = data.recommendation || 'New Regime';
   const best = rec === 'New Regime' ? data.new_regime : data.old_regime;
-  const other = rec === 'New Regime' ? data.old_regime : data.new_regime;
 
   const effScore = data.efficiency_score ?? best?.efficiency_score ?? 85.0;
   const effColor = effScore >= 75 ? 'var(--accent-green)' : effScore >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)';
@@ -112,7 +118,7 @@ export default function TaxReport({ session, activeView }: Props) {
             </div>
           </div>
           <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#64748b' }}>
-            <div>Session ID: {session?.id || 'DEMO-AUDIT'}</div>
+            <div>Session ID: {sessionId ?? projection?.id ?? 'DEMO-AUDIT'}</div>
             <div>Generated: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
           </div>
         </div>

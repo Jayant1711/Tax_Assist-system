@@ -1,6 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../lib/api';
+
+/**
+ * Read-only state projection returned by the backend (ADR-013 Wave D):
+ * the server keeps the full session state; only internal keys are scrubbed.
+ */
+export type SessionProjection = Record<string, any>;
 
 interface Message {
   id: string;
@@ -11,7 +18,10 @@ interface Message {
 }
 
 interface Props {
-  onUpdateSession: (session: any) => void;
+  /** Server-issued app session id (bootstrap in page.tsx). */
+  sessionId: string;
+  /** Applied on every server response; a new id accompanies re-bootstraps. */
+  onUpdateSession: (projection: SessionProjection, sessionId?: string) => void;
   onShowReport: (show: boolean) => void;
 }
 
@@ -90,7 +100,7 @@ function formatMarkdown(text: string): React.ReactNode {
   });
 }
 
-export default function ChatInterface({ onUpdateSession, onShowReport }: Props) {
+export default function ChatInterface({ sessionId, onUpdateSession, onShowReport }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -101,12 +111,8 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [session, setSession] = useState<any>({
-    id: `sid_${Date.now()}`,
-    phase: 'PROFILING',
-  });
+  const [projection, setProjection] = useState<SessionProjection>({ phase: 'PROFILING' });
   const [showDebug, setShowDebug] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -126,7 +132,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
     }
   }, [messages, isTyping]);
 
-  const currentPhase = session?.phase || 'PROFILING';
+  const currentPhase = projection?.phase || 'PROFILING';
   const currentPhaseIdx = Math.max(0, PHASES.indexOf(currentPhase));
 
   const sendMessage = async (messageText?: string) => {
@@ -145,17 +151,20 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
     setIsTyping(true);
 
     try {
-      const res = await fetch('http://localhost:8000/chat', {
+      // Wave D contract: the state lives server-side — the wire carries
+      // only the message and the server-issued session id.
+      const res = await apiFetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: textToSend, session }),
+        body: JSON.stringify({ message: textToSend, session_id: sessionId }),
       });
 
       if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
 
       const data = await res.json();
-      setSession(data.session);
-      onUpdateSession(data.session);
+      const nextProjection: SessionProjection = data.session ?? {};
+      setProjection(nextProjection);
+      onUpdateSession(nextProjection, data.session_id);
 
       setTimeout(() => {
         setIsTyping(false);
@@ -168,7 +177,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
         };
         setMessages((prev) => [...prev, aiMsg]);
 
-        if (data.session?.phase === 'FINAL' || (data.tax_report && Object.keys(data.tax_report).length > 0)) {
+        if (nextProjection?.phase === 'FINAL' || (data.tax_report && Object.keys(data.tax_report).length > 0)) {
           onShowReport(true);
         }
       }, 400);
@@ -180,25 +189,42 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
         {
           id: `err_${Date.now()}`,
           role: 'ai',
-          text: '⚠️ **Backend Unavailable** — Ensure the FastAPI server is running on `http://localhost:8000`. You can start it via `cd backend && python main.py`.',
+          text: '⚠️ **Unable to reach the calculation service** — please try again in a moment.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
     }
   };
 
-  const handleResetSession = () => {
-    const newSession = { id: `sid_${Date.now()}`, phase: 'PROFILING' };
-    setSession(newSession);
-    onUpdateSession(newSession);
-    setMessages([
-      {
-        id: 'welcome_reset',
-        role: 'ai',
-        text: "New consultation started! What is your **profession and annual income**? (e.g. 'Software Engineer earning 15 LPA')",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ]);
+  const handleResetSession = async () => {
+    // Re-bootstrap: a fresh server-issued session (no client-authored state).
+    try {
+      const res = await apiFetch('/sessions', { method: 'POST' });
+      if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+      const data = await res.json();
+      const nextProjection: SessionProjection = data.session ?? { phase: 'PROFILING' };
+      setProjection(nextProjection);
+      onUpdateSession(nextProjection, data.session_id);
+      setMessages([
+        {
+          id: 'welcome_reset',
+          role: 'ai',
+          text: "New consultation started! What is your **profession and annual income**? (e.g. 'Software Engineer earning 15 LPA')",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    } catch (err) {
+      console.error('Session reset error:', err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `err_${Date.now()}`,
+          role: 'ai',
+          text: '⚠️ **Could not start a new session** — please try again in a moment.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    }
   };
 
   const currentSuggestions = QUICK_SUGGESTIONS[currentPhase] || [];
@@ -219,6 +245,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
             className="debug-toggle"
             onClick={() => setShowDebug(!showDebug)}
             title="Toggle session telemetry"
+            aria-expanded={showDebug}
           >
             {showDebug ? '✕ Hide State' : '🔍 Debug'}
           </button>
@@ -234,7 +261,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
       </div>
 
       {/* ── Progress Stepper ── */}
-      <div className="stepper">
+      <div className="stepper" aria-label={`Consultation phase: ${currentPhase}`}>
         {PHASES.map((p, i) => {
           const isDone = i < currentPhaseIdx;
           const isActive = i === currentPhaseIdx;
@@ -256,15 +283,15 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
         })}
       </div>
 
-      {/* ── Debug Panel ── */}
+      {/* ── Debug Panel (read-only projection) ── */}
       {showDebug && (
         <div style={{ padding: '0.75rem 1.5rem', background: 'rgba(0,0,0,0.4)', borderBottom: '1px solid var(--border)' }}>
           <div className="debug-panel">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-              <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>Active Session ID: {session?.id}</span>
-              <span style={{ color: 'var(--accent-green)' }}>Phase: {session?.phase}</span>
+              <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>Active Session ID: {sessionId}</span>
+              <span style={{ color: 'var(--accent-green)' }}>Phase: {projection?.phase}</span>
             </div>
-            <pre>{JSON.stringify(session, null, 2)}</pre>
+            <pre>{JSON.stringify(projection, null, 2)}</pre>
           </div>
         </div>
       )}
@@ -415,6 +442,7 @@ export default function ChatInterface({ onUpdateSession, onShowReport }: Props) 
               }
             }}
             disabled={isTyping}
+            aria-label="Message the tax consultant"
           />
           <button
             className="send-btn"

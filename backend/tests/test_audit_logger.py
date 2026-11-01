@@ -426,7 +426,21 @@ class TestAuditPathSafety:
 
 # ---------------------------------------------------------------------------
 # /history endpoint
+#
+# Wave D adaptation (mechanical, documented — design §10 / ADR-013): the
+# endpoint requires an AUTHENTICATED user with an OWNED app session
+# (foreign/unknown -> 404, anonymous -> 401) and the Sprint-1 interim C5
+# gate default flips to ON (TAX_ENABLE_HISTORY stays as a kill-switch).
+# Every row therefore logs in + bootstraps a session and writes its audit
+# entries under the SERVER-ISSUED id; the filtering/pagination/corruption/
+# fallback/blackbox-guard assertions are unchanged.
 # ---------------------------------------------------------------------------
+
+import sys as _sys
+
+_sys.path.insert(0, BACKEND_DIR)
+
+from tests.conftest import make_session, register_and_login  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -434,14 +448,23 @@ def client():
     previous_cwd = os.getcwd()
     os.chdir(BACKEND_DIR)
     try:
+        import db as db_module
         from fastapi.testclient import TestClient
 
         from main import app
 
+        db_module.init_db()  # re-anchor the store (earlier modules re-point it)
         with TestClient(app) as test_client:
             yield test_client
     finally:
         os.chdir(previous_cwd)
+
+
+def _owned_session(client) -> str:
+    """Register + log in and bootstrap one OWNED app session; returns the
+    server-issued id the /history rows key their audit entries on."""
+    register_and_login(client)
+    return make_session(client)
 
 
 @pytest.fixture
@@ -455,57 +478,69 @@ def fake_audit(tmp_path, monkeypatch):
 
 
 class TestHistoryEndpoint:
-    def test_gate_stays_404_by_default(self, client, monkeypatch) -> None:
+    def test_anonymous_history_is_401_by_default(self, client, monkeypatch) -> None:
+        # Was: "gate stays 404 by default" (Sprint-1 interim C5 measure).
+        # Wave D supersedes it: the default is ON, the endpoint is authed,
+        # so an anonymous request is a 401 before anything else.
         monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
-        response = client.get("/history/sid_hist1")
-        assert response.status_code == 404
+        response = client.get(f"/history/{'0' * 32}")
+        assert response.status_code == 401
 
-    def test_enabled_serves_jsonl_entries_filtered_by_sid(
+    def test_serves_jsonl_entries_filtered_by_owned_sid(
         self, client, fake_audit, monkeypatch
     ) -> None:
-        monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
+        monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)  # default ON
+        sid = _owned_session(client)
         for i in range(3):
-            fake_audit.log_interaction("sid_hist1", f"in {i}", f"out {i}", {"salary": i})
+            fake_audit.log_interaction(sid, f"in {i}", f"out {i}", {"salary": i})
         fake_audit.log_interaction("sid_other", "other in", "other out", {})
 
-        response = client.get("/history/sid_hist1")
+        response = client.get(f"/history/{sid}")
         assert response.status_code == 200
         body = response.json()
         assert set(body) == {"entries", "corrupt_lines_skipped", "has_more"}
         assert body["corrupt_lines_skipped"] == 0
         assert body["has_more"] is False
-        assert [e["session_id"] for e in body["entries"]] == ["sid_hist1"] * 3
+        assert [e["session_id"] for e in body["entries"]] == [sid] * 3
         # Same schema fields the frontend knows; free text minimized.
         entry = body["entries"][0]
         assert entry["user_input"]["char_length"] == len("in 0")
         assert entry["user_input"]["stored"] is False
         assert entry["internal_state"]["salary"] == 0
 
-    def test_enabled_filters_hostile_sid_to_sanitized_name(
+    def test_hostile_audit_sids_stay_sanitized_but_are_not_served(
         self, client, fake_audit, monkeypatch
     ) -> None:
-        monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
+        # Was: the sanitized name of a hostile sid was servable by path.
+        # Wave D: the sanitization itself is UNCHANGED (the stream still
+        # stores the hostile id under its deterministic safe name), but
+        # /history serves only OWNED app sessions — a server-issued uuid
+        # hex can never equal an "untrusted_<digest>" name, so the path is
+        # a 404 and the sanitized stream remains auditable via the logger.
+        monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
         fake_audit.log_interaction("../evil", "hi", "hello", {})
         entries, _, _ = fake_audit.read_entries()
         sanitized = entries[0]["session_id"]
+        assert _UNTRUSTED_SID_RE.match(sanitized)  # sanitization unchanged
 
+        register_and_login(client)
         response = client.get(f"/history/{sanitized}")
-        assert response.status_code == 200
-        assert len(response.json()["entries"]) == 1
+        assert response.status_code == 404
 
     def test_pagination_limit_offset_and_has_more(
         self, client, fake_audit, monkeypatch
     ) -> None:
-        monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
+        monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
+        sid = _owned_session(client)
         for i in range(5):
-            fake_audit.log_interaction("sid_page", f"in {i}", f"out {i}", {"salary": i})
+            fake_audit.log_interaction(sid, f"in {i}", f"out {i}", {"salary": i})
 
-        page1 = client.get("/history/sid_page", params={"limit": 2, "offset": 0}).json()
+        page1 = client.get(f"/history/{sid}", params={"limit": 2, "offset": 0}).json()
         assert len(page1["entries"]) == 2
         assert page1["has_more"] is True
         assert [e["internal_state"]["salary"] for e in page1["entries"]] == [0, 1]
 
-        page3 = client.get("/history/sid_page", params={"limit": 2, "offset": 4}).json()
+        page3 = client.get(f"/history/{sid}", params={"limit": 2, "offset": 4}).json()
         assert len(page3["entries"]) == 1
         assert page3["has_more"] is False
         assert page3["entries"][0]["internal_state"]["salary"] == 4
@@ -514,18 +549,20 @@ class TestHistoryEndpoint:
         "params", [{"limit": 0}, {"limit": 201}, {"limit": "abc"}, {"offset": -1}]
     )
     def test_pagination_bounds_are_hard_422s(self, client, fake_audit, monkeypatch, params) -> None:
-        monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
-        response = client.get("/history/sid_page", params=params)
+        monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
+        sid = _owned_session(client)
+        response = client.get(f"/history/{sid}", params=params)
         assert response.status_code == 422
 
     def test_corrupt_lines_skipped_surfaced(self, client, fake_audit, monkeypatch) -> None:
-        monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
+        monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
+        sid = _owned_session(client)
         with open(fake_audit.log_file, "a", encoding="utf-8") as fh:
             fh.write("{broken line\n")
-        fake_audit.log_interaction("sid_corrupt", "in", "out", {"salary": 1})
-        fake_audit.log_interaction("sid_corrupt", "in2", "out2", {"salary": 2})
+        fake_audit.log_interaction(sid, "in", "out", {"salary": 1})
+        fake_audit.log_interaction(sid, "in2", "out2", {"salary": 2})
 
-        response = client.get("/history/sid_corrupt")
+        response = client.get(f"/history/{sid}")
         assert response.status_code == 200
         body = response.json()
         assert body["corrupt_lines_skipped"] == 1
@@ -534,12 +571,20 @@ class TestHistoryEndpoint:
     def test_legacy_session_audit_json_fallback_read_only(
         self, client, fake_audit, monkeypatch, tmp_path
     ) -> None:
-        monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
+        monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
+        sid = _owned_session(client)
+        # Wave D artifact: the login itself appended auth events to the
+        # JSONL stream (same stream, Wave C), so the file exists — the
+        # fallback's premise is "stream does not exist" and is restored by
+        # removing it (the entries were auth events for the login, not
+        # chat turns for any sid under test).
+        if os.path.exists(fake_audit.log_file):
+            os.remove(fake_audit.log_file)
         legacy_path = os.path.join(str(tmp_path), "session_audit.json")
         legacy_entries = [
             {
                 "timestamp": "2026-04-23T00:25:00",
-                "session_id": "sid_legacy",
+                "session_id": sid,
                 "user_input": "raw legacy text",
                 "ai_response": "legacy reply",
                 "internal_state": {"salary": 100},
@@ -551,7 +596,7 @@ class TestHistoryEndpoint:
             json.dump(legacy_entries, fh)
         before = _read_bytes(legacy_path)
 
-        response = client.get("/history/sid_legacy")
+        response = client.get(f"/history/{sid}")
         assert response.status_code == 200
         body = response.json()
         assert body["entries"] == [legacy_entries[0]]
@@ -562,19 +607,20 @@ class TestHistoryEndpoint:
         assert not os.path.exists(_stream_path(tmp_path))
 
     def test_never_serves_blackbox_content(self, client, fake_audit, monkeypatch, tmp_path) -> None:
-        monkeypatch.setenv("TAX_ENABLE_HISTORY", "1")
-        fake_audit.log_interaction("sid_bb", "global in", "global out", {"salary": 3})
+        monkeypatch.delenv("TAX_ENABLE_HISTORY", raising=False)
+        sid = _owned_session(client)
+        fake_audit.log_interaction(sid, "global in", "global out", {"salary": 3})
         blackbox_dir = os.path.join(str(tmp_path), "blackbox")
         os.makedirs(blackbox_dir, exist_ok=True)
         with open(
-            os.path.join(blackbox_dir, "sid_bb.jsonl"), "w", encoding="utf-8"
+            os.path.join(blackbox_dir, f"{sid}.jsonl"), "w", encoding="utf-8"
         ) as fh:
             fh.write(
-                json.dumps({"session_id": "sid_bb", "secret": "BLACKBOX_ONLY_MARKER"})
+                json.dumps({"session_id": sid, "secret": "BLACKBOX_ONLY_MARKER"})
                 + "\n"
             )
 
-        response = client.get("/history/sid_bb")
+        response = client.get(f"/history/{sid}")
         assert response.status_code == 200
         assert b"BLACKBOX_ONLY_MARKER" not in response.content
         assert len(response.json()["entries"]) == 1

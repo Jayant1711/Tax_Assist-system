@@ -1,126 +1,185 @@
 # Deployment Guide
 
-> Written 2026-10-31 from the codebase as it exists. **Read [§4 Security checklist](#4-security-checklist-before-any-public-exposure) before exposing this app beyond localhost** — as shipped, it is dev-only.
+> Rewritten 2026-11-01 for the Sprint 3 Wave F stack (Dockerfiles, compose, hardening edge, health checks). Statuses cite [decisions.md](decisions.md) ADR-012/013/014; the API contract lives in [api-reference.md](api-reference.md); backup/recovery in [backup-recovery.md](backup-recovery.md).
 
 ## 1. Prerequisites
 
 | Requirement | Version | Notes |
 |---|---|---|
-| Python | 3.10+ | NumPy required (ANFIS); `scikit-learn`/`pandas` declared but unused by runtime code |
-| Node.js | 18+ (Next.js 16) | |
-| OS | any | Developed on Windows |
+| Docker + Compose v2 | any current | The documented production deployment unit |
+| Python | 3.10+ (image uses 3.12-slim) | Only for bare-metal dev runs; NumPy required (ANFIS) |
+| Node.js | 20 (image uses node:20-alpine) | Only for bare-metal frontend dev; Next.js 16 |
+| Reverse proxy with TLS | nginx / Caddy / traefik / any | Terminates HTTPS, routes to loopback ports |
 
-## 2. Local development (verified against README)
+## 2. Files in the stack
 
-### Backend
+| File | Purpose |
+|---|---|
+| `backend/Dockerfile` | python:3.12-slim, pinned `requirements.txt`, non-root uid 10001, `HEALTHCHECK` (stdlib urllib probe of `/health`), **one uvicorn worker** (see §6) |
+| `frontend/Dockerfile` | node:20-alpine multi-stage (deps → build → runner); `NEXT_PUBLIC_API_URL` build arg; non-root uid 10001; `npm run start` |
+| `docker-compose.yml` | backend + frontend on host loopback only; named volumes `db-data` + `logs-data`; healthcheck + `depends_on: service_healthy`; restart unless-stopped |
+| `.env.example` | Every env var of the design §5 inventory, with comments — copy to `.env` and fill in |
+
+## 3. Environment inventory (Sprint 3 design §5)
+
+All backend variables are read at call time; an absent/blank/invalid value falls back to the documented default with a logged warning (`config.py`, `audit_logger.py`, `observability.py`).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `APP_ENV` | `dev` | `prod` enables the production posture (docs/redoc/openapi off, Secure cookies, CORS fail-closed). Only the exact value `prod` counts |
+| `CORS_ORIGINS` | dev: `http://localhost:3000` | Comma-separated exact browser origins. **Prod fails closed**: unset/empty/`*` raises at the point of use — no origin is trusted |
+| `TAX_DB_PATH` | `data/taxassist.db` | SQLite store (users, auth sessions, app sessions). Container: `/app/data/taxassist.db` (volume `db-data`) |
+| `TAX_HOST` / `TAX_PORT` | `127.0.0.1` / `8000` | Bind address of the `python main.py` dev entry. The container CMD binds `0.0.0.0` explicitly (dev bind safety only applies to the bare entry) |
+| `TAX_SESSION_TTL_MINUTES` | `30` | Sliding session TTL (ADR-012) |
+| `TAX_SESSION_ABS_TTL_HOURS` | `24` | Absolute session cap |
+| `TAX_COOKIE_SECURE` | `APP_ENV=prod` | Force/clear the Secure flag; `__Host-` cookie prefix in prod |
+| `TAX_ENABLE_ANON_DEMO` | off | Deny-by-default anonymous demo (`/chat` + `/calculate` only, never `/history`) |
+| `TAX_ENABLE_HISTORY` | **on** | `/history` kill-switch (C5 is closed by auth + ownership; this is an emergency shutoff only) |
+| `TAX_AUDIT_MAX_BYTES` | `10000000` | Audit stream rotation threshold |
+| `TAX_AUDIT_MAX_FILES` | `5` | Rotated audit generations kept |
+| `TAX_AUDIT_RETENTION_DAYS` | `30` | Sweeps rotated audit generations only; the active file is never deleted |
+| `TAX_AUDIT_STORE_TEXT` | off | DPDP opt-in: keep first 512 chars of raw user/AI text (default: sha256[:16] correlation hashes only) |
+| `TAX_RATE_LIMIT_AUTH_PER_MIN` | `10` | `/auth/*` per IP |
+| `TAX_RATE_LIMIT_CHAT_PER_MIN` | `30` | `/chat` + `/sessions*` per user |
+| `TAX_RATE_LIMIT_CALC_PER_MIN` | `60` | `/calculate` per user |
+| `TAX_RATE_LIMIT_GLOBAL_PER_MIN` | `120` | Aggregate per IP |
+| `TAX_MAX_BODY_BYTES` | `1000000` | 413 above this Content-Length |
+| `TAX_LOG_LEVEL` | `INFO` | Root log level (`DEBUG|INFO|WARNING|ERROR|CRITICAL`) |
+| `TAX_APP_LOG_MAX_BYTES` / `TAX_APP_LOG_MAX_FILES` / `TAX_APP_LOG_RETENTION_DAYS` | `10000000` / `5` / `30` | App-log (`logs/app/app.jsonl`) rotation/retention — same mechanics as the audit stream (Wave H) |
+| `NEXT_PUBLIC_API_URL` | `""` | **Build arg, not runtime.** Browser-reachable API base URL baked into the client bundle. `""` = single-origin prod; `http://localhost:8000` = dev; `https://api.your-app.example` = split-host prod |
+
+No signing secret exists (ADR-012): session tokens are opaque 256-bit random values stored only as sha256.
+
+## 4. Production startup (compose)
 
 ```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate            # Windows  (source .venv/bin/activate on POSIX)
-pip install -r requirements.txt
+cp .env.example .env          # then edit:
+#   CORS_ORIGINS=https://your-app.example   (exact browser origin, required in prod)
+#   TAX_COOKIE_SECURE=1                     (HTTPS terminates at the proxy)
+#   NEXT_PUBLIC_API_URL=                    ("" for single-origin, see §5)
 
-# One-time: train the ANFIS scorer (writes anfis_weights.json)
-python anfis_trainer.py            # ~200k synthetic scenarios, EE-Bat search
-
-python main.py                     # Uvicorn on 0.0.0.0:8000
+docker compose up -d --build
+docker compose ps             # backend -> healthy before frontend starts
+curl http://127.0.0.1:8000/health
 ```
 
-- A pre-trained `backend/anfis_weights.json` is already committed — training is only needed if you change the feature vector (20 inputs × 64 rules, `ai_models.py:461-462`).
-- ⚠ Do **not** run `anfis_refine.py` against those weights: it expects a 10×50 topology (`anfis_refine.py:15`) and will crash. It is dead code (roadmap Week 1, item 7).
-- If weights are regenerated with different dimensions, startup crashes at reshape (`ai_models.py:482-485`) — keep 20×64 or update the class constants together.
-- Interactive API docs: `http://localhost:8000/docs` (FastAPI auto).
+- Backend listens on `127.0.0.1:8000`, frontend on `127.0.0.1:3000` — both loopback-only; the reverse proxy is the only public entry.
+- State: named volumes `db-data` → `/app/data` (SQLite), `logs-data` → `/app/logs` (audit + app + blackbox JSONL). They survive `docker compose down`; they do NOT survive `down -v`. Back up with `backend/tools/backup_db.py` ([backup-recovery.md](backup-recovery.md)).
+- The backend container reports `healthy` only while `GET /health` returns 200 (a 503 degraded state marks it unhealthy); the frontend waits for `backend: condition: service_healthy`.
+- `.env` is gitignored — never commit it. A missing `.env` fails `docker compose up` because `env_file: .env` is required.
 
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev                        # http://localhost:3000
-```
-
-### Verify the stack
-
-```bash
-curl http://localhost:8000/docs                          # backend up
-curl -X POST http://localhost:8000/chat -H "Content-Type: application/json" \
-  -d "{\"message\":\"I earn 12 lakhs\",\"session\":{\"id\":\"sid_test1\"}}"
-```
-
-The frontend hardcodes `http://localhost:8000` (`ChatInterface.tsx:148`, `TaxReport.tsx:24`) — it works only against a locally running backend until ADR-010 lands.
-
-## 3. Runtime artifacts & configuration
-
-| Artifact | Path | Written by | Notes |
-|---|---|---|---|
-| Audit log | `backend/logs/session_audit.json` | `audit_logger.py` | Whole-file rewrite per chat turn; contains raw user text (PII) |
-| Black box | `backend/logs/blackbox/<sid>.json` | `session_lab.py` | Per-session turn log; `<sid>` is client-controlled (sanitize before deploying) |
-| Model weights | `backend/anfis_weights.json` | `anfis_trainer.py` | Committed; 95 KB |
-| Test report | `backend/test_report.json` | `test_suite.py` | Committed artifact — regenerates on test run |
-
-`.gitignore` already excludes `backend/logs/` and `.env`; there are **no env vars today** — ports, CORS, and the API URL are all hardcoded (`main.py:18,101`, frontend fetches).
-
-## 4. Security checklist before any public exposure
-
-Everything below is currently **missing**; treat this as a launch blocker list (details and evidence in the audit, mirrored in [decisions.md](decisions.md)):
-
-- [ ] **Authentication** — no endpoint requires auth today; `/history/{sid}` returns any session's financial data and IDs are timestamp-guessable (`main.py:82-91`). (C5)
-- [ ] **Session-ID sanitization** — client-supplied `session.id` is used in a filesystem path (`session_lab.py:22`) → arbitrary file write. (C6)
-- [ ] **Input validation** — `/calculate` accepts raw dicts; malformed amounts/capital-gains raise 500s; message length unbounded. (H5)
-- [ ] **CORS** — `allow_origins=["*"]`, all methods/headers (`main.py:18`). Restrict to the deployed origin.
-- [ ] **HTTPS** — Uvicorn serves plain HTTP on `0.0.0.0:8000`; terminate TLS at a reverse proxy.
-- [ ] **Rate limiting** — none; the regex NLP layer is CPU-bound per message.
-- [ ] **PII handling** — raw chat + financial figures persisted in plaintext with no retention policy (DPDP Act 2023 exposure). (S6)
-- [ ] **Dependency pinning** — `requirements.txt` unpinned; add `pip-audit` / `npm audit` to CI.
-
-## 5. Production topology (recommended)
+## 5. Reverse-proxy / TLS topology
 
 ```text
-[Browser] ──HTTPS──> [Reverse proxy / CDN: TLS, static frontend export]
-                          │
-                          └──> [Uvicorn × N workers behind gunicorn] ──> [SQLite/Redis: sessions + audit]
+[Browser] ──HTTPS──> [Reverse proxy]          # TLS, HSTS, access logging
+                         │  /             \
+                         │ /               \
+                         v                  v
+              127.0.0.1:3000 frontend    127.0.0.1:8000 backend
 ```
 
-- **Do not scale workers before fixing the audit log**: the read-modify-write pattern (`audit_logger.py:24-35`) loses entries under concurrency. Land ADR-009 first.
-- Run Uvicorn behind a process manager; `python main.py` is the dev entry (`main.py:101`). Production form: `gunicorn -k uvicorn.workers.UvicornWorker main:app`.
-- The frontend has no server-side data dependencies — `next build` output can be served statically or via `next start` in a container.
-- Healthcheck: none exists yet; add `GET /health` (roadmap Week 3).
+- **Single-origin production (recommended):** the proxy serves the frontend at `/` and proxies the API (e.g. `/api/*` or `api.your-app.example`) to the backend. Build the frontend with `NEXT_PUBLIC_API_URL=""` so `apiFetch` uses same-origin relative URLs (`frontend/src/lib/api.ts`, ADR-010) — no cross-origin cookies, no preflights, the CSRF origin-check allowlist has exactly one entry.
+- **Split-host production:** set `NEXT_PUBLIC_API_URL=https://api.your-app.example` (rebuild the frontend image) and add both origins to `CORS_ORIGINS`. The session cookie is `__Host-ta_session` (Secure, SameSite=Lax, Path=/) — cookies do not cross sites, so both hostnames must share a registrable domain and the proxy must serve the API on the SAME site as the frontend for the cookie to ride along. Single-origin avoids this class of misconfiguration entirely.
+- Proxy guidance: forward `Host` and `X-Forwarded-For`; do NOT strip `Origin`/`Referer` (the backend's CSRF origin-check middleware validates them on state-changing routes); terminate TLS 1.2+; keep client_max_body_size ≥ `TAX_MAX_BODY_BYTES`.
+- The backend must never be published to a public interface directly — ports are pinned to `127.0.0.1` in compose and TLS is exclusively the proxy's job (ADR-014).
 
-### Minimal Docker sketch (illustrative — not yet in the repo)
+## 6. Why exactly ONE uvicorn worker
 
-```dockerfile
-# backend/Dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
+The Dockerfile CMD is `python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1` — **this is a documented correctness requirement, not a placeholder**:
 
-```dockerfile
-# frontend/Dockerfile
-FROM node:20-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-ARG NEXT_PUBLIC_API_URL=http://backend:8000
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-RUN npm run build
-CMD ["npm", "run", "start"]
-```
+1. The append-only audit stream serializes every write through a **process-wide `threading.Lock`** (`audit_logger.py`) — with multiple workers there are multiple processes, each with its own lock, and `os.append` line atomicity is the only remaining guard.
+2. The SQLite store (`db.py`) relies on single-process access + WAL. Multi-process SQLite works, but the session/lockout/revocation semantics were designed and tested for one writer.
+3. The in-memory rate limiter (`rate_limit.py`) is per-process — N workers would multiply every limit by N.
+4. Rotation/retention of the JSONL streams is best-effort under the lock; concurrent rotators across processes would fight over `os.replace`.
 
-> The frontend Dockerfile only works after the hardcoded URLs are replaced by `NEXT_PUBLIC_API_URL` (ADR-010).
+Scale by adding whole containers behind the proxy load-balancing at L4 only if you first migrate the store/audit to a shared backend (out of scope for Sprint 3).
 
-## 6. Known deployment blockers (summary)
+## 7. `GET /health` semantics
 
-| Blocker | Why it blocks | Fix tracked in |
+Public, unauthenticated, rate-limit-exempt (design §3):
+
+- `200 {"status":"ok","checks":{"db":"ok","audit":"ok"},"app_env","version"}` when every check passes.
+- `db`: `SELECT 1` against `TAX_DB_PATH` (opened `mode=rw` — it NEVER creates the file) + data-dir write permission.
+- `audit`: `logs/audit` dir exists and is writable.
+- Any failing check → `503` with the failing check named (`"status":"degraded"`), which the Docker/Compose healthcheck reports as `unhealthy`.
+- `?verbose=1` adds uptime + registry keys **in dev only** (never in prod responses).
+
+## 8. Hardening edge summary (ADR-014)
+
+- **CORS:** explicit allowlist + `allow_credentials=True`; prod fails closed on unset/`*` — the Sprint-1 wildcard is retired permanently.
+- **CSRF (no token):** SameSite=Lax + JSON-only bodies + Origin/Referer validation middleware (403 on mismatch) + credentials-forcing CORS.
+- **Rate limits:** sliding windows per IP/user; `429 {"detail","retry_after_seconds"}` + `Retry-After`; `/health` exempt. Per-process only — one worker (§6).
+- **Body cap:** 413 over `TAX_MAX_BODY_BYTES` (1 MB default).
+- **Security headers** on every response (including 413/403/429): nosniff, DENY, strict-origin-when-cross-origin, no-store, `default-src 'none'; frame-ancestors 'none'`, permissions lock-down.
+- **App factory:** `create_app(app_env)` — prod disables `/docs`, `/redoc`, `/openapi.json`.
+- **Observability (Wave H):** request-ID middleware (`X-Request-ID` response header), structured JSON logs, app-log rotation — see [security.md](security.md) §5 and the in-code docstrings.
+
+## 9. Auth endpoints summary (ADR-012/013)
+
+| Endpoint | Auth | Notes |
 |---|---|---|
-| Hardcoded `localhost:8000` in both data paths | App cannot reach its API in any hosted environment | [roadmap.md](roadmap.md) Week 3 / ADR-010 |
-| No auth on `/history` | Financial data of any session readable by anyone | Week 3 / C5 |
-| Path traversal in `session_lab.py` | Remote file write via crafted session ID | Week 1 / C6 |
-| Stale tax year (FY 2024-25) | Output is legally wrong for current filings | Week 2 / C1 |
-| Unpinned dependencies + no CI | Non-reproducible, unauditable builds | Week 1 / Week 3 |
-| Audit log race + PII retention | Data loss under load; compliance exposure | Week 2 / H6, S6 |
+| `POST /auth/register` | none | 201 `{user_id, email}`; 409 duplicate; 422 policy (12–1024 chars) |
+| `POST /auth/login` | none | 200 + HttpOnly cookie; uniform 401 (timing-equalized); 423 locked (5 fails / 15 min) |
+| `POST /auth/logout` | none required | 204, revokes the presented session, clears cookie (never a validity oracle) |
+| `GET /auth/me` | cookie | 200 `{user_id, email, expires_at}` / 401 |
+| `GET /auth/sessions` | cookie | Active session rows (hashed-token 12-hex prefixes) |
+| `DELETE /auth/sessions/{id}` | cookie | Owner-checked revoke; 404 otherwise |
+| `POST /sessions` | cookie (or demo) | Server-issued app-session id |
+| `POST /chat`, `POST /calculate` | cookie (or demo) | `{message, session_id}` / `{session_id, tax_year?}` — state is server-side (ADR-013) |
+| `GET /history/{sid}` | cookie + owner | Paginated audit entries; foreign/unknown → 404 |
+
+Rate limits: `/auth/*` 10/min/IP, `/chat`+`/sessions` 30/min/user, `/calculate` 60/min/user, global 120/min/IP.
+
+## 10. Local development (bare metal)
+
+```bash
+# backend
+cd backend
+python -m venv .venv && .venv\Scripts\activate   # POSIX: source .venv/bin/activate
+pip install -r requirements.txt
+python main.py                                   # 127.0.0.1:8000, /docs enabled
+
+# frontend
+cd frontend
+npm install
+npm run dev                                      # http://localhost:3000 (dev default CORS origin)
+```
+
+- Dev keeps `/docs` (interactive API docs) enabled; prod disables them.
+- A pre-trained `backend/anfis_weights.json` is committed — training is only needed if you change the feature vector (20 inputs × 64 rules); if weights are regenerated with different dimensions, startup crashes at reshape.
+- Do not run `anfis_refine.py` against those weights (10×50 vs 20×64 topology mismatch — dead code).
+- Container-based local run: `NEXT_PUBLIC_API_URL=http://localhost:8000` in `.env`, then `docker compose up -d --build`.
+
+## 11. Validation smoke (post-deploy)
+
+```bash
+# 1. health
+curl http://127.0.0.1:8000/health
+
+# 2. register + login (cookie jar), chat, report
+curl -c jar -X POST http://127.0.0.1:8000/auth/register -H "Content-Type: application/json" ^
+  -d "{\"email\":\"ops@your-app.example\",\"password\":\"deploy-smoke-passphrase\"}"
+curl -c jar -X POST http://127.0.0.1:8000/auth/login -H "Content-Type: application/json" ^
+  -d "{\"email\":\"ops@your-app.example\",\"password\":\"deploy-smoke-passphrase\"}"
+curl -b jar -X POST http://127.0.0.1:8000/sessions
+# -> use the returned session_id in /chat {\"message\":\"...\",\"session_id\":\"...\"}
+
+# 3. prod disables docs
+curl -s -o NUL -w "%{http_code}" http://127.0.0.1:8000/docs        # 404 in prod
+
+# 4. headers + request id on every response
+curl -s -D - -o NUL http://127.0.0.1:8000/health | findstr /i "X-Request-ID X-Frame-Options"
+```
+
+The full compose E2E smoke (register → chat → report → volumes survive down/up) runs in the Sprint 3 certification step on a Docker-capable host.
+
+## 12. Runtime artifacts
+
+| Artifact | Path (container) | Written by | Notes |
+|---|---|---|---|
+| SQLite store | `/app/data/taxassist.db` (volume `db-data`) | `db.py` | users, auth_sessions, app_sessions; WAL |
+| Audit stream | `/app/logs/audit/session_audit.jsonl(.N)` (volume `logs-data`) | `audit_logger.py` | Append-only JSONL; PII-minimized |
+| Blackbox | `/app/logs/blackbox/<sid>.jsonl` (volume `logs-data`) | `session_lab.py` | Per-session append-only JSONL |
+| App log | `/app/logs/app/app.jsonl(.N)` (volume `logs-data`) | `observability.py` | Structured JSON log (Wave H) |
+
+All three JSONL families are covered by the backup tool: `python tools/backup_db.py --out-dir /backups` ([backup-recovery.md](backup-recovery.md)).

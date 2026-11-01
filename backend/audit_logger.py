@@ -370,12 +370,19 @@ class AuditLogger:
         tax_results: Any = None,
         extracted: Any = None,
         plan: Any = None,
+        user_id: Any = None,
     ) -> None:
         """Append one minimized interaction record. Never raises to the caller.
 
         PII minimization at write: raw input/response text and the dropped
         state keys never reach disk; a correlation hash + char length does.
         An unserializable value produces the minimal redacted record.
+
+        Sprint 3 Wave D (additive): *user_id* — the app_sessions owner when
+        the turn was authenticated — is recorded when known and omitted
+        for anonymous demo turns. The field is the opaque user row id
+        (already the sanitization unit the auth events carry); nothing
+        else about the record shape changes.
         """
         safe = safe_session_id(session_id)
         store = self._store_text()
@@ -391,6 +398,8 @@ class AuditLogger:
         }
         if isinstance(plan, str):
             entry["plan"] = plan
+        if user_id is not None:
+            entry["user_id"] = user_id
 
         with _WRITE_LOCK:
             _append_entry_unlocked(self.log_file, entry, safe)
@@ -403,6 +412,35 @@ class AuditLogger:
         if self._store_text_override is not None:
             return self._store_text_override
         return store_text_enabled()
+
+    def log_event(self, event: str, session_id: str = "auth", **fields: Any) -> None:
+        """Append one generic structured event (Sprint 3 Wave C).
+
+        The auth core (auth.py/main.py) appends its lifecycle events —
+        register / login success / login failure / lockout / logout /
+        session revoke — as new event types on the SAME append-only
+        stream, reusing the process-wide lock, rotation and retention.
+        Callers pass only sanitized values (sha256[:16] correlation
+        hashes — never raw emails, tokens or passwords; that sanitization
+        is the caller's contract, this method writes what it is given).
+
+        ``None``/absent optional fields are omitted from the line so
+        records stay compact.
+        """
+        safe = safe_session_id(session_id)
+        entry: Dict[str, Any] = {
+            "timestamp": datetime.now().isoformat(),
+            "session_id": safe,
+            "event": event,
+        }
+        for key, value in fields.items():
+            if value is not None:
+                entry[key] = value
+
+        with _WRITE_LOCK:
+            _append_entry_unlocked(self.log_file, entry, safe)
+            self._rotate_if_needed()
+            self._sweep_rotated()
 
     # -- rotation / retention ----------------------------------------------
 

@@ -40,6 +40,43 @@ Sprint 2: tax year modernization (FY 2025-26 / AY 2026-27), computation correctn
 ### Documentation
 - `docs/tax-verification.md` (verified constants + sources + expert amendments), `docs/sprint2-design.md` (consolidated design + rulings + test matrix), `docs/tax-rules.md` refreshed, `docs/security.md` §3 audit item marked landed.
 
+## [0.4.0-sprint3] — 2026-11-01
+
+Sprint 3: authentication, server-side sessions, deployment platform, security hardening, frontend testing, observability. Branch `sprint-3-production`; baseline `v0.3-sprint2`. Full details in [Sprint3_RELEASE_NOTES.md](Sprint3_RELEASE_NOTES.md).
+
+### Added — Authentication (Objective A; C5 closed; ADR-012)
+- Email/password accounts with stdlib scrypt hashing (memory-hard, per-hash parameters, timing-equalized logins) — zero new runtime dependencies.
+- Opaque 256-bit HttpOnly cookie sessions (sha256-at-rest, sliding 30-min + absolute 24-h TTL, row-level revocation, UA binding, lockout after 5 failures).
+- `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/sessions` (list + owner-checked revoke); audit events for all auth actions.
+- OAuth-ready schema (`auth_provider`/`oauth_subject` reserved).
+
+### Added — Server-side sessions (Objective B; ADR-013 accepted, supersedes ADR-002)
+- Conversation state moved to SQLite (`app_sessions`, WAL); the client sends only an opaque `session_id` and receives a read-only projection.
+- Ownership enforced on `/chat`, `/calculate`, `/history`, `/sessions` (foreign ids → 404); sliding + absolute expiration and revocation.
+- **Breaking:** `POST /chat` body `{message, session_id}`; `POST /calculate` body `{session_id}`; legacy session-dict bodies → 422.
+
+### Added — Deployment (Objective C)
+- backend/frontend Dockerfiles (non-root, pinned, healthchecks), docker-compose.yml (loopback ports, named volumes), `.env.example`, production startup, `GET /health` (db + audit checks, 503 degradation).
+
+### Added — Security hardening (Objective D; ADR-014)
+- CORS allowlist from environment (fail-closed in production; wildcard retired); rate limiting (auth 10/min/IP, chat 30/min, calculate 60/min, global 120/min; 429 + Retry-After); 1 MB body cap; security headers on every response; OpenAPI surface disabled in production; Origin-check CSRF middleware.
+
+### Added — Frontend testing (Objective E)
+- Vitest (22 component/contract tests) + Playwright (7 E2E: auth flow, session_id wire contract, protected routes) — executed locally and in CI (new e2e job).
+- Frontend auth wiring: `/login` page, session bootstrap, logout, `lib/api.ts` (NEXT_PUBLIC_API_URL — ADR-010; hardcoded localhost removed).
+
+### Added — Observability (Objective F)
+- Structured JSON logging with request-ID correlation; app-log rotation (`TAX_APP_LOG_*`); engine-failure diagnostics with graceful degradation; `docs/backup-recovery.md` + `backend/tools/backup_db.py` (SQLite backup, JSONL stream copies, recovery runbook).
+
+### Added — Planning
+- `Sprint4_AI_Modernization.md`: dataset strategy, model candidates, evaluation framework, confidence scoring, explainability (planning only — no ANFIS/NLP changes).
+
+### Fixed
+- `/health` db probe reads the header (`PRAGMA schema_version`) instead of `SELECT 1` — a corrupt/non-sqlite `TAX_DB_PATH` returned 200 on Linux CI (platform bug caught by the pipeline).
+
+### Security
+- Sprint 1+2 controls re-verified intact (10/10 disposition table); threat model T1–T12 implemented; CSRF closed (SameSite=Lax + JSON-only + Origin middleware); CORS wildcard retired (fail-closed allowlist); independent certification: SECURITY-CERTIFIED (116/116 probes) after CI green.
+
 ## [0.2.0-sprint1] — 2026-10-31
 
 Sprint 1: correctness, security hardening, testing foundation. Baseline `main @ 50d8eda`. Full details in [Sprint1_RELEASE_NOTES.md](Sprint1_RELEASE_NOTES.md).

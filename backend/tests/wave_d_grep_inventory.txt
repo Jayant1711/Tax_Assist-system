@@ -1,0 +1,155 @@
+Sprint 3 Wave D — grep inventory (design §10 regression guard)
+==============================================================
+
+Committed at Step D start, BEFORE any test adaptation, at branch
+sprint-3-production @ fe888cd. Command (PowerShell/cmd, no external deps):
+
+    cd backend/tests
+    findstr /s /n /c:"\"session\"" *.py
+    findstr /s /n /c:"/calculate" *.py
+
+Purpose: pin the complete mechanical-adaptation surface for the ADR-013
+contract swap (POST /chat body {message, session} -> {message, session_id};
+POST /calculate full-dict body -> {session_id, tax_year?}) so the Step D
+gate ("no `\"session\":` request-body construction remains outside the
+legacy-422 test") can be re-run verbatim after adaptation.
+
+Inventory summary (per file, lines carrying the OLD wire contract):
+
+  test_api.py               2   /chat {message, session} + /calculate full dict
+  test_capital_gains.py     5   /chat session dicts (tri-state flag + happy path)
+  test_deductions.py        7   /chat session dicts (80eea/categories/80ddb)
+  test_fy2025_26_matrix.py  3   /chat session dicts (tax_year pin) + /calculate
+  test_hardening.py         5   /chat old bodies (413/origin/rate-limit vehicles)
+  test_hra.py               7   /chat session dicts + /calculate HRA rows
+  test_nlp_new_inputs.py    8   /chat session dicts (age/CG enum/validator rows)
+  test_session_security.py  3   /chat client-chosen session ids (C6 surface)
+  test_validation.py       13   /chat + /calculate payload validation rows
+  test_audit_logger.py      -   /history endpoint tests (ownership adaptation,
+                                no "session": request bodies — tracked separately)
+  test_auth.py              0   auth-only, untouched
+  (engine/NLP/parity/corpus/HRA-matrix modules call functions, not the
+   wire — unaffected by design §10.)
+
+Adaptation disposition (every change documented in a test comment at the
+adaptation site; NO test deleted, NO assertion weakened beyond the
+mechanical contract change):
+
+  - authed_client / make_session fixtures (tests/conftest.py) replace
+    client-supplied session dicts; ids are server-issued uuid4 hex.
+  - payload-validation rows move to the server-state write path: the state
+    is seeded through the store (tests are trusted writers) and refused at
+    the load boundary by the same _validate_session_payload rows (422).
+  - client-chosen-id rows (C6) collapse into the server-issued-id contract:
+    the wire can no longer carry an id (old-style body -> 422); the
+    sanitization units (validation.py, SessionLab, audit logger) are
+    unchanged and stay covered by their unit tests.
+  - /history tests gain owned rows (foreign -> 404, anonymous -> 401);
+    TAX_ENABLE_HISTORY default flips ON (kill-switch retained).
+  - old-style bodies are additionally pinned by dedicated contract-422
+    tests (test_session_store.py).
+
+--- raw findstr output (fe888cd, pre-adaptation) ---
+
+=== findstr /s /n /c:"\"session\"" *.py ===
+test_api.py:36:            "session": {"id": "sid_apitest1", "phase": "PROFILING"},
+test_api.py:42:    session = body["session"]
+test_capital_gains.py:243:                "session": {"id": "sid_ok", "cg_transfer_before_2024_07_23": "yes"},
+test_capital_gains.py:254:                "session": {"id": "sid_ok", "cg_transfer_before_2024_07_23": 1},
+test_capital_gains.py:264:                "session": {"id": "sid_ok", "cg_transfer_before_2024_07_23": True},
+test_capital_gains.py:274:                "session": {"id": "sid_ok", "cg_transfer_before_2024_07_23": None},
+test_capital_gains.py:282:            json={"message": "hi", "session": {"id": "sid_ok"}},
+test_deductions.py:323:        json={"message": "hi", "session": {"id": "sid_80eea", "80eea": 150_000}},
+test_deductions.py:362:                      "session": {"id": "sid_cat1", "80u_80dd_category": bad}},
+test_deductions.py:371:                      "session": {"id": "sid_cat2", "80u_80dd_category": cat}},
+test_deductions.py:380:                      "session": {"id": "sid_cat3", "80g_category": bad}},
+test_deductions.py:390:                      "session": {"id": "sid_cat4", "80g_category": cat}},
+test_deductions.py:398:                  "session": {"id": "sid_ddb1", "80ddb_expenditure": 1e11}},
+test_deductions.py:405:                      "session": {"id": "sid_ddb2", "80ddb_expenditure": bad}},
+test_fy2025_26_matrix.py:421:            "session": {
+test_fy2025_26_matrix.py:440:            "session": {"id": "sid_fy2526b", "tax_year": "fy_2023_24"},
+test_hardening.py:55:    return {"message": "hi", "session": {"id": sid}}
+test_hardening.py:63:            json={"message": "x" * 1_100_000, "session": {"id": "sid_cap1"}},
+test_hardening.py:71:            json={"message": "x" * 1_100_000, "session": {"id": "sid_cap1"}},
+test_hardening.py:83:                "session": {"id": "sid_cap2", "pad": "x" * 50_000},
+test_hardening.py:203:        first = client.post("/chat", json={"message": "hi", "session": {"id": "bad!!"}})
+test_hardening.py:205:        second = client.post("/chat", json={"message": "hi", "session": {"id": "bad!!"}})
+test_hardening.py:220:        first = client.post("/chat", json={"message": "hi", "session": {"id": "bad!!"}})
+test_hra.py:480:        return client.post("/chat", json={"message": "hi", "session": session})
+test_hra.py:483:        "session",
+test_hra.py:498:        "session",
+test_hra.py:524:                "session": {"id": "sid_hra_adv1", "salary": 1_800_000},
+test_hra.py:529:        assert body["session"]["hra_received"] == 300_000
+test_hra.py:530:        assert body["session"]["rent_paid"] == 400_000
+test_nlp_new_inputs.py:193:            json={"message": "I am 67", "session": {"id": "sid_d2g_age1"}},
+test_nlp_new_inputs.py:196:        assert response.json()["session"]["age"] == 67
+test_nlp_new_inputs.py:287:                "session": {
+test_nlp_new_inputs.py:300:                "session": {
+test_nlp_new_inputs.py:314:                "session": {
+test_nlp_new_inputs.py:459:        "session",
+test_nlp_new_inputs.py:468:        assert client.post("/chat", json={"message": "hi", "session": session}).status_code == 422
+test_nlp_new_inputs.py:471:        "session",
+test_nlp_new_inputs.py:479:        assert client.post("/chat", json={"message": "hi", "session": session}).status_code == 200
+test_session_security.py:53:            json={"message": "hi", "session": {"id": bad_id}},
+test_session_security.py:60:            json={"message": "hi", "session": {"id": "sid_1730000000000"}},
+test_session_security.py:67:            json={"message": "hi", "session": {"phase": "PROFILING"}},
+test_validation.py:134:            json={"message": "hi", "session": {"id": "sid_ok", "salary": "abc"}},
+test_validation.py:143:                "session": {"id": "sid_ok", "capital_gains": [{"amount": "x"}]},
+test_validation.py:151:            json={"message": "x" * 5000, "session": {"id": "sid_ok"}},
+test_validation.py:160:                "session": {"id": "sid_ok", "pad": "x" * 150_000},
+test_validation.py:168:            json={"message": "hi", "session": {"id": "sid_ok"}},
+test_validation.py:226:            '{"message": "hi", "session": {"id": "sid_fin1", "salary": Infinity}}',
+test_validation.py:234:            '{"message": "hi", "session": {"id": "sid_fin1", "salary": NaN}}',
+test_validation.py:267:            json={"message": "hi", "session": {"id": "../evil", "pad": "x" * 99_000}},
+test_validation.py:425:                "session": {"id": "sid_ok", "tax_year": "fy_1999_00"},
+test_validation.py:435:                "session": {"id": "sid_ok", "tax_year": None},
+=== findstr /s /n /c:"/calculate" *.py ===
+test_api.py:3:Covers /chat and /calculate happy paths only; validation-error paths
+test_api.py:49:        "/calculate",
+test_capital_gains.py:216:            "/calculate",
+test_capital_gains.py:227:            "/calculate",
+test_capital_gains.py:288:            "/calculate",
+test_capital_gains.py:295:            "/calculate",
+test_capital_gains.py:301:        """Wiring proof: the /calculate flag reaches the engine's advisory
+test_capital_gains.py:304:            "/calculate",
+test_deductions.py:24:  - 80EEA: REMOVED — the session key and the /calculate field now 422
+test_deductions.py:330:    response = client.post("/calculate", json={"80eea": 150_000})
+test_deductions.py:411:        response = client.post("/calculate", json={
+test_deductions.py:431:            "/calculate", json={"80u_80dd_category": "severe"},
+test_deductions.py:434:        response = client.post("/calculate", json={"80g_category": "cat_9"})
+test_deductions.py:436:        response = client.post("/calculate", json={"80ddb_expenditure": -5})
+test_fy2025_26_matrix.py:366:# ── 9. API surface — /calculate and /chat (client fixture mirrors
+test_fy2025_26_matrix.py:386:        "/calculate",
+test_fy2025_26_matrix.py:397:    """Step A3 flips the registry default — an unpinned /calculate call now
+test_fy2025_26_matrix.py:399:    response = client.post("/calculate", json={"salary": 500_000})
+test_fy2025_26_matrix.py:408:        "/calculate",
+test_hardening.py:121:            "/calculate",
+test_hardening.py:215:        # One /chat then one /calculate: distinct class buckets, shared
+test_hardening.py:222:        second = client.post("/calculate", json={"salary": "abc"})
+test_hra.py:418:        response = client.post("/calculate", json={
+test_hra.py:440:        response = client.post("/calculate", json=payload)
+test_hra.py:444:        # Documented pydantic lax-mode behavior for /calculate numeric
+test_hra.py:448:        response = client.post("/calculate", json={"hra_received": "300000"})
+test_hra.py:465:        response = client.post("/calculate", json=payload)
+test_hra.py:471:            "/calculate",
+test_nlp_new_inputs.py:261:            "/calculate",
+test_nlp_new_inputs.py:270:            "/calculate", json={"capital_gains": [{"amount": 100}]}
+test_nlp_new_inputs.py:277:            "/calculate",
+test_validation.py:3:/calculate must 422 on non-numeric income, malformed capital gains and out-of
+test_validation.py:54:        response = client.post("/calculate", json={"salary": "abc"})
+test_validation.py:58:        response = client.post("/calculate", json={"capital_gains": ["oops"]})
+test_validation.py:64:            "/calculate",
+test_validation.py:72:            "/calculate",
+test_validation.py:82:        response = client.post("/calculate", json={"salary": -5})
+test_validation.py:86:        response = client.post("/calculate", json={"age": 999})
+test_validation.py:91:            "/calculate",
+test_validation.py:110:        response = client.post("/calculate", json=payload)
+test_validation.py:211:        response = self._post_raw(client, "/calculate", '{"salary": 1e309}')
+test_validation.py:217:            "/calculate",
+test_validation.py:241:        assert client.post("/calculate", json={"salary": "1e11"}).status_code == 200
+test_validation.py:243:            "/calculate",
+test_validation.py:252:        response = client.post("/calculate", json={"salary": "abc"})
+test_validation.py:275:            "/calculate",
+test_validation.py:396:            "/calculate",
+test_validation.py:405:            "/calculate",
+test_validation.py:416:        response = client.post("/calculate", json={"salary": 500000})

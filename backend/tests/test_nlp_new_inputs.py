@@ -185,12 +185,17 @@ class TestAgeExtractor:
         assert "age" not in sess
         assert sess.get("other_income") == 4_500_000
 
-    def test_age_booking_survives_chat_round_trip(self, client) -> None:
+    def test_age_booking_survives_chat_round_trip(self, authed_client, session_id) -> None:
         """session["age"] is an int 0-120 — the main.py validator row
-        must accept the extractor's write on the next /chat turn."""
-        response = client.post(
+        must accept the extractor's write on the next /chat turn.
+
+        Wave D adaptation (mechanical — ADR-013): the state is
+        server-side, so the round-trip goes through the owned session id
+        and the response session is the read-only projection (age, a
+        frontend key, survives it)."""
+        response = authed_client.post(
             "/chat",
-            json={"message": "I am 67", "session": {"id": "sid_d2g_age1"}},
+            json={"message": "I am 67", "session_id": session_id},
         )
         assert response.status_code == 200
         assert response.json()["session"]["age"] == 67
@@ -249,88 +254,98 @@ class TestNlpWriteClamping:
 
 # =========================================================================
 # 3. V-2 — capital-gains type enum at both boundaries
+#
+#    Wave D adaptation (mechanical, documented — design §10 / ADR-013):
+#    the state (and its capital_gains entries) lives SERVER-SIDE, so the
+#    enum rows are pinned at the server-state load boundary — the state is
+#    seeded through the store (tests are trusted writers) and /chat and
+#    /calculate must refuse entries the validator rejects. Same rows, same
+#    422s; only the delivery vehicle changed.
 # =========================================================================
+
+import json as _json
+
+import db as _db
+
+
+def _seed_state(session_id: str, state: Dict[str, Any]) -> None:
+    seeded = {"id": session_id, **state}
+    _db.execute(
+        "UPDATE app_sessions SET state = ? WHERE id = ?",
+        (_json.dumps(seeded, default=str), session_id),
+    )
+
 
 CG_TYPES = ("equity_ltcg", "equity_stcg", "property_cg")
 
 
 class TestCapitalGainsTypeEnum:
     @pytest.mark.parametrize("cg_type", ["crypto", "gold", ""])
-    def test_calculate_rejects_unknown_cg_type(self, client, cg_type) -> None:
-        response = client.post(
+    def test_calculate_rejects_unknown_cg_type(self, authed_client, session_id, cg_type) -> None:
+        _seed_state(session_id, {"capital_gains": [{"type": cg_type, "amount": 100}]})
+        response = authed_client.post(
             "/calculate",
-            json={"capital_gains": [{"type": cg_type, "amount": 100}]},
+            json={"session_id": session_id},
         )
         assert response.status_code == 422, cg_type
 
-    def test_calculate_missing_cg_type_rejected(self, client) -> None:
+    def test_calculate_missing_cg_type_rejected(self, authed_client, session_id) -> None:
         """The untaxed-income hole: an entry with no type books income and
         no tax at the engine — the boundary must reject it."""
-        response = client.post(
-            "/calculate", json={"capital_gains": [{"amount": 100}]}
+        _seed_state(session_id, {"capital_gains": [{"amount": 100}]})
+        response = authed_client.post(
+            "/calculate", json={"session_id": session_id}
         )
         assert response.status_code == 422
 
     @pytest.mark.parametrize("cg_type", CG_TYPES)
-    def test_calculate_accepts_all_three_types(self, client, cg_type) -> None:
-        response = client.post(
+    def test_calculate_accepts_all_three_types(self, authed_client, session_id, cg_type) -> None:
+        _seed_state(session_id, {"capital_gains": [{"type": cg_type, "amount": 100}]})
+        response = authed_client.post(
             "/calculate",
-            json={"capital_gains": [{"type": cg_type, "amount": 100}]},
+            json={"session_id": session_id},
         )
         assert response.status_code == 200, cg_type
 
-    def test_chat_rejects_unknown_cg_type_in_session(self, client) -> None:
-        response = client.post(
+    def test_chat_rejects_unknown_cg_type_in_session(self, authed_client, session_id) -> None:
+        _seed_state(session_id, {"capital_gains": [{"type": "crypto", "amount": 100}]})
+        response = authed_client.post(
             "/chat",
-            json={
-                "message": "hi",
-                "session": {
-                    "id": "sid_d2g_cg1",
-                    "capital_gains": [{"type": "crypto", "amount": 100}],
-                },
-            },
+            json={"message": "hi", "session_id": session_id},
         )
         assert response.status_code == 422
 
-    def test_chat_missing_cg_type_in_session_rejected(self, client) -> None:
-        response = client.post(
+    def test_chat_missing_cg_type_in_session_rejected(self, authed_client, session_id) -> None:
+        _seed_state(session_id, {"capital_gains": [{"amount": 100}]})
+        response = authed_client.post(
             "/chat",
-            json={
-                "message": "hi",
-                "session": {
-                    "id": "sid_d2g_cg2",
-                    "capital_gains": [{"amount": 100}],
-                },
-            },
+            json={"message": "hi", "session_id": session_id},
         )
         assert response.status_code == 422
 
     @pytest.mark.parametrize("cg_type", CG_TYPES)
-    def test_chat_accepts_valid_cg_types_in_session(self, client, cg_type) -> None:
-        response = client.post(
+    def test_chat_accepts_valid_cg_types_in_session(self, authed_client, session_id, cg_type) -> None:
+        _seed_state(session_id, {"capital_gains": [{"type": cg_type, "amount": 100}]})
+        response = authed_client.post(
             "/chat",
-            json={
-                "message": "hi",
-                "session": {
-                    "id": "sid_d2g_cg3",
-                    "capital_gains": [{"type": cg_type, "amount": 100}],
-                },
-            },
+            json={"message": "hi", "session_id": session_id},
         )
         assert response.status_code == 200, cg_type
 
-    def test_session_model_rejects_unknown_cg_type(self) -> None:
-        from pydantic import ValidationError
+    def test_session_validator_rejects_unknown_cg_type(self) -> None:
+        # Was: ChatRequest(message, session=...) — the client-supplied
+        # state field is gone (ADR-013), so the SAME validator row is
+        # asserted against _validate_session_payload directly (pydantic
+        # surfaced the ValueError as ValidationError before; the direct
+        # call raises ValueError — same rejection, one frame earlier).
+        from main import _validate_session_payload
 
-        from main import ChatRequest
-
-        with pytest.raises(ValidationError):
-            ChatRequest(
-                message="hi",
-                session={
+        with pytest.raises(ValueError):
+            _validate_session_payload(
+                {
                     "id": "sid_d2g_cg4",
                     "capital_gains": [{"type": "crypto", "amount": 100}],
-                },
+                }
             )
 
     def test_nlp_cg_type_inference_stays_in_enum(self) -> None:
@@ -453,27 +468,38 @@ class TestValidatorRowsSpotCheck:
     """Step D landed the 80u_80dd_category (3-value), 80g_category
     (4-value) and 80ddb_expenditure (bounded numeric) session rows; this
     step adds nothing new on the validator side (NLP-side only) — these
-    spot-checks pin that the rows still hold after the D2/G changes."""
+    spot-checks pin that the rows still hold.
+
+    Wave D adaptation (mechanical — ADR-013): the rows are pinned at the
+    server-state load boundary — the state is seeded through the store
+    (tests are trusted writers) and /chat must refuse what the validator
+    rejects; same rows, same 422/200 outcomes."""
 
     @pytest.mark.parametrize(
         "session",
         [
-            {"id": "sid_d2g_v1", "80u_80dd_category": "severe"},
-            {"id": "sid_d2g_v1", "80g_category": "cat_9"},
-            {"id": "sid_d2g_v1", "80ddb_expenditure": -1},
-            {"id": "sid_d2g_v1", "80ddb_expenditure": 1e11 + 1},
+            {"80u_80dd_category": "severe"},
+            {"80g_category": "cat_9"},
+            {"80ddb_expenditure": -1},
+            {"80ddb_expenditure": 1e11 + 1},
         ],
     )
-    def test_rows_still_reject_bad_values(self, client, session) -> None:
-        assert client.post("/chat", json={"message": "hi", "session": session}).status_code == 422
+    def test_rows_still_reject_bad_values(self, authed_client, session_id, session) -> None:
+        _seed_state(session_id, session)
+        assert authed_client.post(
+            "/chat", json={"message": "hi", "session_id": session_id}
+        ).status_code == 422
 
     @pytest.mark.parametrize(
         "session",
         [
-            {"id": "sid_d2g_v2", "80u_80dd_category": "80_plus"},
-            {"id": "sid_d2g_v2", "80g_category": "cat_50_no_limit"},
-            {"id": "sid_d2g_v2", "80ddb_expenditure": 60_000},
+            {"80u_80dd_category": "80_plus"},
+            {"80g_category": "cat_50_no_limit"},
+            {"80ddb_expenditure": 60_000},
         ],
     )
-    def test_rows_still_accept_good_values(self, client, session) -> None:
-        assert client.post("/chat", json={"message": "hi", "session": session}).status_code == 200
+    def test_rows_still_accept_good_values(self, authed_client, session_id, session) -> None:
+        _seed_state(session_id, session)
+        assert authed_client.post(
+            "/chat", json={"message": "hi", "session_id": session_id}
+        ).status_code == 200

@@ -1,19 +1,28 @@
 """Session-id sanitization tests (ISSUE #1 — C6 arbitrary file write).
 
-API level: /chat must 422 on traversal / absolute-path / non-ASCII / too-short
-session ids and still accept the frontend-generated "sid_<epoch-ms>" shape and
-sessions without an id. Unit level: SessionLab.record_turn must never write
-outside its lab_dir even when called directly with a hostile id (defense in
-depth behind the API validator).
+Unit level: SessionLab.record_turn must never write outside its lab_dir
+even when called directly with a hostile id (defense in depth behind the
+API boundary), and validation.safe_session_id maps hostile ids to a
+deterministic path-safe digest. Sprint 2 Step F: per-session files are
+append-only ``<sid>.jsonl`` streams.
 
-Sprint 2 Step F (mechanical adaptation): the blackbox is an append-only
-JSONL stream, so per-session files are now ``<sid>.jsonl`` instead of
-``<sid>.json``.
+Wave D adaptation (mechanical, documented — design §10 / ADR-013): the
+C6 attack surface is CLOSED BY CONSTRUCTION at the API — session ids are
+SERVER-ISSUED uuid4 hex (POST /sessions), so no client-supplied id can
+reach the filesystem path join anymore. The former "API rejects hostile
+ids with 422" rows become the contract guard: an old-style body carrying
+a session dict (with whatever id inside) is a 422 before any handler
+logic, and a request without a session id is a 422 (the id is required
+and never client-chosen). The sanitization units are unchanged and stay
+pinned by the unit classes below (still load-bearing for the audit
+stream + blackbox, which sanitize whatever id they are handed).
 """
 import os
 import re
 
 import pytest
+
+from tests.conftest import make_session
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -21,52 +30,46 @@ BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # construction (no separators, no traversal sequences).
 _UNTRUSTED_FILE_RE = re.compile(r"^untrusted_[0-9a-f]{16}\.jsonl$")
 
-
-@pytest.fixture(scope="module")
-def client():
-    previous_cwd = os.getcwd()
-    os.chdir(BACKEND_DIR)
-    try:
-        from fastapi.testclient import TestClient
-
-        from main import app
-
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        os.chdir(previous_cwd)
+# The hostile ids the old contract let clients send on /chat (C6). Wave D
+# keeps them here as the documentation of what the wire can no longer
+# carry: every one of them rides inside the legacy session-dict key, which
+# the contract guard rejects before anything touches an id.
+_BAD_IDS = [
+    "../evil",               # relative path traversal
+    "C:\\Windows\\Temp\\x",  # absolute path (Windows drive letter)
+    "síd_12345678",          # non-ASCII
+    "ab",                    # below the 4-char minimum
+]
 
 
 class TestChatSessionIdValidation:
-    @pytest.mark.parametrize(
-        "bad_id",
-        [
-            "../evil",               # relative path traversal
-            "C:\\Windows\\Temp\\x",  # absolute path (Windows drive letter)
-            "síd_12345678",          # non-ASCII
-            "ab",                    # below the 4-char minimum
-        ],
-    )
-    def test_chat_rejects_unsafe_session_id(self, client, bad_id) -> None:
-        response = client.post(
+    @pytest.mark.parametrize("bad_id", _BAD_IDS)
+    def test_legacy_body_with_client_id_is_422(self, authed_client, bad_id) -> None:
+        # Was: {"message", "session": {"id": bad_id}} -> 422 at the API
+        # id validator. Wave D: the id is server-issued; the legacy body
+        # shape itself is the 422 (contract guard fires pre-handler), so
+        # no client-chosen id — hostile or not — can reach the write path.
+        response = authed_client.post(
             "/chat",
             json={"message": "hi", "session": {"id": bad_id}},
         )
         assert response.status_code == 422
 
-    def test_chat_accepts_frontend_shaped_session_id(self, client) -> None:
-        response = client.post(
-            "/chat",
-            json={"message": "hi", "session": {"id": "sid_1730000000000"}},
+    def test_chat_accepts_server_issued_session_id(self, authed_client) -> None:
+        # Was: the frontend-shaped "sid_<epoch-ms>" id was accepted. Wave
+        # D: ids are SERVER-ISSUED uuid4 hex and /chat accepts them.
+        sid = make_session(authed_client)
+        response = authed_client.post(
+            "/chat", json={"message": "hi", "session_id": sid}
         )
         assert response.status_code == 200
 
-    def test_chat_missing_id_still_ok(self, client) -> None:
-        response = client.post(
-            "/chat",
-            json={"message": "hi", "session": {"phase": "PROFILING"}},
-        )
-        assert response.status_code == 200
+    def test_chat_without_session_id_is_422(self, authed_client) -> None:
+        # Was: a session dict without an id was OK (the server used the
+        # "default" bucket). Wave D: the id is REQUIRED and server-issued
+        # — a body without one is a validation error, never an implicit id.
+        response = authed_client.post("/chat", json={"message": "hi"})
+        assert response.status_code == 422
 
 
 class TestSafeSessionId:
