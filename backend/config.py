@@ -207,6 +207,27 @@ def tax_max_body_bytes() -> int:
     return _env_int("TAX_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES)
 
 
+def tax_corpus_capture() -> bool:
+    """Full-fidelity corpus capture opt-in (Sprint 3 follow-up, default OFF).
+
+    When enabled, every chat turn is captured COMPLETE (session id, full
+    user input, full AI response, extractions, state, tax summary) into
+    the corpus stream (see corpus.py). The records are full-sensitivity
+    PII — enable ONLY on deployments whose users consented (local dev /
+    testing). The certified audit stream is unaffected.
+    """
+    return os.environ.get("TAX_CORPUS_CAPTURE", "").strip() in {
+        "1",
+        "true",
+        "True",
+    }
+
+
+def tax_corpus_path() -> str:
+    """Corpus stream location (TAX_CORPUS_PATH, default logs/corpus/...)."""
+    return os.environ.get("TAX_CORPUS_PATH", "logs/corpus/corpus.jsonl")
+
+
 def tax_log_level() -> str:
     """Validated log level for the __main__ entry (default INFO)."""
     raw = os.environ.get("TAX_LOG_LEVEL", "").strip().upper()
