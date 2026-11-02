@@ -12,6 +12,7 @@ import re
 from typing import Dict, Any, List, Optional, Tuple
 from ai_models import SemanticAttention, UniversalParser, ReasoningAgent
 from profession_db import classify_profession
+import response_composer
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,14 @@ _PERCENT_RE = re.compile(
 # skips commas adjacent to digits: "I am 67, my father is 91" is ONE
 # sentence, but the self-age and the parent-age live in different clauses)
 _GUARD_CLAUSE_SPLIT_RE = re.compile(r"\s+(?:and|&)\s+|[,;]", re.IGNORECASE)
+
+# Sprint 4 P1: variant splitter for the 80U/80DD flat-amount window
+# ONLY — a comma DIRECTLY BETWEEN DIGITS is Indian grouping ("1,25,000"),
+# not a clause boundary, so the grouped statutory amount stays inside
+# its anchor's clause ("80u 1,25,000 claimed"). All other guards keep
+# the plain splitter above (comma = boundary, as before).
+_GROUPING_SAFE_SPLIT_RE = re.compile(
+    r"\s+(?:and|&)\s+|;|,(?!\d)|(?<!\d),", re.IGNORECASE)
 _SENIOR_RE = re.compile(r"senior citizen|super senior", re.IGNORECASE)
 
 # 80U/80DD disability-category collection (heuristic-honest: keywords book
@@ -136,6 +145,7 @@ _80G_CATEGORY_KEYWORDS: Tuple[Tuple[str, str], ...] = (
     ("ngo", "cat_50_no_limit"),
     ("hospital", "cat_50_no_limit"),
     ("temple", "cat_50_qualifying_limit"),
+    ("mandir", "cat_50_qualifying_limit"),
     ("mosque", "cat_50_qualifying_limit"),
     ("church", "cat_50_qualifying_limit"),
     ("gurudwara", "cat_50_qualifying_limit"),
@@ -148,6 +158,73 @@ ASKBACK_80G = (
     "Government / local authority, or another charitable / religious "
     "institution?"
 )
+
+# ── Sprint 4 P1 — deterministic extraction guards (docs/sprint4-execution.md
+#    P1 items 3-6). Each guard is anchored to a measured eval/ledger gap. ──
+
+# Item 3 (80E principal vs interest): 80E covers only the INTEREST on a
+# qualifying education loan — the principal is not deductible anywhere, and
+# loan amounts used to book as 80E interest.
+_PRINCIPAL_WORD_RE = re.compile(r"\bprincipal\b|\bmool dhan\b|\bmul dhan\b",
+                                re.IGNORECASE)
+EDU_LOAN_PRINCIPAL_ADVISORY = (
+    "Section 80E covers only the INTEREST paid on a qualifying education "
+    "loan — the principal portion is not deductible, so I have not booked "
+    "this amount."
+)
+
+# Item 4 (percentages / flat amounts): the statutory flat 80U/80DD amounts
+# ARE the disability category — 75,000 is the 40-79% deduction and 1,25,000
+# the 80%+ one. The number is blanked so it can never book as an amount.
+_80U_FLAT_AMOUNT_RE = re.compile(
+    r"(?<![\d.,])(1,25,000|125000|75,000|75000)(?![\d.,])")
+
+# Item 5 (transfer dates): in a sale context a prepositional year is a DATE,
+# never an amount, and it books the tri-state CG flag
+# cg_transfer_before_2024_07_23 (tax_engine.py R-e disclosure). Only
+# PREPOSITION-anchored years parse — a bare 4-digit number ("sold property
+# for 1200") stays an amount. Out-of-range years are swallowed with an
+# advisory exactly like out-of-range ages.
+CG_FLAG_KEY = "cg_transfer_before_2024_07_23"
+_CG_SALE_CTX_RE = re.compile(
+    r"\bsold\b|\bsale\b|\bsell\b|\bbech\w*|\btransfer(?:red|ring)?\b",
+    re.IGNORECASE)
+_MONEY_UNIT_LOOKAHEAD = (
+    r"(?!\s*(?:%|percent(?:age)?\b|lakh|lakhs?|lacs?|crores?|crs?|cr\b|"
+    r"k\b|thousand|lpa|mn|million|pm))")
+_YEAR_PHRASE_RE = re.compile(
+    r"\b(?P<prep>in|before|after|during|since)\s+"
+    r"(?P<year>\d{4})\b" + _MONEY_UNIT_LOOKAHEAD,
+    re.IGNORECASE)
+_PURCHASE_BEFORE_RE = re.compile(
+    r"\b(?:bought|purchased|acquired)\s+(?:it\s+)?before\s+"
+    r"(?P<year>\d{4})\b" + _MONEY_UNIT_LOOKAHEAD,
+    re.IGNORECASE)
+_LAST_YEAR_RE = re.compile(r"\blast year\b", re.IGNORECASE)
+TRANSFER_YEAR_ADVISORY = (
+    "Please provide the transfer year as a 4-digit calendar year "
+    "(for example 2023)."
+)
+
+# Item 4 (abstain gap): an interrogative sentence is meta — "how much tax
+# on 12 lakhs?" booked 1,200,000 as other_income through the profile-default
+# fall-through. No amount books from a question sentence. Bare "do" is
+# deliberately NOT a cue (the Hinglish numeral "do lakh ...").
+_QUESTION_SENT_RE = re.compile(
+    r"^\s*(?:how|what|which|why|is|are|was|were|should|can|could|would|"
+    r"will|does|did)\b",
+    re.IGNORECASE)
+QUESTION_NO_BOOKING_NOTE = (
+    "That looks like a question — I haven't recorded any amounts from it. "
+    "Share the figures to include and I will book them."
+)
+
+# Item 6 (rent legs -> 80GG): rent paid with no HRA received IS the 80GG
+# claim (the engine disqualifies 80GG when hra_received > 0). "hra nahi
+# milta, X kiraya deta hoon" fell through to the profile default because
+# the comma split hid the no-HRA context from the clause.
+_NO_HRA_CONTEXT_RE = re.compile(
+    r"\bhra\s+nahi(?:n)?\b|\bno hra\b|\bwithout hra\b", re.IGNORECASE)
 
 
 class NLPEngine:
@@ -167,12 +244,17 @@ class NLPEngine:
         lq = last_q.lower()
         if any(k in lq for k in ["salary", "income", "earn", "kitna kamate", "annual income", "annual"]):
             return "business" if profile == "Business Owner" else "salary"
+        # Sprint 4 P1 item 3 (deduction semantics): NPS is checked BEFORE
+        # 80C — the NPS ask-back itself names the 80C limit ("completely
+        # separate from your 80C limit!"), so the 80C substring check used
+        # to prime 80C for the bare follow-up amount. "NPS" must never
+        # leak into 80C.
+        if any(k in lq for k in ["nps", "pension", "80ccd"]):
+            return "nps"
         if any(k in lq for k in ["80c", "ppf", "lic", "elss", "investment", "saving", "bachate"]):
             return "80c"
         if any(k in lq for k in ["health", "insurance", "80d", "medical", "swasthya"]):
             return "80d"
-        if any(k in lq for k in ["nps", "pension", "80ccd"]):
-            return "nps"
         # Sprint 2 Step D2/G: the 80U/80DD ask-back mentions "80U/80DD" —
         # substring matching would read it as "80d" and mis-route a bare
         # follow-up amount to health insurance. The flat 80U/80DD deduction
@@ -249,15 +331,27 @@ class NLPEngine:
         return v, False
 
     @staticmethod
-    def _clause_has_family(text: str, pos: int) -> bool:
+    def _clause_window(text: str, pos: int,
+                       split_re: Optional[re.Pattern] = None) -> Tuple[int, int]:
+        """The guard-clause window (commas count here — see
+        _GUARD_CLAUSE_SPLIT_RE) containing the match at *pos*, as
+        (start, end) offsets into *text*. *split_re* overrides the
+        boundary pattern for callers that must not split digit groups
+        (the 80U/80DD flat-amount window)."""
+        split = split_re or _GUARD_CLAUSE_SPLIT_RE
+        start = 0
+        for m in split.finditer(text, 0, pos):
+            start = m.end()
+        nxt = split.search(text, pos)
+        end = nxt.start() if nxt else len(text)
+        return start, end
+
+    @classmethod
+    def _clause_has_family(cls, text: str, pos: int) -> bool:
         """True when a family word shares the guard-clause window with the
         match at pos (the family-context guard for age extraction and the
         senior-citizen heuristic)."""
-        start = 0
-        for m in _GUARD_CLAUSE_SPLIT_RE.finditer(text, 0, pos):
-            start = m.end()
-        nxt = _GUARD_CLAUSE_SPLIT_RE.search(text, pos)
-        end = nxt.start() if nxt else len(text)
+        start, end = cls._clause_window(text, pos)
         return bool(_FAMILY_WORD_RE.search(text[start:end]))
 
     def _preparse_guard(
@@ -268,6 +362,7 @@ class NLPEngine:
         notes: List[str],
         askbacks: List[str],
         allow_askback: bool,
+        msg_ctx: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Step D2/G pre-parse pass over ONE sentence (before clause
         parsing). Runs, in order:
@@ -286,15 +381,24 @@ class NLPEngine:
         2. Percentage masking: "<n>%" / "<n> percent" is never a monetary
            amount (the digit pass only drops <100, so "100 percent" would
            book ₹100 of income).
+        2b. Transfer-date parse (P1 item 5): in a sale context a
+           prepositional year ("sold in 2023", "bought before 2024",
+           "last year") is a DATE — it books the tri-state
+           cg_transfer_before_2024_07_23 flag and is blanked; out-of-range
+           years are swallowed with an advisory like ages. A bare 4-digit
+           number without a date preposition stays an amount.
         3. Senior-citizen heuristic: "senior citizen" with no family word
            in the clause floors session["age"] at 60 — the reply states
            the assumption (SENIOR_AGE_NOTE) so it can be corrected; an
            explicit age in the same message wins.
         4. 80U/80DD disability-category collection: severity keywords book
-           the enum value; a generic disability mention books "40_79"; a
-           bare "80u"/"80dd" mention emits the category ask-back and books
-           nothing. Detection runs on the ORIGINAL sentence so percentage-
-           masked numbers still classify ("80 percent" -> 80_plus).
+           the enum value; the statutory FLAT amounts (75,000 / 1,25,000)
+           map to the category enum and are blanked (P1 item 4 — the flat
+           deduction is category-driven, never a numeric booking); a
+           generic disability mention books "40_79"; a bare "80u"/"80dd"
+           mention emits the category ask-back and books nothing.
+           Detection runs on the ORIGINAL sentence so percentage-masked
+           numbers still classify ("80 percent" -> 80_plus).
         5. 80G donee-category collection: keyword table books the enum
            value (donation context or an open 80G ask-back required); no
            keyword match with donation context emits the ask-back and
@@ -343,6 +447,90 @@ class NLPEngine:
         for m in _PERCENT_RE.finditer(masked):
             _blank(m.start("num"), m.end("num"))
 
+        # 2b. Sprint 4 P1 item 5 — transfer-date year parse (measured:
+        # led-transfer-date-2023 booked the year as a second capital-gains
+        # entry). A PREPOSITION-anchored year in a sale context ("sold in
+        # 2023", "bought before 2024") is a date: it books the tri-state
+        # cg_transfer_before_2024_07_23 flag and is blanked so the number
+        # can never reach the parser as an amount. Bare 4-digit numbers
+        # ("sold property for 1200") are untouched. Out-of-range years are
+        # swallowed with an advisory exactly like out-of-range ages.
+        if _CG_SALE_CTX_RE.search(masked):
+            for m in _YEAR_PHRASE_RE.finditer(masked):
+                year = int(m.group("year"))
+                prep = m.group("prep").lower()
+                _blank(m.start("year"), m.end("year"))
+                if not 1800 <= year <= 2099:
+                    ctx = msg_ctx if msg_ctx is not None else {}
+                    if ctx.get("cg_advisory_count", 0) < 2:
+                        extracted.append(TRANSFER_YEAR_ADVISORY)
+                        ctx["cg_advisory_count"] =                             ctx.get("cg_advisory_count", 0) + 1
+                    logger.info("transfer-date: out-of-range year %d swallowed",
+                                year)
+                    continue
+                if year <= 2023 or (prep == "before" and year == 2024):
+                    session[CG_FLAG_KEY] = True
+                    _ctx = msg_ctx if msg_ctx is not None else {}
+                    if not _ctx.get("cg_note_given"):
+                        _ctx["cg_note_given"] = True
+                        notes.append(
+                            "Noted — the transfer was before 23-Jul-2024, so the "
+                            "older capital-gains option may apply. I will flag it "
+                            "in your report.")
+                    logger.info("transfer-date: %s %d -> flag True", prep, year)
+                elif year >= 2025 or prep in ("after", "since"):
+                    session[CG_FLAG_KEY] = False
+                    _ctx = msg_ctx if msg_ctx is not None else {}
+                    if not _ctx.get("cg_note_given"):
+                        _ctx["cg_note_given"] = True
+                        notes.append(
+                            "Noted — the transfer was after 23-Jul-2024 (the new "
+                            "12.5% regime applies).")
+                    logger.info("transfer-date: %s %d -> flag False", prep, year)
+                else:
+                    # a bare 2024 straddles the cutoff — disclosed, unset
+                    # (security: same per-message dedupe as the True/False
+                    # notes — the straddle note was measured amplifying a
+                    # repeated-2024 message to 25KB)
+                    _ctx = msg_ctx if msg_ctx is not None else {}
+                    if not _ctx.get("cg_note_given"):
+                        _ctx["cg_note_given"] = True
+                        notes.append(
+                            "A 2024 transfer straddles the 23-Jul-2024 cutoff — "
+                            "tell me the month if you can.")
+                    logger.info("transfer-date: %s 2024 left ambiguous", prep)
+            if _LAST_YEAR_RE.search(masked):
+                # "last year" against the FY 2025-26 engine default: the
+                # previous calendar year is after the cutoff (documented
+                # assumption — the note discloses it so it can be corrected).
+                session[CG_FLAG_KEY] = False
+                notes.append(
+                    "Noted — a sale last year falls after the 23-Jul-2024 "
+                    "cutoff (the new 12.5% regime applies).")
+                logger.info("transfer-date: 'last year' -> flag False")
+        else:
+            _ctx2 = msg_ctx if msg_ctx is not None else {}
+            for m in _PURCHASE_BEFORE_RE.finditer(masked):
+                year = int(m.group("year"))
+                _blank(m.start("year"), m.end("year"))
+                if 1800 <= year <= 2099:
+                    # acquired before the cutoff year — the R-e election
+                    # context the flag carries
+                    session[CG_FLAG_KEY] = True
+                    if not _ctx2.get("cg_note_given"):
+                        _ctx2["cg_note_given"] = True
+                        notes.append(
+                            "Noted — acquired before 2024 (before the "
+                            "23-Jul-2024 cutoff).")
+                    logger.info("transfer-date: bought before %d -> flag True",
+                                year)
+                else:
+                    if _ctx2.get("cg_advisory_count", 0) < 2:
+                        extracted.append(TRANSFER_YEAR_ADVISORY)
+                        _ctx2["cg_advisory_count"] =                             _ctx2.get("cg_advisory_count", 0) + 1
+                    logger.info("transfer-date: out-of-range year %d swallowed",
+                                year)
+
         # 3. senior-citizen heuristic (per clause, family-guarded)
         for m in _SENIOR_RE.finditer(masked):
             if self._clause_has_family(masked, m.start()):
@@ -364,7 +552,36 @@ class NLPEngine:
             severe = bool(_SEVERE_80_RE.search(original_lower))
             generic = bool(_GENERIC_40_RE.search(original_lower))
             if dis_word or sec_mention or u80_open:
-                if severe:
+                # Sprint 4 P1 item 4: the statutory FLAT amounts ARE the
+                # category ("80u flat 75000" / "80dd flat deduction
+                # 125000" / "disability deduction 75000 claimed"). The
+                # flat amount maps to the enum and is BLANKED so the
+                # parser can never book it as a numeric 80U amount (the
+                # tax engine ignores the legacy numeric key anyway —
+                # docs/tax-verification.md §6). Searched inside the
+                # disability mention's own clause so an unrelated 75,000
+                # in a sibling clause is untouched.
+                flat = None
+                anchor_m = (_DISABILITY_WORD_RE.search(masked)
+                            or _80U_MENTION_RE.search(masked))
+                if anchor_m is not None:
+                    # grouping-safe window: "1,25,000" must stay whole
+                    ws, we = self._clause_window(
+                        masked, anchor_m.start(),
+                        split_re=_GROUPING_SAFE_SPLIT_RE)
+                    flat = _80U_FLAT_AMOUNT_RE.search(masked, ws, we)
+                elif u80_open:
+                    flat = _80U_FLAT_AMOUNT_RE.search(masked)
+                if flat is not None:
+                    flat_val = int(flat.group(0).replace(",", ""))
+                    flat_cat = "40_79" if flat_val == 75000 else "80_plus"
+                    session["80u_80dd_category"] = flat_cat
+                    extracted.append(
+                        f"80U/80DD CATEGORY: {flat_cat} (flat ₹{flat_val:,})")
+                    _blank(flat.start(), flat.end())
+                    logger.info("80U/80DD flat amount %d -> category %s",
+                                flat_val, flat_cat)
+                elif severe:
                     session["80u_80dd_category"] = "80_plus"
                     extracted.append("80U/80DD CATEGORY: 80_plus (flat ₹1,25,000)")
                     logger.info("80U/80DD category collected: 80_plus")
@@ -435,8 +652,12 @@ class NLPEngine:
                 session["profile"] = detected
 
         # ── 2. Contextual flags ────────────────────────────────────────
-        if any(k in text_lower for k in ["parent", "mom", "dad", "mother", "father",
-                                          "senior citizen", "mata", "pita", "maa", "baap"]):
+        # Sprint 4 certification: word-bounded matching — the bare
+        # substring "maa" fired inside "main" ("main 50 hazaar kamata
+        # hoon" set has_parents). Same definition as the preparse guard's
+        # _FAMILY_WORD_RE, so the flag and the family-context guard can
+        # never disagree.
+        if _FAMILY_WORD_RE.search(text):
             session["has_parents"] = True
         if any(k in text_lower for k in ["home loan", "house loan", "mortgage",
                                           "ghar ka loan", "housing loan"]):
@@ -458,6 +679,9 @@ class NLPEngine:
         sentences = re.split(r'(?<!\d)[,.;!?](?!\d)', text)
         newly_extracted: List[str] = []
         already_mapped_this_turn: set = set()
+        # Sprint 4 P2: categories booked via the profile-default fall-
+        # through this turn (confidence-aware reply surface).
+        turn_default_cats: List[str] = []
         # Sprint 2 Step D2/G: reply notes (age/senior-citizen assumption)
         # and category ask-backs collected by the pre-parse guard. All
         # message-scoped locals — the engine is a shared singleton, so no
@@ -465,6 +689,12 @@ class NLPEngine:
         notes: List[str] = []
         askbacks: List[str] = []
         allow_askback = not bare_no
+        # Security review finding 1: note/advisory amplification guard —
+        # the transfer-date notes are per-MESSAGE, not per-match
+        # (adversarial repetition "sold in 1800 " * 300 amplified the
+        # reply 9.4x). msg_ctx is handed down through _preparse_guard.
+        question_noted = False
+        msg_ctx = {"cg_note_given": False, "cg_advisory_count": 0}
 
         # Sprint 2 Step D: 80EEA advisory-keyword check. The section was
         # DISCONTINUED (loans must have been sanctioned before April 2022),
@@ -485,14 +715,28 @@ class NLPEngine:
 
             # Sprint 2 Step D2/G: pre-parse guard — anchored age extraction
             # with span masking (Objectives G + G-1), percentage masking,
-            # the senior-citizen heuristic and the 80U/80DD + 80G category
-            # collection. Returns the sentence with consumed numeric spans
-            # blanked (length-preserving) so those numbers never reach
-            # UniversalParser.
+            # the transfer-date parse, the senior-citizen heuristic and the
+            # 80U/80DD + 80G category collection. Returns the sentence with
+            # consumed numeric spans blanked (length-preserving) so those
+            # numbers never reach UniversalParser.
             s = self._preparse_guard(
-                s, session, newly_extracted, notes, askbacks, allow_askback
+                s, session, newly_extracted, notes, askbacks, allow_askback,
+                msg_ctx
             )
             s_lower = s.lower()
+
+            # Sprint 4 P1 item 4 (abstain gap): a question sentence is
+            # meta — "how much tax on 12 lakhs?" used to book 1,200,000 as
+            # other_income through the profile-default fall-through. No
+            # amount is ever booked from an interrogative sentence; the
+            # reply says so once per message. (The splitter consumes the
+            # trailing "?", so the cue is the leading interrogative.)
+            if _QUESTION_SENT_RE.match(s) and any(c.isdigit() for c in s):
+                if not question_noted:
+                    notes.append(QUESTION_NO_BOOKING_NOTE)
+                    question_noted = True
+                logger.info("question guard: nothing booked")
+                continue
 
             # Sprint 2 Step B: metro-city booking (heuristic documented at
             # module top). A statutory metro named in a sentence that also
@@ -587,6 +831,36 @@ class NLPEngine:
                     best_cat, is_default = self.attention.resolve_category_detailed(
                         clause, m["start"], m["end"], session.get("profile"), asked_cat
                     )
+
+                    # Sprint 4 P1 item 6 (measured rent-leg cells): the rent
+                    # legs route to 80GG when the context says so —
+                    #  (a) an explicit 80GG mention in the clause ("50,000
+                    #      annual rent exempted via 80gg" lost to the bare
+                    #      "rent" hit on rent_paid by a proximity hair), or
+                    #  (b) an explicit no-HRA statement in the message
+                    #      ("hra nahi milta, X kiraya deta hoon" — the comma
+                    #      split hides the context from the clause-scoped
+                    #      resolver, and the amount fell through to the
+                    #      profile default). Rent paid with no HRA received
+                    #      IS the 80GG claim (hra_received > 0 disqualifies
+                    #      it at the tax engine).
+                    if best_cat in ("rent_paid", "hra_received") and \
+                            re.search(r"\b80gg\b", clause, re.IGNORECASE):
+                        best_cat, is_default = "80gg", False
+                    elif best_cat == "rent_paid" and \
+                            _NO_HRA_CONTEXT_RE.search(text_lower):
+                        best_cat, is_default = "80gg", False
+
+                    # Sprint 4 P1 item 3 (deduction semantics): 80E covers
+                    # only the INTEREST on a qualifying education loan —
+                    # a principal mention ("education loan principal of
+                    # 150000") is not deductible anywhere. Advise and book
+                    # nothing (the corrected 80E interest path is unchanged).
+                    if best_cat == "80e" and \
+                            _PRINCIPAL_WORD_RE.search(clause):
+                        newly_extracted.append(EDU_LOAN_PRINCIPAL_ADVISORY)
+                        logger.info("80E principal guard: amount not booked")
+                        continue
 
                     # 4c. Correction: subtract from a previously mapped category
                     if is_correction:
@@ -706,6 +980,12 @@ class NLPEngine:
                         session[best_cat] = summed
 
                     newly_extracted.append(f"{label}: ₹{val:,.0f}")
+                    # Sprint 4 P2: confidence-aware replies — remember the
+                    # categories this turn booked via the profile-default
+                    # fall-through (is_default=True) so the composer can
+                    # surface them as tentative (never silently).
+                    if is_default and not is_correction:
+                        turn_default_cats.append(best_cat)
 
         # ── 5. Agent reasoning ─────────────────────────────────────────
         decision = self.agent.decide_next_step(session)
@@ -723,7 +1003,9 @@ class NLPEngine:
             session["phase"] = "PROFILING"
 
         # ── 6. Generate response ───────────────────────────────────────
-        response = self._generate_reply(session, newly_extracted, plan, text_lower, bare_no)
+        response = self._generate_reply(session, newly_extracted, plan,
+                                        text_lower, bare_no,
+                                        default_cats=turn_default_cats)
         # Sprint 2 Step D2/G: surface the age/senior-citizen assumption
         # notes and the category ask-backs. Appending keeps the discovery
         # flow intact; the ask-back rides inside _last_question so the
@@ -745,32 +1027,21 @@ class NLPEngine:
     #  Helper: group extracted entities for acknowledgement
     # ------------------------------------------------------------------ #
 
-    def _group_found(self, found: List[str]) -> str:
-        if not found:
-            return ""
-        groups: Dict[str, float] = {}
-        for f in found:
-            if ":" in f:
-                cat, val_str = f.split(":", 1)
-                try:
-                    val = float(
-                        val_str.replace("₹", "").replace(",", "")
-                                .replace("(ANNUALIZED)", "").strip()
-                    )
-                    groups[cat.strip()] = groups.get(cat.strip(), 0) + val
-                except ValueError:
-                    pass
-        if not groups:
-            return f"Got it! Processed {len(found)} values. "
-        summary = ", ".join(f"{cat}: ₹{amt:,.0f}" for cat, amt in groups.items())
-        return f"✅ Mapped — {summary}. "
-
-    # ------------------------------------------------------------------ #
-    #  Response generator  (single definition — bug fixed)
-    # ------------------------------------------------------------------ #
-
     def _generate_reply(self, session: Dict, found: List[str], plan: str,
-                        text_lower: str, bare_no: bool) -> str:
+                        text_lower: str, bare_no: bool,
+                        default_cats: Optional[List[str]] = None) -> str:
+        """Reply assembly — Sprint 4 P2 split of concerns.
+
+        The discovery STATE MACHINE (which branch fires, zero-sentinel
+        semantics, the FINAL phase flip, the recursion) stays here; all
+        PROSE (acknowledgments, ask-back phrasing, advisory weaving,
+        confidence messaging) comes from response_composer. The composer
+        is deterministic: rotation is indexed by the session's own turn
+        count, so the same state always yields the same reply.
+        """
+        composer = response_composer.default_composer
+        turn_idx = composer.turn_index(session)
+
         # ── bare "no" → mark current slot as 0 and advance ─────────────
         if bare_no:
             income_keys = ["salary", "business", "rental", "other_income"]
@@ -785,80 +1056,59 @@ class NLPEngine:
                 decision2 = self.agent.decide_next_step(session)
                 plan2     = decision2.split("plan: ")[-1]
                 # Recurse once (bare_no=False to avoid infinite loop)
-                return self._generate_reply(session, [], plan2, text_lower, False)
-            else:
-                return ("No worries! Let's start fresh. 😊 "
-                        "What is your profession and annual income?")
+                return self._generate_reply(session, [], plan2, text_lower,
+                                            False, default_cats)
 
-        ack = self._group_found(found)
+        ack = composer.ack(found) + composer.advisory(session)
+        if ack:
+            ack += "\n"
+        conf = composer.confidence_line(default_cats)
+        if conf:
+            ack += conf + "\n"
 
-        # ── Branch on agent plan ───────────────────────────────────────
+        # ── Branch on agent plan (state machine — prose via composer) ──
         if "Acknowledge" in plan and not found:
             profile = session.get("profile", "professional")
-            return (f"Noted — you're a **{profile}**! 👍  "
-                    f"What is your total annual income from this? "
-                    f"_(e.g. '12 lakhs', '8.5L', '2.5 crore')_")
+            return ack + composer.ask("profile-ack", turn_idx,
+                                      profile=profile)
 
         if "specific income amount" in plan:
             profile = session.get("profile", "work")
-            return (ack + f"What is your total annual income from {profile}? "
-                    f"_(e.g. '12 lakh per year' or '1.5 crore')_")
+            return ack + composer.ask("income", turn_idx, profile=profile)
 
         if "income details" in plan:
-            return (ack + "Welcome! 🙏 I'm your AI Tax Consultant for FY 2024-25. "
-                    "Tell me your **profession** and **annual income** to begin. "
-                    "_(e.g. 'I'm a software engineer earning 18 LPA')_")
+            return ack + composer.ask("welcome", turn_idx)
 
         if re.search(r'\b80C\b', plan):
-            return (ack +
-                    "💰 **Section 80C** — Have you made any tax-saving investments this year? "
-                    "_(PPF, LIC premium, ELSS mutual funds, EPF, or children's tuition fees "
-                    "— up to ₹1.5 Lakh)_")
+            return ack + composer.ask("80c", turn_idx)
 
         if re.search(r'\b80D\b', plan):
-            return (ack +
-                    "🏥 **Health Insurance (Section 80D)** — Do you pay health insurance premiums "
-                    "for yourself or your family? "
-                    "_(₹25,000 for self/family; ₹50,000 if parents are senior citizens)_")
+            return ack + composer.ask("80d", turn_idx)
 
         if "NPS" in plan or "80CCD" in plan:
-            return (ack +
-                    "🎯 **NPS Bonus Deduction** — Have you contributed to NPS (National Pension System)? "
-                    "It gives an **extra ₹50,000** deduction under Section 80CCD(1B), "
-                    "completely separate from your 80C limit!")
+            return ack + composer.ask("nps", turn_idx)
 
         if "HRA" in plan or "rent" in plan:
             # Step B: the combined Rule 2A question asks all THREE statutory
             # inputs (monthly rent, monthly HRA received, metro city) and
             # states the non-metro default so the assumption is never silent.
-            return (ack +
-                    "🏠 **Rent & HRA** — What is your **monthly rent**, your "
-                    "**monthly HRA received**, and do you live in a **metro city** "
-                    "(Delhi / Mumbai / Kolkata / Chennai)? "
-                    "_(HRA exemption if salaried, Section 80GG if not — until a "
-                    "metro city is confirmed, the non-metro 40% assumption applies)_")
+            return ack + composer.ask("hra", turn_idx)
 
         if "home loan interest" in plan or "24b" in plan:
-            return (ack +
-                    "🏦 **Home Loan Interest (Section 24b)** — What is the total home loan "
-                    "**interest** you paid this year? "
-                    "_(Up to ₹2 Lakh is deductible for self-occupied property)_")
+            return ack + composer.ask("24b", turn_idx)
 
         if re.search(r'\b80G\b', plan):
-            return (ack +
-                    "🤝 **Charitable Donations (Section 80G)** — Have you donated to any charity, "
-                    "PM Relief Fund, or NGO this year? "
-                    "_(50% to 100% of donations are deductible)_")
+            return ack + composer.ask("80g", turn_idx)
 
         if "Final audit ready" in plan:
             session["phase"] = "FINAL"
             tips = self.agent.get_savings_tips(session)
             tip_text = ("\n\n💡 **Quick Tip**: " + tips[0]) if tips else ""
-            return (ack +
-                    "✨ **All data collected!** Generating your complete Tax Optimization "
-                    f"Report now…{tip_text}")
+            return (ack + composer.ask("closing", turn_idx)
+                    + f" (tax year {composer.year})" + tip_text)
 
-        return (ack +
-                "Anything else to add? "
-                "_(e.g. home loan interest, NPS, donations, property sale, "
-                "education loan, rental income)_")
+        return ack + composer.ask("open", turn_idx)
+
+    # ------------------------------------------------------------------ #
+    #  Response generator  (single definition — bug fixed)
+    # ------------------------------------------------------------------ #

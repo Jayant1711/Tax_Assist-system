@@ -220,13 +220,16 @@ class TestRealPipelineIntegration:
             pytest.approx(1.0, abs=1e-4)
 
     def test_pipeline_miss_is_visible(self) -> None:
-        """P1 item 3: the current pipeline misbooks the noun-form
-        'shares sold' — the harness must register the miss (this test
-        documents the baseline gap; it flips when P1 lands)."""
+        """P1 item 3: the pre-P1 pipeline misbooked the noun-form
+        'shares sold' to the profile default (the 16-span
+        capital_gains->other_income eval cell). FLIPPED at P1
+        (docs/sprint4-execution.md P1 item 3): the noun-form pair now
+        books capital_gains and the harness must register the HIT."""
         records = [_rec("gap1", [("capital_gains", 500_000)])]
         records[0]["text"] = "shares sold for 5 lakhs"
         report = nlp_eval.evaluate_extraction(records)
-        assert report["per_category"]["capital_gains"]["recall"] < 1.0
+        assert report["per_category"]["capital_gains"]["recall"] == \
+            pytest.approx(1.0, abs=1e-4)
 
     def test_turn_records_run_through_one_session(self) -> None:
         rec = _rec("turn1", [("salary", 1_800_000), ("80c", 150_000)])

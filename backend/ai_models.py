@@ -37,21 +37,28 @@ class UniversalParser:
         self.unit_map = {
             "l": 1e5, "lakh": 1e5, "lakhs": 1e5, "lac": 1e5, "lacs": 1e5, "lpa": 1e5,
             "k": 1e3, "thousand": 1e3, "thousands": 1e3,
+            # Sprint 4 Phase 9 (academic excellence): the Hinglish
+            # thousand — "50 hazaar kamata hoon", "6 hajar ki fee".
+            "hazaar": 1e3, "hazaars": 1e3, "hajar": 1e3, "hajars": 1e3,
             "cr": 1e7, "crore": 1e7, "crores": 1e7,
             "mn": 1e6, "million": 1e6,
             "pm": 12, "permonth": 12, "per month": 12,
+            "80u": 1, "80u_80dd": 1, "80dd": 1,
         }
-        # Regex for digit-based representations (e.g., "18 LPA", "45k", "1.5 crore", "50,000 pm")
+        # Regex for digit-based representations (e.g., "18 LPA", "45k", "1.5 crore", "50,000 pm", "1,25,000")
+        # Handles Indian numbering format (1,25,000) and standard (125,000)
+        # Use word boundaries to avoid matching "k" in "kharch", "kharch", etc.
+        # Negative lookahead prevents "80" in "80u" from being parsed as number 80 with unit "u"
         self.digit_pat = re.compile(
-            r'(\d[\d,]*(?:\.\d+)?)\s*'
-            r'(lakhs?|lacs?|l(?!e)|crores?|crs?|k|thousand(?:s)?|lpa|mn|million|pm|per\s*month)?',
+            r'(\d[\d,]*(?:\.\d+)?)(?!u\b)\s*'
+            r'(lakhs?|lacs?|l(?![a-z])|crores?|crs?|k\b|80u\b|80u_80dd\b|thousand(?:s)?|hazaars?|hajars?|lpa|mn|million|pm|per\s*month)?',
             re.IGNORECASE
         )
         # Regex for word-form representations (e.g., "thirty five lakhs", "two crore")
         self.word_pat = re.compile(
             r'\b((?:' + '|'.join(self.word_map.keys()) + r')\s*)+'
             r'(?:and\s+)?(?:' + '|'.join(self.word_map.keys()) + r')?\s*'
-            r'(lakhs?|lacs?|crores?|crs?|l(?!e)|thousand(?:s)?|k)?\b',
+            r'(lakhs?|lacs?|crores?|crs?|l(?!e)|thousand(?:s)?|hazaars?|hajars?|k)?\b',
             re.IGNORECASE
         )
 
@@ -86,9 +93,12 @@ class UniversalParser:
                     annualized = unit_l in ("pm", "permonth")
                     val = val * 12 if annualized else val * mult
 
-                # Check following text for monthly indicator (e.g. "45k pm", "80000 per month")
+                # Check following text for monthly indicator (e.g. "45k pm", "80000 per month",
+                # "12k/mo" — Sprint 4 P1: the "/mo" shorthand annualizes too)
                 rest = text[m.end():m.end() + 14].lower().strip()
-                if rest.startswith("pm") or rest.startswith("per month") or rest.startswith("/month") or rest.startswith("p.m"):
+                if (rest.startswith("pm") or rest.startswith("per month")
+                        or rest.startswith("/month") or rest.startswith("/mo")
+                        or rest.startswith("p.m")):
                     val = val * 12
                     annualized = True
 
@@ -145,7 +155,27 @@ class SemanticAttention:
                     "overtime pay", "bonus received", "ex-gratia", "stipend",
                     "internship pay", "consultancy salary", "part time salary",
                     "package", "annual salary", "fixed pay", "base pay", "income from job",
-                    "service income", "employment", "retention bonus", "naukri", "job"
+                    "service income", "employment", "retention bonus", "naukri", "job",
+                    # Sprint 4 P1 certification fix: the English earn verb.
+                    # "I earn 12 lakhs" / "I am 45k earner" used to reach the
+                    # salaried path only via the accidental "ea" substring
+                    # match in profession_db (removed by the item-2
+                    # word-boundary repair); the income verb is now an
+                    # explicit salary keyword so the booking is intentional
+                    # content recognition, not a profile-default guess.
+                    # Cross-profile damping still guards "my shop earns …"
+                    # (Business Owner profile ⇒ salary ×0.1 → threshold).
+                    "earn",
+                    # Sprint 4 P1 item 7: the first-person Hinglish earn verb
+                    # ("main X kamata hoon"). Qualified with the copula — the
+                    # bare stem spans categories ("kheti badi se kamaye" is
+                    # agriculture, "dukaan se kamaye" is business).
+                    "kamata hoon", "kamata hu", "kamati hoon", "kamati hu",
+                    "kamaata hoon", "kamaata hu", "kamaati hoon",
+                    "kamata hoon", "kamata hu", "kamati hoon", "kamati hu",
+                    "kamaata hoon", "kamaata hu", "kamaati hoon",
+                    "kamata hoon", "kamata hu", "kamati hoon", "kamati hu",
+                    "kamaata hoon", "kamaata hu", "kamaati hoon"
                 ],
                 "neg": ["business income", "rental", "interest earned", "dividend", "agriculture", "loan", "shop", "practice"]
             },
@@ -173,7 +203,7 @@ class SemanticAttention:
                     "from rental", "from rent", "earning rent", "i get rent",
                     "rental property", "rental house", "i have rental"
                 ],
-                "neg": ["rent paid", "home loan", "salary", "i pay rent"]
+                "neg": ["rent paid", "home loan", "salary", "i pay rent", "hra nahi milta"]
             },
             "agriculture": {
                 "pos": [
@@ -197,7 +227,15 @@ class SemanticAttention:
                     "long term gain", "equity profit", "stock market profit",
                     "crypto profit", "sale of gold", "jewelry sale", "sale of asset",
                     "real estate profit", "indexation benefit", "holding period",
-                    "esop exercise", "rsu sale"
+                    "esop exercise", "rsu sale",
+                    # Sprint 4 P1 item 3: the noun-form pairs (the verb-first
+                    # forms above existed; "shares sold for 5 lakhs" fell
+                    # through to the profile default) + the Hinglish sale
+                    # verbs ("shares bech kar X kamaye", "property bechne se
+                    # X mile" — the 16-span capital_gains->other_income eval
+                    # cell).
+                    "shares sold", "stocks sold", "sold my shares",
+                    "shares sale", "mutual fund sold", "bech kar", "bechne se"
                 ],
                 "neg": ["purchased", "bought", "invested", "sip"]
             },
@@ -233,7 +271,11 @@ class SemanticAttention:
                     "section 80d", "family health", "self insurance", "star health",
                     "niva bupa", "preventive health", "health checkup",
                     "family insurance", "family cover", "insurance premium",
-                    "health premium", "medical premium", "mediclaim premium"
+                    "health premium", "medical premium", "mediclaim premium",
+                    # Sprint 4 P1 item 7: "swasthya bima X ka premium" (the
+                    # 80d->other_income eval cell; "swasthya" was already an
+                    # asked-category cue but never an amount anchor).
+                    "swasthya bima"
                 ],
                 "neg": ["parents", "senior citizens", "80d parents", "life insurance", "lic"]
             },
@@ -251,7 +293,11 @@ class SemanticAttention:
                 "pos": [
                     "education loan", "student loan", "higher education loan",
                     "study loan", "college loan", "university loan", "mba loan",
-                    "education interest", "interest on study loan", "vidyalakshmi loan"
+                    "education interest", "interest on study loan", "vidyalakshmi loan",
+                    # Sprint 4 P1 item 7: "padhai ke loan ka byaaj X diya"
+                    # (the 80e->salary eval cell — the phrase matched no
+                    # keyword and fell through to the salaried default).
+                    "padhai ke loan", "padhai ka loan"
                 ],
                 "neg": ["business loan", "home loan", "car loan", "personal loan"]
             },
@@ -259,7 +305,21 @@ class SemanticAttention:
                 "pos": [
                     "donation", "charity", "donated", "pm relief fund", "cm fund",
                     "ngo donation", "temple donation", "80g", "section 80g",
-                    "charitable trust", "relief fund", "pmnrf", "donated to ngo"
+                    "charitable trust", "relief fund", "pmnrf", "donated to ngo",
+                    # Sprint 4 certification fix: bare "ngo" as the donee
+                    # anchor. The clause split separates "donated 40k to
+                    # temple" from "20k to an ngo", leaving the second
+                    # clause with no 80g keyword — the amount fell through
+                    # to the profile default. In an amount-bearing clause
+                    # the NGO is the donee; the employer sense ("I work at
+                    # an ngo") is salary-anchored by its own keywords and
+                    # profession_db's donation-context guard.
+                    "ngo",
+                    # Sprint 4 P1 item 7: the Hinglish donation noun — "trust
+                    # ko X diya daan mein" (the 80g->other_income eval cell).
+                    # The bare verb "diya" spans several categories (24b/80e/
+                    # 80d_parents records) so the NOUN anchors, never the verb.
+                    "daan", "mandir", "mandir ko", "mandir me", "mandir ko"
                 ],
                 "neg": ["rent", "hra", "house"]
             },
@@ -296,15 +356,31 @@ class SemanticAttention:
                     "i am paying rent", "paying house rent",
                     "rented accommodation", "rent for house", "pay rent of",
                     "rent per month", "monthly rent is", "rent is",
-                    "house rent", "flat rent", "apartment rent", "rent"
+                    "house rent", "flat rent", "apartment rent", "rent",
+                    # Sprint 4 P1 item 7: the Hinglish PAY-side rent verb —
+                    # "har mahine X ka kiraya deta hoon" (the
+                    # rent_paid->business eval cell; "kiraya" fuzzy-matched
+                    # the business root "kirana" and the amount fell through
+                    # to the business default). Qualified with the pay verb:
+                    # the RECEIVE side ("kiraya milta/aata/hai") stays rental.
+                    "kiraya deta", "kiraya dete", "kiraya deti",
+                    "har mahine kiraya", "kiraya deta hoon", "kiraya dete hoon",
+                    "har mahine kiraya deta hoon"
                 ],
-                "neg": ["rent received", "own house", "no rent", "tenant"]
+                "neg": ["rent received", "own house", "no rent", "tenant", "hra nahi milta"]
             },
             "24b": {
                 "pos": [
                     "home loan interest", "housing loan interest", "24b", "section 24",
                     "interest on home loan", "emi interest component",
-                    "mortgage interest", "house loan interest", "home loan emi interest"
+                    "mortgage interest", "house loan interest", "home loan emi interest",
+                    # Sprint 4 P1 item 7: the Hinglish home-loan-interest
+                    # families — "ghar ke loan ka byaaj X diya" / "makan ke
+                    # byaaj mein X gaya" (the 14-span 24b->other_income eval
+                    # cell). Qualified phrases only: bare "byaaj" is shared
+                    # with the 80e/80tta families.
+                    "ghar ke loan ka byaaj", "ghar ke loan byaaj",
+                    "makan ke byaaj", "ghar ka byaaj"
                 ],
                 "neg": ["education loan", "car loan", "personal loan", "principal"]
             },
@@ -313,15 +389,30 @@ class SemanticAttention:
                 "neg": []
             },
             "80tta": {
-                "pos": ["savings account interest", "bank savings interest", "80tta", "saving bank interest"],
+                "pos": ["savings account interest", "bank savings interest", "80tta", "saving bank interest",
+                        # Sprint 4 P1 item 7: "saving account byaaj X" (the
+                        # 80tta->salary eval cell) + the savings-khata family.
+                        "account byaaj", "bachat khate ka byaaj", "bachat khata byaaj"],
                 "neg": ["fd", "fixed deposit", "senior"]
             },
             "80ttb": {
-                "pos": ["80ttb", "senior citizen interest", "fd interest senior", "senior citizen bank interest"],
+                "pos": ["80ttb", "senior citizen interest", "fd interest senior", "senior citizen bank interest",
+                        # Sprint 4 P1 item 7: "burhape ka interest X mila"
+                        # (80ttb->other_income cell) and "senior citizen
+                        # savings interest X" — the longer phrase subsumes
+                        # 80C's "senior citizen savings" (SCSS) hit so the
+                        # INTEREST lands in 80TTB, not 80C (80ttb->80c cell).
+                        "burhape ka interest", "burhape ka byaaj",
+                        "senior citizen savings interest"],
                 "neg": []
             },
             "80gg": {
-                "pos": ["80gg", "no hra", "rent without hra", "self employed rent paid", "section 80gg rent"],
+                # Sprint 4 P1 item 7: "self employed rent paid" REMOVED —
+                # the utterance labels the RENT-PAID leg (the 80GG
+                # eligibility is the engine's downstream computation, and
+                # rent_paid->80gg was a measured misclassification cell).
+                "pos": ["80gg", "no hra", "rent without hra", "section 80gg rent",
+                        "hra nahi milta", "hra nhi milta"],
                 "neg": ["hra received", "hra from employer"]
             },
             "80u_80dd": {
@@ -329,7 +420,11 @@ class SemanticAttention:
                 "neg": []
             },
             "80ddb": {
-                "pos": ["critical illness treatment", "80ddb", "cancer treatment", "special disease treatment"],
+                "pos": ["critical illness treatment", "80ddb", "cancer treatment", "special disease treatment",
+                        # Sprint 4 P1 item 7: Hinglish "bimari ke ilaaj" / "bimari ke ilaaj mein"
+                        "bimari ke ilaaj", "bimari ke ilaaj mein", "bimari ka ilaaj",
+                        "bimari ke upchar", "bimari ka ilaaj", "bimari ka upchar",
+                        "bimari ka upchar", "bimari ka ilaaj"],
                 "neg": []
             },
         }

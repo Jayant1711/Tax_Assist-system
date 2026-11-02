@@ -360,6 +360,15 @@ class TaxEngine:
         # Optimizer Logic
         rec     = "New Regime" if new_res.total_tax <= old_res.total_tax else "Old Regime"
         savings = abs(old_res.total_tax - new_res.total_tax)
+        # Sprint 4 certification (architect-verified ordering defect): the
+        # savings/recommendation binding MUST precede score_efficiency —
+        # the scorer's feature 17 (savings ratio) reads
+        # result["savings"], which was still the dataclass default 0.0
+        # whenever the score was computed first.
+        old_res.savings          = savings
+        new_res.savings          = savings
+        old_res.recommendation   = rec
+        new_res.recommendation   = rec
 
         # ANFIS Industrial Audit Score
         final_res = old_res if rec == "Old Regime" else new_res
@@ -367,10 +376,6 @@ class TaxEngine:
 
         old_res.efficiency_score = eff_score
         new_res.efficiency_score = eff_score
-        old_res.recommendation   = rec
-        new_res.recommendation   = rec
-        old_res.savings          = savings
-        new_res.savings          = savings
 
         # Risk Analysis
         total_inc = salary + business + rental_gross + other_income
