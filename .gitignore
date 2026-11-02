@@ -32,3 +32,6 @@ backend/data/
 logs/
 data/taxassist.db
 data/anfis_v1/
+
+# Office lock files
+~$*
