@@ -314,8 +314,8 @@ export default function ChatInterface({ sessionId, onUpdateSession, onShowReport
                       <span
                         key={idx}
                         style={{
-                          fontSize: '0.68rem',
-                          padding: '0.15rem 0.5rem',
+                          fontSize: '0.72rem',
+                          padding: '0.18rem 0.55rem',
                           borderRadius: '6px',
                           background: 'rgba(16,185,129,0.15)',
                           color: 'var(--accent-green)',
@@ -359,7 +359,7 @@ export default function ChatInterface({ sessionId, onUpdateSession, onShowReport
               <button
                 onClick={() => sendMessage("I am a software engineer earning 24 LPA. I invest 1.5L in 80C, 25k in 80D health insurance, and 50k in NPS.")}
                 style={{
-                  fontSize: '0.72rem',
+                  fontSize: '0.78rem',
                   padding: '0.25rem 0.65rem',
                   borderRadius: '16px',
                   background: 'rgba(99,102,241,0.18)',
@@ -377,7 +377,7 @@ export default function ChatInterface({ sessionId, onUpdateSession, onShowReport
               <button
                 onClick={() => sendMessage("I run a retail business with 18 lakhs net profit. I have 1.5 lakhs in PPF and senior citizen parents.")}
                 style={{
-                  fontSize: '0.72rem',
+                  fontSize: '0.78rem',
                   padding: '0.25rem 0.65rem',
                   borderRadius: '16px',
                   background: 'rgba(16,185,129,0.15)',
@@ -400,7 +400,7 @@ export default function ChatInterface({ sessionId, onUpdateSession, onShowReport
               key={i}
               onClick={() => sendMessage(sug)}
               style={{
-                fontSize: '0.72rem',
+                fontSize: '0.78rem',
                 padding: '0.25rem 0.65rem',
                 borderRadius: '16px',
                 background: 'rgba(255,255,255,0.04)',
