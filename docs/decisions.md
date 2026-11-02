@@ -187,3 +187,13 @@ ADRs 001-007 document decisions already embodied in the code; ADRs 008-011 were 
 
 **Consequences:** ✅ A browser-origin allowlist the cookie can trust, bounded CPU-exhaustion, hardened responses on every path. ❌ NAT'd users share per-IP auth limits (mitigated: per-user keys for the authenticated buckets); misconfigured `CORS_ORIGINS` in prod is a hard outage by design — fail-closed is the point.
 
+
+## ADR-015 — Deterministic extraction retained; learned extractor not warranted at current corpus volume
+
+**Date:** 2026-11-02 (Sprint 4 certification)
+
+**Context:** The Sprint-4 plan pre-committed a decision rule (docs/sprint4-execution.md §P3): if the P0 evaluation framework measures income-head + major-section precision/recall ≥ 95% on the labeled corpus, the deterministic extraction pipeline is KEPT and a learned extractor is not warranted; revisit at ≥5,000 organic turns.
+
+**Decision:** KEEP the deterministic pipeline as the sole production extractor. Measured 2026-11-02 on the eval split (434 records, template-disjoint): macro F1 1.000 across all 21 categories, gate PASS with zero failing categories, abstention accuracy 17/17, zero pipeline errors (`NLP_EVALUATION_REPORT.md`, `MODEL_DECISION_REPORT.md`, tool: `backend/tools/run_eval.py`). The research-layer TF-IDF intent classifier (96.41%, 8 classes) remains a research artifact — never a production component.
+
+**Consequences:** ✅ Explainable, auditable, offline extraction (ADR-003 intact); the extraction ceiling analysis moves from "precision problem" to "coverage problem" — future work is corpus growth, not model substitution. ❌ Long-tail utterances outside the template grammar still fall through to profile defaults (guarded: `is_default` bookings never overwrite stated values and are surfaced as tentative by the response composer); the decision is pre-committed to re-open at the organic-corpus trigger.
