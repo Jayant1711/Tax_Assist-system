@@ -1,4 +1,7 @@
 # ANFIS v5 Retraining Plan — Live-Engine Ground Truth, CPU NumPy, Gated Release
+
+> **Implementation status note (2026-11-04):** the shipped v5 deviates from this design as documented in `MODEL_REGISTRY.md` — additive 48-rule combination (not product/64), schema v2.1+f21 (23-dim savings input), and the deployment path is the exact rule heads (`ADR-016`), not TSK weight promotion. This document is retained as the design record.
+
 **Phase 6 · ANFIS REBIRTH · 2026-11-02**
 Companions: [`ANFIS_VNEXT_ARCHITECTURE.md`](ANFIS_VNEXT_ARCHITECTURE.md) (system design) · [`ANFIS_FEATURE_SCHEMA.md`](ANFIS_FEATURE_SCHEMA.md) (exact feature/output definitions) · [`ANFIS_EXPLAINABILITY_FRAMEWORK.md`](ANFIS_EXPLAINABILITY_FRAMEWORK.md).
 

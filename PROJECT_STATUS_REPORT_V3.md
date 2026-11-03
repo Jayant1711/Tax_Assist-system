@@ -21,7 +21,7 @@
 
 ## 2. Files changed / added (this run)
 
-- **Code**: `backend/tax_intelligence.py` (v5 completion: features_v2 single-source, f21, exact rule heads, advisor, explainability), `backend/nlp_engine.py` (closing-turn integration + msg_ctx amplification caps ×5 vectors), `backend/nlp_eval.py` (gate attach fix + conventions), `backend/ai_models.py` + `profession_db.py` (earn/earner/ngo/hazaar/lakh-stem), `backend/tax_engine.py` (scoring order), `backend/tests/*` (+37 tests: composer 25, intelligence 12), `backend/tools/*` (run_eval, generate_anfis_dataset, train_anfis_v5, retrain_anfis), `.gitignore`
+- **Code**: `backend/tax_intelligence.py` (v5 completion: features_v2 single-source, f21, exact rule heads, advisor, explainability), `backend/nlp_engine.py` (closing-turn integration + msg_ctx amplification caps ×5 vectors), `backend/nlp_eval.py` (gate attach fix + conventions), `backend/ai_models.py` + `profession_db.py` (earn/earner/ngo/hazaar/lakh-stem), `backend/tax_engine.py` (scoring order), `backend/tests/*` (+35 tests: composer 23, intelligence 12), `backend/tools/*` (run_eval, generate_anfis_dataset, train_anfis_v5, retrain_anfis), `.gitignore`
 - **Data**: `data/anfis_v1/` (gitignored; regenerable via the committed tools)
 - **Reports (10)**: listed in §6
 
