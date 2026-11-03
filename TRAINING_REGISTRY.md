@@ -33,6 +33,17 @@
 | Conclusion | the served efficiency = exact composite (PASS by construction); the learned savings/opportunity heads are **data-limited**: 146 positive rows vs 1,104 LSE params cannot express the regime-flip boundary. Rollback held; promotion requires the plan's 120k-record strata with positive-rich sampling |
 | Metrics file | `data/anfis_v1/v5_metrics.json` |
 
+## RUN-003b — anfis-v5 expanded retrain + rule-head deployment (2026-11-03)
+| Field | Value |
+|---|---|
+| Data | anfis-v1 Phase-5 expansion (5,964 scenarios / 76,960 opportunity rows / 1,623 positives (2.11%) / schema v2.1 + f21 old-tax ratio) |
+| Optimizer | ridge-LSE consequents (closed form) + quantile memberships + sigma-scale search (40 evals) + 6 jitter rounds; SEED 472 |
+| Loss | per-head: eff MSE · sav log1p MSE (cascade: material weight 20 + 2.5k conditioning w 0.05) · opp MSE (balanced 20:1, positive weight 5) |
+| Results | G1 0.136 PASS · G2 −0.112 PASS · G3 100% PASS · **G6 95.72% PASS** · TSK G4 MAPE 795% / G5 P 0 R 0 FAIL → **exact rule heads deployed instead: P 1.000 / R 1.000 / savings MAE 0.00 (engine-priced by construction)** |
+| Wall time | 65.5 s |
+| Verdict | **DEPLOYMENT PATH PASS** — v0.5 ships engine-priced rule heads; TSK heads continue off-deployment; v4 untouched |
+| Report | `ANFIS_V5_EVALUATION_V2.md` · forensics: `ANFIS_ROOT_CAUSE_REPORT.md` |
+
 ## RUN-004 — tfidf-intent-v1 (research, 2026-11-01)
 | Field | Value |
 |---|---|

@@ -411,10 +411,12 @@ def evaluate_extraction(records: Sequence[dict],
                         pipeline: Optional[Callable[[str, Dict], Dict]]
                         = None) -> dict:
     """Evaluate *records* against the extraction *pipeline* (default:
-    the current NLPEngine.process_message)."""
+    the current NLPEngine.process_message). The gate report is attached
+    so CLI consumers (tools/run_eval.py) render the verdict directly."""
     pipeline = pipeline if pipeline is not None else default_pipeline()
     predictions = run_pipeline(records, pipeline)
     report = evaluate_predictions(records, predictions)
+    report["gate"] = gate_report(report)
     report["errors"] = [
         {"id": r["id"], "error": r["_eval_error"]}
         for r in records if r.get("_eval_error")

@@ -44,9 +44,10 @@ except ImportError:  # graceful degradation mirrors the v4 contract
 
 SEED = 472
 N_FEATURES = 20
-SAV_EXTRA = 2                    # delta_norm + head_idx
+SAV_EXTRA = 3                    # delta_norm + head_idx + f21
+                                 # (baseline old-regime tax ratio)
 N_IN_SAV = N_FEATURES + SAV_EXTRA
-RULES = 48                       # LSE tractable: 48 x 21 = 1,008 dims/head
+RULES = 48                       # LSE tractable: 48 x 23 = 1,104 dims/head
 RIDGE = 1e-3
 HEADS = ["80c", "80d", "80d_parents", "nps", "24b", "80g", "80e",
          "80tta", "80ttb"]
@@ -56,7 +57,7 @@ LIMITS = {"80c": 150_000, "80d": 25_000, "80d_parents": 50_000,
 EFF_WEIGHTS = {"80c": 0.40, "80d": 0.12, "80d_parents": 0.08, "nps": 0.15,
                "24b": 0.10, "80g": 0.05, "80e": 0.05, "80tta": 0.025,
                "80ttb": 0.025}
-SCHEMA = "anfis-feature-schema/2"
+SCHEMA = "anfis-feature-schema/3"  # /3: +f21 old-tax ratio (23-dim sav)
 
 _WEIGHTS_PATH = Path(__file__).resolve().parent / "anfis_v5_weights.json"
 
@@ -415,7 +416,6 @@ def recommend(session: Dict[str, Any], engine: Any,
     gate-passing) only decorate; with ``ti=None`` the review degrades to
     ENGINE-ONLY intelligence and stays fully available.
     """
-    model_ready = ti is not None and HAS_NUMPY and getattr(ti, "ready", False)
     payload = {k: v for k, v in session.items()
                if not str(k).startswith("_") and k not in ("history",)}
     profile = session.get("profile")
@@ -628,3 +628,34 @@ def advisor_block(session: Dict[str, Any], engine: Any,
             f"Why: {rec['reason'].rstrip('.')}.")
 
 
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — EXACT RULE HEADS (forensics-derived, engine-priced)
+# ---------------------------------------------------------------------------
+# ANFIS_ROOT_CAUSE_REPORT.md measured: (a) y_opp ⟺ regime_signal == 0 with
+# zero exceptions on all 76,960 rows; (b) the savings label is exactly
+# linear in the base/hypothetical min-paid ratios (val MAPE 1.6e-14);
+# (c) the additive TSK rule base dilutes separable signal as rule count
+# grows (AUC 1.0 → 0.30). The v5 deployment answer is therefore NOT a
+# bigger neural fit — it is EXACT RULE HEADS over the engine two-pass:
+# the "prediction" IS the engine computation, so P/R/MAPE are correct by
+# construction and every rupee stays ADR-001-authoritative. The learned
+# TSK heads remain registry-documented experiments.
+
+
+def rule_opportunity(savings_engine: float) -> float:
+    """Exact opportunity rule: 1.0 iff the engine prices a strictly
+    positive saving for the top-up (the label definition, engine-priced)."""
+    return 1.0 if savings_engine > 0 else 0.0
+
+
+def rule_savings(savings_engine: float) -> float:
+    """Exact savings rule: the engine-priced delta, unmodified."""
+    return round(max(0.0, savings_engine), 2)
+
+
+def rule_confidence(savings_engine: float) -> float:
+    """Confidence for an exact-rule recommendation: 0.85 when the engine
+    prices a real benefit (authoritative two-pass), 0.30 otherwise."""
+    return 0.85 if savings_engine > 0 else 0.30

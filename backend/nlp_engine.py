@@ -373,6 +373,8 @@ class NLPEngine:
         allow_askback: bool,
         msg_ctx: Optional[Dict[str, Any]] = None,
     ) -> str:
+        if msg_ctx is None:
+            msg_ctx = {}
         """Step D2/G pre-parse pass over ONE sentence (before clause
         parsing). Runs, in order:
 
@@ -513,9 +515,14 @@ class NLPEngine:
                 # previous calendar year is after the cutoff (documented
                 # assumption — the note discloses it so it can be corrected).
                 session[CG_FLAG_KEY] = False
-                notes.append(
-                    "Noted — a sale last year falls after the 23-Jul-2024 "
-                    "cutoff (the new 12.5% regime applies).")
+                # security review finding 1: same per-message dedupe as the
+                # sibling notes (measured 28KB amplification uncapped)
+                _ctx3 = msg_ctx if msg_ctx is not None else {}
+                if not _ctx3.get("cg_note_given"):
+                    _ctx3["cg_note_given"] = True
+                    notes.append(
+                        "Noted — a sale last year falls after the 23-Jul-2024 "
+                        "cutoff (the new 12.5% regime applies).")
                 logger.info("transfer-date: 'last year' -> flag False")
         else:
             _ctx2 = msg_ctx if msg_ctx is not None else {}
@@ -600,7 +607,13 @@ class NLPEngine:
                     logger.info("80U/80DD category collected: 40_79")
                 elif allow_askback:
                     # bare section mention: ask the category, book nothing
-                    askbacks.append(ASKBACK_80U)
+                    # (security review findings 2-3: per-message askback cap
+                    # — measured 43-64KB amplification uncapped)
+                    if msg_ctx is None:
+                        msg_ctx = {}
+                    if msg_ctx.get("askback_80u", 0) < 2:
+                        msg_ctx["askback_80u"] =                             msg_ctx.get("askback_80u", 0) + 1
+                        askbacks.append(ASKBACK_80U)
 
         # 5. 80G donee category (heuristic-honest)
         if not zero_intent:
@@ -619,7 +632,11 @@ class NLPEngine:
             elif donation_ctx and allow_askback:
                 # donation with no recognizable donee: ask back, book no
                 # category (the engine's disclosed default still applies)
-                askbacks.append(ASKBACK_80G)
+                if msg_ctx is None:
+                    msg_ctx = {}
+                if msg_ctx.get("askback_80g", 0) < 2:
+                    msg_ctx["askback_80g"] =                         msg_ctx.get("askback_80g", 0) + 1
+                    askbacks.append(ASKBACK_80G)
 
         return masked
 

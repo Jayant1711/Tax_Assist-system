@@ -68,8 +68,9 @@ EFF_WEIGHTS: Dict[str, float] = {
 PROFILES: List[Optional[str]] = ["Salaried", "Business Owner",
                                  "Senior Citizen", None]
 INCOMES = [300_000, 500_000, 800_000, 1_000_000, 1_150_000, 1_250_000,
-           1_500_000, 1_800_000, 2_400_000, 3_000_000, 5_000_000,
-           8_000_000, 12_000_000, 20_000_000]
+           1_400_000, 1_500_000, 1_650_000, 1_800_000, 2_000_000,
+           2_400_000, 2_700_000, 3_000_000, 3_500_000, 5_000_000,
+           8_000_000, 12_000_000, 20_000_000, 50_000_000]
 # booked-value grids per head (0 = head unused → the opportunity space)
 GRID: Dict[str, List[float]] = {
     "80c": [0, 50_000, 100_000, 150_000],
@@ -111,6 +112,21 @@ def base_session(profile: Optional[str], income: float,
             sess[head] = amount
     sess["has_parents"] = bool(booked.get("80d_parents"))
     sess["has_home_loan"] = bool(booked.get("24b"))
+    # Phase 5 expansion inputs: Rule-2A legs + capital gains — the old
+    # regime interacts with both, and the v1 grid had neither (the
+    # measured cause of the 0.31% positive density)
+    if booked.get("hra_received"):
+        sess["hra_received"] = booked["hra_received"]
+        sess["rent_paid"] = booked.get("rent_paid", 0)
+        sess["is_metro"] = bool(booked.get("is_metro", True))
+    if booked.get("cg_equity_ltcg"):
+        sess["capital_gains"] = [{"type": "equity_ltcg",
+                                  "amount": booked["cg_equity_ltcg"],
+                                  "holding": "unknown"}]
+    elif booked.get("cg_stcg"):
+        sess["capital_gains"] = [{"type": "equity_stcg",
+                                  "amount": booked["cg_stcg"],
+                                  "holding": "unknown"}]
     return sess
 
 
@@ -164,8 +180,16 @@ def main() -> int:
     scenario_ids: List[str] = []
 
     scenario_no = 0
-    for profile, income, combo in itertools.product(
-            PROFILES, INCOMES, _sampled_bookings()):
+    EXP_INCOMES = [2_400_000, 3_000_000, 5_000_000, 8_000_000,
+                   12_000_000, 20_000_000, 50_000_000]
+    expansion = [(p, i, c)
+                 for p in PROFILES
+                 for i in EXP_INCOMES
+                 for c in _expansion_bookings()]
+    base_grid = [(p, i, c) for p, i, c in
+                 itertools.product(PROFILES, INCOMES,
+                                   _sampled_bookings())]
+    for profile, income, combo in itertools.chain(base_grid, expansion):
         scenario_no += 1
         sid = f"scn_{scenario_no:05d}"
         age = 35 if profile != "Senior Citizen" else 67
@@ -239,6 +263,13 @@ def main() -> int:
                     "x_hyp": x_hyp,
                     "delta_norm": round(delta / LIMITS[head], 4),
                     "head_idx": head_idx,
+                    # f21 (forensics EXP-F2): the BASELINE old-regime tax
+                    # ratio — the marginal-rate context the savings/
+                    # opportunity heads cannot see otherwise (engine-
+                    # computed, min(1, ·) clipped).
+                    "f21_old_tax_ratio": round(
+                        min(1.0, float(base["old_regime"].total_tax)
+                            / (income * 0.3 + 1)), 6),
                 })
                 opportunities.append({"head": head, "delta": delta,
                                       "savings_engine": savings})
@@ -269,7 +300,8 @@ def main() -> int:
         sav_x, sav_y, opp_y = [], [], []
         for row in opt_rows:
             sav_x.append(list(row["x_hyp"]) + [row["delta_norm"],
-                                               row["head_idx"] / 9.0])
+                                               row["head_idx"] / 9.0,
+                                               row["f21_old_tax_ratio"]])
             sav_y.append(float(row["savings_engine"]))
             opp_y.append(1.0 if row["savings_engine"] > 0 else 0.0)
         np.savez_compressed(OUT_DIR / "savings.npz",
@@ -304,7 +336,7 @@ def _sampled_bookings() -> List[Dict[str, float]]:
             combos.append({h1: GRID[h1][1], h2: GRID[h2][1]})
     # seeded multi-head fill (5 of 9 heads) — deterministic stride
     stride = 7
-    for step in range(250):
+    for step in range(1200):
         combo: Dict[str, float] = {}
         for j, head in enumerate(heads):
             values = GRID[head]
@@ -316,6 +348,72 @@ def _sampled_bookings() -> List[Dict[str, float]]:
     for c in combos:
         key = tuple(sorted(c.items()))
         if key not in seen:
+            seen.add(key)
+            unique.append(c)
+    return unique
+
+
+def _expansion_bookings() -> List[Dict[str, float]]:
+    """Phase 5 expansion strata (DATASET_QUALITY_REPORT_V2): the v1 grid
+    under-sampled the OLD-regime-optimal corner — high incomes with heavy
+    deductions, HRA legs, capital gains and senior heads. Forensics
+    measured the v1 positive concentration: 80.7% of positives are 80e
+    full-headroom flips; these strata widen the surface."""
+    combos: List[Dict[str, float]] = []
+    # S1: heavy-deduction salaried (old-regime-optimal corner)
+    for nps in [0, 50_000]:
+        for hra in [0, 300_000]:
+            combos.append({"80c": 150_000, "80d": 25_000, "nps": nps,
+                           "24b": 200_000, "80e": 200_000, "80g": 50_000,
+                           "hra_received": hra, "rent_paid": 250_000 if hra
+                           else 0, "is_metro": True})
+    # S2: CG interactions (equity LTCG around the 1.25L 112A exempt band)
+    for cg in [100_000, 125_000, 300_000, 1_200_000]:
+        for stcg in [0, 150_000]:
+            combos.append({"80c": 150_000, "cg_equity_ltcg": cg,
+                           "cg_stcg": stcg})
+    # S3: HRA-only salaried (Rule 2A legs, metro vs non-metro)
+    for hra in [120_000, 240_000, 360_000]:
+        for metro in [True, False]:
+            combos.append({"hra_received": hra, "rent_paid": 240_000,
+                           "is_metro": metro})
+    # S4: senior heads (80TTB is senior-gated in the engine)
+    for ttb in [0, 50_000]:
+        for tta in [0, 10_000]:
+            combos.append({"80ttb": ttb, "80tta": tta, "80c": 100_000})
+    # S6: flip-hunter — the near-flip income band (regime choice flips
+    # with heavy deductions around 12L-30L; the measured positive
+    # concentration zone)
+    for income_band in [1_200_000, 1_500_000, 1_800_000, 2_100_000,
+                        2_400_000, 2_700_000, 3_000_000, 3_500_000]:
+        for step in range(48):
+            combo = {"80c": 150_000, "80d": 25_000, "nps": 50_000,
+                     "24b": 200_000, "80e": 200_000, "80g": 50_000,
+                     "hra_received": 300_000, "rent_paid": 250_000,
+                     "is_metro": True}
+            knock = list(combo)[(step * 3) % len(combo)]
+            combo[knock] = 0
+            if step % 4 == 1:
+                combo["cg_equity_ltcg"] = 300_000
+            combos.append(combo)
+    # S5: near-max fills with one head knocked out (near-max, not all-max
+    # — all-max priced zero benefit in qa probes)
+    for step in range(120):
+        combo = {"80c": 150_000, "80d": 25_000, "nps": 50_000,
+                 "24b": 200_000, "80e": 200_000, "80g": 50_000,
+                 "hra_received": 300_000, "rent_paid": 250_000,
+                 "is_metro": True}
+        knock = list(combo)[step % len(combo)]
+        combo[knock] = 0
+        if step % 3 == 0:
+            combo["cg_equity_ltcg"] = 300_000
+        elif step % 3 == 1:
+            combo["cg_stcg"] = 150_000
+        combos.append(combo)
+    seen, unique = set(), []
+    for c in combos:
+        key = tuple(sorted((k, v) for k, v in c.items() if v))
+        if key and key not in seen:
             seen.add(key)
             unique.append(c)
     return unique
