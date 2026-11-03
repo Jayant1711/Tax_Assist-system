@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tax_engine import TaxEngine  # noqa: E402
+from tax_intelligence import features_v2  # noqa: E402 — single source
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "data" / "anfis_v1"
 
@@ -54,17 +55,21 @@ LIMITS: Dict[str, float] = {
     "80tta": 10_000,       # Section 80TTA
     "80ttb": 50_000,       # Section 80TTB (senior)
 }
-# v1 efficiency composite weights (documented display metric; sums to 1)
+# v1 efficiency composite weights (documented display metric). 80ttb
+# carries NO weight: its utilization has no schema-v2 feature (senior-
+# gated), so a labeled term the features cannot express would make the
+# label unverifiable from inputs.
 EFF_WEIGHTS: Dict[str, float] = {
     "80c": 0.40, "80d": 0.12, "80d_parents": 0.08, "nps": 0.15,
-    "24b": 0.10, "80g": 0.05, "80e": 0.05, "80tta": 0.025, "80ttb": 0.025,
+    "24b": 0.10, "80g": 0.05, "80e": 0.05, "80tta": 0.025, "80ttb": 0.0,
 }
 
 # Senior Citizen exercises the senior slabs + 80TTB gating (qa finding 7)
 PROFILES: List[Optional[str]] = ["Salaried", "Business Owner",
                                  "Senior Citizen", None]
-INCOMES = [400_000, 800_000, 1_150_000, 1_250_000, 1_800_000, 3_000_000,
-           5_000_000, 10_000_000]
+INCOMES = [300_000, 500_000, 800_000, 1_000_000, 1_150_000, 1_250_000,
+           1_500_000, 1_800_000, 2_400_000, 3_000_000, 5_000_000,
+           8_000_000, 12_000_000, 20_000_000]
 # booked-value grids per head (0 = head unused → the opportunity space)
 GRID: Dict[str, List[float]] = {
     "80c": [0, 50_000, 100_000, 150_000],
@@ -141,42 +146,9 @@ def efficiency_ground_truth(booked: Dict[str, float],
 
 def feature_vector(sess: Dict[str, Any], result: Dict[str, Any],
                    profile: Optional[str]) -> List[float]:
-    """EXACTLY the 20 production features, in score_efficiency order —
-    the retrained weights must be drop-in for anfis_weights.json v4."""
-    inc = (float(sess.get("salary") or 0) + float(sess.get("business") or 0)
-           + float(sess.get("other_income") or 0) + 1e-9)
-    gains = sess.get("capital_gains") or []
-    gains_amt = sum(float(g.get("amount") or 0) for g in gains
-                    if isinstance(g, dict)) if isinstance(gains, list) else 0.0
-
-    def clip(x: float) -> float:
-        return max(0.0, min(1.0, float(x)))
-
-    savings = float(result.get("savings") or 0)
-    paid = min(float(result["old_regime"].total_tax),
-               float(result["new_regime"].total_tax))
-    return [
-        clip(inc / 10_000_000),                                          # 1
-        clip(float(sess.get("80c") or 0) / 150_000),                     # 2
-        clip(float(sess.get("80d") or 0) / 25_000),                      # 3
-        clip(float(sess.get("80d_parents") or 0) / 50_000),              # 4
-        clip(float(sess.get("nps") or 0) / 50_000),                      # 5
-        clip(float(sess.get("hra") or 0) / 200_000),                     # 6
-        clip(float(sess.get("24b") or 0) / 200_000),                     # 7
-        clip(float(sess.get("80e") or 0) / 500_000),                     # 8
-        clip(float(sess.get("80g") or 0) / (inc * 0.1 + 1)),             # 9
-        clip(float(sess.get("80tta") or 0) / 50_000),                    # 10
-        clip(float(sess.get("80u_80dd") or 0) / 125_000),                # 11
-        clip(float(sess.get("80ddb") or 0) / 100_000),                   # 12
-        clip(float(sess.get("80eea") or 0) / 150_000),                   # 13
-        clip(gains_amt / inc),                                           # 14
-        clip(float(sess.get("business") or 0) / inc),                    # 15
-        0.3,                                                             # 16
-        clip(savings / (inc * 0.1 + 1)),                                 # 17
-        clip(paid / (inc * 0.3 + 1)),                                    # 18
-        1.0 if sess.get("age", 30) >= 60 else 0.0,                       # 19
-        1.0 - clip(float(sess.get("80c") or 0) / 150_000),               # 20
-    ]
+    """Delegates to tax_intelligence.features_v2 (schema v2, single
+    source of truth — train/serve can never diverge)."""
+    return features_v2(sess, result, profile)
 
 
 def main() -> int:
@@ -250,8 +222,13 @@ def main() -> int:
                 if savings <= 0 and head != "80g":
                     # an engine-priced zero-savings probe is still signal
                     pass
+                hyp_sess = dict(sess2)
+                x_hyp = feature_vector(hyp_sess, res2, profile)
+                head_idx = list(LIMITS).index(head)
                 opt_rows.append({
                     "scenario_id": sid, "head": head, "delta": delta,
+                    "session": {k: v for k, v in sess.items()
+                                if k != "id"},
                     "baseline_paid": base_paid,
                     "hypothetical_paid": paid2,
                     "savings_engine": savings,
@@ -259,6 +236,9 @@ def main() -> int:
                     "new_regime_optimal":
                         float(res2["new_regime"].total_tax)
                         <= float(res2["old_regime"].total_tax),
+                    "x_hyp": x_hyp,
+                    "delta_norm": round(delta / LIMITS[head], 4),
+                    "head_idx": head_idx,
                 })
                 opportunities.append({"head": head, "delta": delta,
                                       "savings_engine": savings})
@@ -283,6 +263,19 @@ def main() -> int:
                             y_eff=np.asarray(y_eff, dtype=np.float32),
                             y_top=np.asarray(y_top, dtype=np.float32),
                             scenario_id=np.asarray(scenario_ids))
+        # per-opportunity savings/opportunity training matrix (schema v2):
+        # rows = [x_hyp(20), delta_norm, head_idx/9]; labels = engine
+        # savings (INR) and the >0 opportunity flag.
+        sav_x, sav_y, opp_y = [], [], []
+        for row in opt_rows:
+            sav_x.append(list(row["x_hyp"]) + [row["delta_norm"],
+                                               row["head_idx"] / 9.0])
+            sav_y.append(float(row["savings_engine"]))
+            opp_y.append(1.0 if row["savings_engine"] > 0 else 0.0)
+        np.savez_compressed(OUT_DIR / "savings.npz",
+                            X=np.asarray(sav_x, dtype=np.float32),
+                            y_sav=np.asarray(sav_y, dtype=np.float32),
+                            y_opp=np.asarray(opp_y, dtype=np.float32))
     except ImportError:  # numpy-absent fallback: JSON matrix
         _write_jsonl("features.jsonl",
                      [{"scenario_id": s, "x": x, "y_eff": e, "y_top": t}
@@ -311,7 +304,7 @@ def _sampled_bookings() -> List[Dict[str, float]]:
             combos.append({h1: GRID[h1][1], h2: GRID[h2][1]})
     # seeded multi-head fill (5 of 9 heads) — deterministic stride
     stride = 7
-    for step in range(60):
+    for step in range(250):
         combo: Dict[str, float] = {}
         for j, head in enumerate(heads):
             values = GRID[head]

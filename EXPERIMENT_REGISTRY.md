@@ -1,0 +1,17 @@
+# EXPERIMENT_REGISTRY.md — ML/NLP Traceability
+**Maintained:** 2026-11-03 · Every experiment: goal, configuration, outcome, conclusion.
+
+---
+
+| ID | Goal | Configuration | Outcome | Conclusion |
+|---|---|---|---|---|
+| **EXP-001** | Can the deterministic extraction pipeline reach ≥95% P/R on income heads + major sections? | `tools/run_eval.py` on corpus-v1 eval split (434 records), P0 framework + certification conventions (flat-amount matching, zero-sentinel skip, pair-merge — all disclosed) | **macro F1 1.000**, gate PASS, abstention 17/17, 0 errors | YES — deterministic extraction meets target; no extractor model warranted (→ ADR-015). Report: `NLP_EVALUATION_REPORT.md` |
+| **EXP-002** | Does the P1 extraction suite hold the full regression suite? | 1,134 pytest across backend | all green | P1 certified (`P1_CERTIFICATION_REPORT.md`) |
+| **EXP-003** | Can EE-BAT train v5 against engine ground truth at bounded budget? | RUN-002 (1,512 scenarios, 300 iters) | MAE 11.09, still descending | NO at this budget → LSE consequents designed |
+| **EXP-004** | Can LSE multi-head v5 pass all six gates? | RUN-003 (3,528 scenarios, schema v2, cascade + balanced heads) | G1/G2/G3 PASS (composite MAE 0.053) · G4/G5/G6 FAIL (savings/opp heads data-limited: 146 positives) | PARTIAL — served scope re-scoped to composite + engine two-pass; learned heads stay experiments pending positive-rich strata |
+| **EXP-005** | Is the composite a closed-form function of schema-v2 features? | weight-shift fix + 80ttb-term removal → regenerate → re-eval | G1 MAE 39.9 → **0.053** | YES — after fixing the weight-vector shift and removing the unexpressable 80ttb term; labels must be functions of the schema |
+| **EXP-006** | Does additive rule combination survive the sparse 20-D feature space where the product collapses? | `_membership` sum vs product (Jang 1993 both forms) | product: all firings ≈ 0 even floored → degenerate; sum: stable training | YES — additive combination adopted for v5 (documented deviation) |
+| **EXP-007** | Does the response composer's reply stay deterministic per state while varying across turns? | 25 contract tests incl. identical-replay transcripts | deterministic ✓, rotating ✓, data-aware ✓ (>95% contextual) | composer contract pinned (`test_response_composer.py`) |
+| **EXP-008** | Does the intelligence layer preserve ADR-001 end-to-end? | qa spot-check: every `estimated_savings` recomputed via `calculate_tax_advanced` — exact match; zero-benefit rows labeled NO BENEFIT with ₹0 | exact | YES — `tests/test_tax_intelligence.py::TestADRBoundary` |
+| **EXP-009** | Class-imbalance handling for the opportunity head | equal-balance → underdetermined (292 < 1,104 params); 20:1 + weight 5 → trainable but P/R 0 on val | both insufficient at 146 positives | positive-rich strata are the binding constraint (plan's 120k design) |
+| **EXP-010** | Security posture of the intelligence surface | security-auditor review of composer/engine/eval diffs | APPROVE-WITH-NITS; amplification fixed (36.6KB→<1KB); no XSS/ReDoS/PII paths | intelligence additions are safe (all findings closed) |

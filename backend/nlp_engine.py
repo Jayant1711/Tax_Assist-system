@@ -14,6 +14,15 @@ from ai_models import SemanticAttention, UniversalParser, ReasoningAgent
 from profession_db import classify_profession
 import response_composer
 
+# Sprint 4 vNext: lazily-constructed TaxEngine for the intelligence
+# annotation (constructed once; calculate_tax_advanced is a pure function).
+_TAX_ENGINE = None
+
+
+def _TAX_ENGINE_SET(engine) -> None:
+    global _TAX_ENGINE
+    _TAX_ENGINE = engine
+
 logger = logging.getLogger(__name__)
 
 # Sprint 2 Step B: metro-city detection heuristics (documented).
@@ -1104,11 +1113,23 @@ class NLPEngine:
             session["phase"] = "FINAL"
             tips = self.agent.get_savings_tips(session)
             tip_text = ("\n\n💡 **Quick Tip**: " + tips[0]) if tips else ""
-            return (ack + composer.ask("closing", turn_idx)
+            # Sprint 4 vNext (Phase 5): the Tax Intelligence Layer annotates
+            # the closing turn with the top CA-style recommendation. The
+            # block cites only ENGINE-priced savings (ADR-001); when the
+            # layer is offline or finds nothing material, the reply is
+            # unchanged.
+            intel_text = ""
+            try:
+                from tax_engine import TaxEngine
+                from tax_intelligence import advisor_block, get_intelligence
+                if _TAX_ENGINE is None:
+                    _TAX_ENGINE_SET(TaxEngine())
+                intel_text = advisor_block(
+                    session, _TAX_ENGINE, get_intelligence()) or ""
+            except Exception:  # noqa: BLE001 — intelligence never breaks a turn
+                intel_text = ""
+            return (ack + composer.ask("closing", turn_idx) + intel_text
                     + f" (tax year {composer.year})" + tip_text)
 
         return ack + composer.ask("open", turn_idx)
-
-    # ------------------------------------------------------------------ #
-    #  Response generator  (single definition — bug fixed)
     # ------------------------------------------------------------------ #
