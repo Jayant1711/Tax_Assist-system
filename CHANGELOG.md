@@ -2,7 +2,9 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
-## [Unreleased] — sprint-4-ai-modernization (certification + intelligence layer)
+## [0.5.0-sprint4] — 2026-11-04
+
+Sprint 4: Tax Intelligence Layer (ANFIS v5), Explainability Engine, CA-style recommendations, computation transparency, and the extraction certification wave. Branch `sprint-4-ai-modernization`; baseline `v0.4-sprint3`. Full details in `SPRINT4_RELEASE_CANDIDATE_REPORT_V2.md` and `V0_5_RELEASE_PACKAGE_FINAL.md`.
 
 ### Added
 - **Response Composer** (`backend/response_composer.py`): the P2 contextual reply layer — data-aware acknowledgments (en-IN amounts, category verbs), advisory weaving (80C/NPS/80D headroom, 80G donee rule, CG election note, 87A band position), deterministic phrasing rotation by turn count, confidence messaging for profile-default bookings. 23 contract tests (`tests/test_response_composer.py`): determinism, variety, data-awareness, >95% contextual metric.
