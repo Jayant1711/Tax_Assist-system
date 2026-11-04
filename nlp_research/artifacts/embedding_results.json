@@ -1,0 +1,1302 @@
+{
+  "full": {
+    "tag": "full",
+    "corpus_sentences": 9731,
+    "vocab_size_sgns": 531,
+    "vocab_size_glove": 531,
+    "sgns": {
+      "model": "sgns_full",
+      "similarity": [
+        {
+          "pair": [
+            "ppf",
+            "epf"
+          ],
+          "cosine": 0.8657030853964106
+        },
+        {
+          "pair": [
+            "ppf",
+            "investment"
+          ],
+          "cosine": 0.8977910907249114
+        },
+        {
+          "pair": [
+            "mediclaim",
+            "insurance"
+          ],
+          "cosine": 0.907562720858466
+        },
+        {
+          "pair": [
+            "salary",
+            "income"
+          ],
+          "cosine": 0.8408233489756021
+        },
+        {
+          "pair": [
+            "salary",
+            "wages"
+          ],
+          "cosine": 0.9049469408006379
+        },
+        {
+          "pair": [
+            "rent",
+            "kiraya"
+          ],
+          "cosine": -0.672807155612397
+        },
+        {
+          "pair": [
+            "daan",
+            "donation"
+          ],
+          "cosine": 0.5907193444477006
+        },
+        {
+          "pair": [
+            "byaaj",
+            "interest"
+          ],
+          "cosine": 0.46474388029774283
+        },
+        {
+          "pair": [
+            "tax",
+            "slab"
+          ],
+          "cosine": 0.895009353501364
+        },
+        {
+          "pair": [
+            "home",
+            "makan"
+          ],
+          "cosine": 0.8667568860308336
+        },
+        {
+          "pair": [
+            "ppf",
+            "bimari"
+          ],
+          "cosine": 0.9248581349015239
+        },
+        {
+          "pair": [
+            "salary",
+            "mandir"
+          ],
+          "cosine": 0.8544394729815827
+        }
+      ],
+      "related_pair_accuracy": 1.0,
+      "analogy_accuracy": 0.0,
+      "analogy_detail": [
+        {
+          "quad": [
+            "ppf",
+            "investment",
+            "mediclaim",
+            "insurance"
+          ],
+          "predicted": "donation",
+          "correct": false
+        },
+        {
+          "quad": [
+            "salary",
+            "income",
+            "rent",
+            "housing"
+          ],
+          "predicted": "documents",
+          "correct": false
+        },
+        {
+          "quad": [
+            "daan",
+            "donation",
+            "byaaj",
+            "savings_interest"
+          ],
+          "status": "oov"
+        },
+        {
+          "quad": [
+            "makan",
+            "housing",
+            "bimari",
+            "medical"
+          ],
+          "predicted": "taxes",
+          "correct": false
+        },
+        {
+          "quad": [
+            "ppf",
+            "deduction",
+            "lic",
+            "insurance"
+          ],
+          "predicted": "healthcare",
+          "correct": false
+        }
+      ],
+      "odd_one_out_accuracy": 0.25,
+      "odd_detail": [
+        {
+          "group": [
+            "ppf",
+            "elss",
+            "nsc",
+            "mediclaim"
+          ],
+          "predicted": "mediclaim",
+          "correct": true
+        },
+        {
+          "group": [
+            "salary",
+            "wages",
+            "ctc",
+            "mandir"
+          ],
+          "predicted": "salary",
+          "correct": false
+        },
+        {
+          "group": [
+            "rent",
+            "kiraya",
+            "makan",
+            "daan"
+          ],
+          "predicted": "kiraya",
+          "correct": false
+        },
+        {
+          "group": [
+            "tax",
+            "slab",
+            "surcharge",
+            "bimari"
+          ],
+          "predicted": "slab",
+          "correct": false
+        }
+      ],
+      "nearest_neighbors": {
+        "ppf": [
+          [
+            "policy",
+            0.9650680203936021
+          ],
+          [
+            "investing",
+            0.9613827605837899
+          ],
+          [
+            "house",
+            0.9598941311662011
+          ],
+          [
+            "wages",
+            0.959759872596066
+          ],
+          [
+            "business",
+            0.9591752134898753
+          ]
+        ],
+        "mediclaim": [
+          [
+            "ppf",
+            0.9254816783644194
+          ],
+          [
+            "policy",
+            0.9121026947074409
+          ],
+          [
+            "invest",
+            0.9077569332533415
+          ],
+          [
+            "insurance",
+            0.9075627214055284
+          ],
+          [
+            "wages",
+            0.9046016636209036
+          ]
+        ],
+        "salary": [
+          [
+            "invest",
+            0.9613603957845542
+          ],
+          [
+            "list",
+            0.9510438169002933
+          ],
+          [
+            "includes",
+            0.9474972699594586
+          ],
+          [
+            "rental",
+            0.9371289084499667
+          ],
+          [
+            "donation",
+            0.9362839176941783
+          ]
+        ],
+        "tax": [
+          [
+            "taxes",
+            0.9362740954119387
+          ],
+          [
+            "regime",
+            0.9358175451379438
+          ],
+          [
+            "paycheck",
+            0.9196107606302297
+          ],
+          [
+            "turnover",
+            0.9138601781819298
+          ],
+          [
+            "liability",
+            0.9137715578344079
+          ]
+        ],
+        "kiraya": [
+          [
+            "ka",
+            0.9914528994849144
+          ],
+          [
+            "hai",
+            0.9913535356211994
+          ],
+          [
+            "7.5",
+            0.9901069489034902
+          ],
+          [
+            "ke",
+            0.9900638196792242
+          ],
+          [
+            "5",
+            0.9894910424072871
+          ]
+        ],
+        "daan": [
+          [
+            "ghar",
+            0.9207234232634612
+          ],
+          [
+            "trust",
+            0.9189855843296926
+          ],
+          [
+            "father",
+            0.8976617220275228
+          ],
+          [
+            "80d",
+            0.8840461228322947
+          ],
+          [
+            "exemption",
+            0.8789092930806426
+          ]
+        ]
+      }
+    },
+    "glove": {
+      "model": "glove_full",
+      "similarity": [
+        {
+          "pair": [
+            "ppf",
+            "epf"
+          ],
+          "cosine": 0.9758277217955134
+        },
+        {
+          "pair": [
+            "ppf",
+            "investment"
+          ],
+          "cosine": 0.3616387398143736
+        },
+        {
+          "pair": [
+            "mediclaim",
+            "insurance"
+          ],
+          "cosine": 0.29340136086637025
+        },
+        {
+          "pair": [
+            "salary",
+            "income"
+          ],
+          "cosine": 0.8450678801884045
+        },
+        {
+          "pair": [
+            "salary",
+            "wages"
+          ],
+          "cosine": -0.026250671197959454
+        },
+        {
+          "pair": [
+            "rent",
+            "kiraya"
+          ],
+          "cosine": 0.5852125871095465
+        },
+        {
+          "pair": [
+            "daan",
+            "donation"
+          ],
+          "cosine": 0.2141300568418033
+        },
+        {
+          "pair": [
+            "byaaj",
+            "interest"
+          ],
+          "cosine": 0.454576591982496
+        },
+        {
+          "pair": [
+            "tax",
+            "slab"
+          ],
+          "cosine": -0.28580795301815964
+        },
+        {
+          "pair": [
+            "home",
+            "makan"
+          ],
+          "cosine": 0.8898344594792134
+        },
+        {
+          "pair": [
+            "ppf",
+            "bimari"
+          ],
+          "cosine": 0.9029776960540706
+        },
+        {
+          "pair": [
+            "salary",
+            "mandir"
+          ],
+          "cosine": 0.02151157280476755
+        }
+      ],
+      "related_pair_accuracy": 1.0,
+      "analogy_accuracy": 0.25,
+      "analogy_detail": [
+        {
+          "quad": [
+            "ppf",
+            "investment",
+            "mediclaim",
+            "insurance"
+          ],
+          "predicted": "donation",
+          "correct": false
+        },
+        {
+          "quad": [
+            "salary",
+            "income",
+            "rent",
+            "housing"
+          ],
+          "predicted": "paid",
+          "correct": false
+        },
+        {
+          "quad": [
+            "daan",
+            "donation",
+            "byaaj",
+            "savings_interest"
+          ],
+          "status": "oov"
+        },
+        {
+          "quad": [
+            "makan",
+            "housing",
+            "bimari",
+            "medical"
+          ],
+          "predicted": "medical",
+          "correct": true
+        },
+        {
+          "quad": [
+            "ppf",
+            "deduction",
+            "lic",
+            "insurance"
+          ],
+          "predicted": "80c",
+          "correct": false
+        }
+      ],
+      "odd_one_out_accuracy": 0.25,
+      "odd_detail": [
+        {
+          "group": [
+            "ppf",
+            "elss",
+            "nsc",
+            "mediclaim"
+          ],
+          "predicted": "mediclaim",
+          "correct": true
+        },
+        {
+          "group": [
+            "salary",
+            "wages",
+            "ctc",
+            "mandir"
+          ],
+          "predicted": "salary",
+          "correct": false
+        },
+        {
+          "group": [
+            "rent",
+            "kiraya",
+            "makan",
+            "daan"
+          ],
+          "predicted": "rent",
+          "correct": false
+        },
+        {
+          "group": [
+            "tax",
+            "slab",
+            "surcharge",
+            "bimari"
+          ],
+          "predicted": "tax",
+          "correct": false
+        }
+      ],
+      "nearest_neighbors": {
+        "ppf": [
+          [
+            "80d",
+            0.9912747941152906
+          ],
+          [
+            "revenue",
+            0.9899457351182535
+          ],
+          [
+            "earnings",
+            0.9869080795052513
+          ],
+          [
+            "vyapar",
+            0.9861554367481284
+          ],
+          [
+            "ngo",
+            0.9860459317568755
+          ]
+        ],
+        "mediclaim": [
+          [
+            "bima",
+            0.9871414571432242
+          ],
+          [
+            "daan",
+            0.9869666001593586
+          ],
+          [
+            "donated",
+            0.9867099841705937
+          ],
+          [
+            "health",
+            0.9849102205428679
+          ],
+          [
+            "home",
+            0.9844646391564105
+          ]
+        ],
+        "salary": [
+          [
+            "insurance",
+            0.9724246372706229
+          ],
+          [
+            "donation",
+            0.9248366361580931
+          ],
+          [
+            "housing",
+            0.9061226346504354
+          ],
+          [
+            "medical",
+            0.9040296347537522
+          ],
+          [
+            "investment",
+            0.8890957073609467
+          ]
+        ],
+        "tax": [
+          [
+            "80c",
+            0.7925880987060626
+          ],
+          [
+            "and",
+            0.7377951757584692
+          ],
+          [
+            "deduction",
+            0.7293231767732652
+          ],
+          [
+            "under",
+            0.7167384425815247
+          ],
+          [
+            "on",
+            0.6886724461903999
+          ]
+        ],
+        "kiraya": [
+          [
+            "bima",
+            0.9302220281744145
+          ],
+          [
+            "treatment",
+            0.9269827166176857
+          ],
+          [
+            "donated",
+            0.9194545150585133
+          ],
+          [
+            "daan",
+            0.9073791031710375
+          ],
+          [
+            "mediclaim",
+            0.8920637997146162
+          ]
+        ],
+        "daan": [
+          [
+            "donated",
+            0.9961493080644213
+          ],
+          [
+            "bima",
+            0.9940546553940812
+          ],
+          [
+            "treatment",
+            0.9933959116389004
+          ],
+          [
+            "policy",
+            0.9892112765811277
+          ],
+          [
+            "exemption",
+            0.9889960372330947
+          ]
+        ]
+      }
+    },
+    "plots": [
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_pca_sgns_full.png",
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_tsne_sgns_full.png",
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_pca_glove_full.png",
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_tsne_glove_full.png"
+    ]
+  },
+  "templates_only": {
+    "tag": "templates_only",
+    "corpus_sentences": 7478,
+    "vocab_size_sgns": 143,
+    "vocab_size_glove": 143,
+    "sgns": {
+      "model": "sgns_templates_only",
+      "similarity": [
+        {
+          "pair": [
+            "ppf",
+            "epf"
+          ],
+          "cosine": 0.37786998494435
+        },
+        {
+          "pair": [
+            "ppf",
+            "investment"
+          ],
+          "cosine": -0.2737622864133403
+        },
+        {
+          "pair": [
+            "mediclaim",
+            "insurance"
+          ],
+          "cosine": 0.8645649088072537
+        },
+        {
+          "pair": [
+            "salary",
+            "income"
+          ],
+          "cosine": 0.47101941505155576
+        },
+        {
+          "pair": [
+            "salary",
+            "wages"
+          ],
+          "cosine": 0.8367989339392733
+        },
+        {
+          "pair": [
+            "rent",
+            "kiraya"
+          ],
+          "cosine": 0.37315873591089394
+        },
+        {
+          "pair": [
+            "daan",
+            "donation"
+          ],
+          "cosine": 0.3846587832577943
+        },
+        {
+          "pair": [
+            "byaaj",
+            "interest"
+          ],
+          "cosine": 0.5076489238159816
+        },
+        {
+          "pair": [
+            "tax",
+            "slab"
+          ],
+          "cosine": 0.1343336529073885
+        },
+        {
+          "pair": [
+            "home",
+            "makan"
+          ],
+          "cosine": 0.8015298386435523
+        },
+        {
+          "pair": [
+            "ppf",
+            "bimari"
+          ],
+          "cosine": -0.4312408532316927
+        },
+        {
+          "pair": [
+            "salary",
+            "mandir"
+          ],
+          "cosine": 0.8986170419147386
+        }
+      ],
+      "related_pair_accuracy": 1.0,
+      "analogy_accuracy": 0.0,
+      "analogy_detail": [
+        {
+          "quad": [
+            "ppf",
+            "investment",
+            "mediclaim",
+            "insurance"
+          ],
+          "predicted": "bimari",
+          "correct": false
+        },
+        {
+          "quad": [
+            "salary",
+            "income",
+            "rent",
+            "housing"
+          ],
+          "predicted": "under",
+          "correct": false
+        },
+        {
+          "quad": [
+            "daan",
+            "donation",
+            "byaaj",
+            "savings_interest"
+          ],
+          "status": "oov"
+        },
+        {
+          "quad": [
+            "makan",
+            "housing",
+            "bimari",
+            "medical"
+          ],
+          "predicted": "vpf",
+          "correct": false
+        },
+        {
+          "quad": [
+            "ppf",
+            "deduction",
+            "lic",
+            "insurance"
+          ],
+          "predicted": "she",
+          "correct": false
+        }
+      ],
+      "odd_one_out_accuracy": 0.25,
+      "odd_detail": [
+        {
+          "group": [
+            "ppf",
+            "elss",
+            "nsc",
+            "mediclaim"
+          ],
+          "predicted": "nsc",
+          "correct": false
+        },
+        {
+          "group": [
+            "salary",
+            "wages",
+            "ctc",
+            "mandir"
+          ],
+          "predicted": "ctc",
+          "correct": false
+        },
+        {
+          "group": [
+            "rent",
+            "kiraya",
+            "makan",
+            "daan"
+          ],
+          "predicted": "daan",
+          "correct": true
+        },
+        {
+          "group": [
+            "tax",
+            "slab",
+            "surcharge",
+            "bimari"
+          ],
+          "predicted": "slab",
+          "correct": false
+        }
+      ],
+      "nearest_neighbors": {
+        "ppf": [
+          [
+            "medicine",
+            0.527621217613678
+          ],
+          [
+            "documents",
+            0.5026118842781967
+          ],
+          [
+            "rebate",
+            0.4955285797292274
+          ],
+          [
+            "ready",
+            0.49221839647924165
+          ],
+          [
+            "related",
+            0.4668787457403255
+          ]
+        ],
+        "mediclaim": [
+          [
+            "home",
+            0.9519190415200618
+          ],
+          [
+            "kamai",
+            0.934169997712706
+          ],
+          [
+            "rental",
+            0.9341543500861712
+          ],
+          [
+            "vpf",
+            0.9285781935076544
+          ],
+          [
+            "kamata",
+            0.9270045591552966
+          ]
+        ],
+        "salary": [
+          [
+            "naukri",
+            0.9273069779962652
+          ],
+          [
+            "vpf",
+            0.9233984595117731
+          ],
+          [
+            "kamai",
+            0.9167287158976204
+          ],
+          [
+            "house",
+            0.9160027815126827
+          ],
+          [
+            "paycheck",
+            0.9113272337305063
+          ]
+        ],
+        "tax": [
+          [
+            "taxable",
+            0.5744002198648673
+          ],
+          [
+            "is",
+            0.5694696210126898
+          ],
+          [
+            "regime",
+            0.557020277661311
+          ],
+          [
+            "for",
+            0.5418869385630731
+          ],
+          [
+            "of",
+            0.525277138463096
+          ]
+        ],
+        "kiraya": [
+          [
+            "taxes",
+            0.7415521705641052
+          ],
+          [
+            "ghar",
+            0.721758497666426
+          ],
+          [
+            "advisor",
+            0.6825008647140972
+          ],
+          [
+            "tracks",
+            0.6727441204331085
+          ],
+          [
+            "under",
+            0.663519344930695
+          ]
+        ],
+        "daan": [
+          [
+            "ngo",
+            0.9112461069979781
+          ],
+          [
+            "form",
+            0.9099236290444347
+          ],
+          [
+            "claim",
+            0.909467479277723
+          ],
+          [
+            "amount",
+            0.906416821713806
+          ],
+          [
+            "80c",
+            0.8892244157095099
+          ]
+        ]
+      }
+    },
+    "glove": {
+      "model": "glove_templates_only",
+      "similarity": [
+        {
+          "pair": [
+            "ppf",
+            "epf"
+          ],
+          "cosine": 0.9987481798916725
+        },
+        {
+          "pair": [
+            "ppf",
+            "investment"
+          ],
+          "cosine": 0.047099989084390184
+        },
+        {
+          "pair": [
+            "mediclaim",
+            "insurance"
+          ],
+          "cosine": 0.06982292280156757
+        },
+        {
+          "pair": [
+            "salary",
+            "income"
+          ],
+          "cosine": 0.8324861658877564
+        },
+        {
+          "pair": [
+            "salary",
+            "wages"
+          ],
+          "cosine": 0.08609415306843121
+        },
+        {
+          "pair": [
+            "rent",
+            "kiraya"
+          ],
+          "cosine": 0.9113900065337712
+        },
+        {
+          "pair": [
+            "daan",
+            "donation"
+          ],
+          "cosine": 0.09968278522198717
+        },
+        {
+          "pair": [
+            "byaaj",
+            "interest"
+          ],
+          "cosine": 0.067352740028216
+        },
+        {
+          "pair": [
+            "tax",
+            "slab"
+          ],
+          "cosine": -0.5184015387970955
+        },
+        {
+          "pair": [
+            "home",
+            "makan"
+          ],
+          "cosine": 0.9365729269580564
+        },
+        {
+          "pair": [
+            "ppf",
+            "bimari"
+          ],
+          "cosine": 0.9452836313165403
+        },
+        {
+          "pair": [
+            "salary",
+            "mandir"
+          ],
+          "cosine": 0.0998346006232854
+        }
+      ],
+      "related_pair_accuracy": 1.0,
+      "analogy_accuracy": 0.0,
+      "analogy_detail": [
+        {
+          "quad": [
+            "ppf",
+            "investment",
+            "mediclaim",
+            "insurance"
+          ],
+          "predicted": "housing",
+          "correct": false
+        },
+        {
+          "quad": [
+            "salary",
+            "income",
+            "rent",
+            "housing"
+          ],
+          "predicted": "savings",
+          "correct": false
+        },
+        {
+          "quad": [
+            "daan",
+            "donation",
+            "byaaj",
+            "savings_interest"
+          ],
+          "status": "oov"
+        },
+        {
+          "quad": [
+            "makan",
+            "housing",
+            "bimari",
+            "medical"
+          ],
+          "predicted": "investment",
+          "correct": false
+        },
+        {
+          "quad": [
+            "ppf",
+            "deduction",
+            "lic",
+            "insurance"
+          ],
+          "predicted": "and",
+          "correct": false
+        }
+      ],
+      "odd_one_out_accuracy": 0.0,
+      "odd_detail": [
+        {
+          "group": [
+            "ppf",
+            "elss",
+            "nsc",
+            "mediclaim"
+          ],
+          "predicted": "ppf",
+          "correct": false
+        },
+        {
+          "group": [
+            "salary",
+            "wages",
+            "ctc",
+            "mandir"
+          ],
+          "predicted": "salary",
+          "correct": false
+        },
+        {
+          "group": [
+            "rent",
+            "kiraya",
+            "makan",
+            "daan"
+          ],
+          "predicted": "rent",
+          "correct": false
+        },
+        {
+          "group": [
+            "tax",
+            "slab",
+            "surcharge",
+            "bimari"
+          ],
+          "predicted": "tax",
+          "correct": false
+        }
+      ],
+      "nearest_neighbors": {
+        "ppf": [
+          [
+            "daan",
+            0.9997021263100183
+          ],
+          [
+            "ilaaj",
+            0.99966289656358
+          ],
+          [
+            "mediclaim",
+            0.9996366591933391
+          ],
+          [
+            "cess",
+            0.9990294876877184
+          ],
+          [
+            "liability",
+            0.9990151319754234
+          ]
+        ],
+        "mediclaim": [
+          [
+            "daan",
+            0.9996669213731267
+          ],
+          [
+            "ilaaj",
+            0.9996567140797953
+          ],
+          [
+            "ppf",
+            0.9996366591917413
+          ],
+          [
+            "kiraya",
+            0.9991288082877726
+          ],
+          [
+            "home",
+            0.9990796920048899
+          ]
+        ],
+        "salary": [
+          [
+            "medical",
+            0.9953807090258134
+          ],
+          [
+            "donation",
+            0.9953188871162245
+          ],
+          [
+            "insurance",
+            0.9921910350898983
+          ],
+          [
+            "housing",
+            0.9912947508346257
+          ],
+          [
+            "investment",
+            0.9905859620321781
+          ]
+        ],
+        "tax": [
+          [
+            "deduction",
+            0.9317805415256291
+          ],
+          [
+            "and",
+            0.8915803183194987
+          ],
+          [
+            "income",
+            0.8325957388636226
+          ],
+          [
+            "the",
+            0.8158201166656739
+          ],
+          [
+            "of",
+            0.8053540939984183
+          ]
+        ],
+        "kiraya": [
+          [
+            "treatment",
+            0.999782141641666
+          ],
+          [
+            "home",
+            0.9997788678532538
+          ],
+          [
+            "trust",
+            0.9997697909542503
+          ],
+          [
+            "donate",
+            0.9997697859234712
+          ],
+          [
+            "health",
+            0.9997659594787011
+          ]
+        ],
+        "daan": [
+          [
+            "ppf",
+            0.9997021263086677
+          ],
+          [
+            "ilaaj",
+            0.9996802306552075
+          ],
+          [
+            "mediclaim",
+            0.9996669213733742
+          ],
+          [
+            "cess",
+            0.9989645935887518
+          ],
+          [
+            "surcharge",
+            0.9989365071960918
+          ]
+        ]
+      }
+    },
+    "plots": [
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_pca_sgns_templates_only.png",
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_tsne_sgns_templates_only.png",
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_pca_glove_templates_only.png",
+      "C:\\Users\\lenovo\\Desktop\\Tax_Assist-system-main\\Tax_Assist-system-main\\nlp_research\\plots\\embeddings_tsne_glove_templates_only.png"
+    ]
+  }
+}

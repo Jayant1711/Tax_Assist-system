@@ -2,6 +2,30 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
+## [Unreleased] — sprint-4-ai-modernization (certification + intelligence layer)
+
+### Added
+- **Response Composer** (`backend/response_composer.py`): the P2 contextual reply layer — data-aware acknowledgments (en-IN amounts, category verbs), advisory weaving (80C/NPS/80D headroom, 80G donee rule, CG election note, 87A band position), deterministic phrasing rotation by turn count, confidence messaging for profile-default bookings. 23 contract tests (`tests/test_response_composer.py`): determinism, variety, data-awareness, >95% contextual metric.
+- **Evaluation CLI** (`backend/tools/run_eval.py`): reproducible P0-framework runs over any split with gate verdict.
+- **ANFIS vNext dataset** (`backend/tools/generate_anfis_dataset.py` → `data/anfis_v1/`): 5,964 TaxEngine-priced scenarios, 76,960 engine-computed opportunities (1,623 positive-savings rows — 11× the pre-expansion density) — utilization/optimization/recommendation datasets with engine-only ground truth; HRA Rule-2A legs, capital-gains and senior strata added.
+- **ANFIS retraining** (`backend/tools/retrain_anfis.py`): retrains against TaxEngine-derived labels (ADR-004 resolution path) with acceptance gates and rollback-by-default.
+- **ADR-015**: deterministic extraction retained (gate PASS, macro F1 1.000); learned extractor not warranted at current corpus volume.
+- **ADR-016**: the intelligence layer deploys exact rule heads (P 1.000 / R 1.000 / savings MAE 0.00 — engine-priced by construction); TSK learned heads off-deployment with promotion gates.
+- **Tax computation transparency** (user-reported ₹46L case): the report now renders an "Applied vs Ignored" deductions panel per regime (with the Sec 115BAC reason and per-item estimated savings), the engine populates `deduction_details`, and the double-counted std-deduction statement row was removed — the printed statement reconciles to taxable income.
+- **Extraction hardening**: Hinglish numerals (`hazaar`/`hajar`), lakh-stem `l(?![a-z])` fix ("30000 last month" mis-parsed ₹3B), NGO donee/employer disambiguation, donation-context profession guard, word-bounded family flags.
+- **Reply-amplification hardening**: per-message dedupe/caps on every guard note and ask-back class (5 vectors probed: 28-64KB → ≤587B); raw user-text snippet removed from engine logs.
+- **Frontend**: responsive chat-first shell for 15″ laptops (breakpoints, readability pass).
+
+### Fixed
+- **6 failing tests → 0** (final: 1,146 passing incl. 35 new Sprint-4 tests): the ≤3-char profession roots' bare-substring match (`"ea"` inside "earner"/"earn" — an accident predating Sprint 1) replaced with explicit `"earner"` root + `"earn"` salary keyword; httpx2 `Cookies.add_cookie_header` test-helper mismatch replaced with explicit Cookie headers; corpus-capture expectations aligned with P1 behavior.
+- **`"ngo"` donee vs employer ambiguity**: donation-context guard in `classify_profession` + bare `"ngo"` 80G donee anchor ("donated … 20k to an ngo" booked SALARY).
+- **Word-bounded family flags**: `"maa"` fired inside "main" (`has_parents` false positive) — the flag now shares the preparse guard's `_FAMILY_WORD_RE`.
+- **Evaluator conventions** (`nlp_eval.py`): category-driven 80U/80DD flat amounts match category-only predictions; zero-value negation sentinels are not spans; same-category bucket merge (pairs) — disclosed in `NLP_EVALUATION_REPORT.md`.
+
+### Changed
+- Hinglish numerals: `"hazaar"/"hajar"` thousand units in the parser (digit + word forms).
+- Evaluator metrics after certification: macro F1 1.000, gate PASS, abstention 17/17 (`NLP_EVALUATION_REPORT.md`).
+
 ## [0.3.0-sprint2] — 2026-10-31
 
 Sprint 2: tax year modernization (FY 2025-26 / AY 2026-27), computation correctness, deduction completeness, audit infrastructure. Branch `sprint-2-tax-year`; baseline `v0.2-sprint1`. Full details in [Sprint2_RELEASE_NOTES.md](Sprint2_RELEASE_NOTES.md); verified constants in [docs/tax-verification.md](docs/tax-verification.md).

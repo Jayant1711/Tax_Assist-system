@@ -27,3 +27,11 @@ backend/logs/
 
 # SQLite store (Sprint 3 Wave C: server-side sessions, ADR-013)
 backend/data/
+
+# Sprint 4 runtime artifacts (security review finding 4 — never commit)
+logs/
+data/taxassist.db
+data/anfis_v1/
+
+# Office lock files
+~$*

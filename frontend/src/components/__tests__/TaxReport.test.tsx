@@ -126,4 +126,48 @@ describe('TaxReport', () => {
 
     expect(await screen.findByText(/Session ID: sess_abc123/)).toBeInTheDocument();
   });
+
+  // ── Sprint 4 Phase 4A: the Applied-vs-Ignored transparency panel ──
+  const TRANSPARENCY_PROJECTION = {
+    phase: 'FINAL',
+    salary: 4_600_000,
+    '80c': 150_000,
+    '80d': 50_000,
+    nps: 50_000,
+  };
+
+  it('renders the Applied-vs-Ignored panel with Sec 115BAC ignored rows', async () => {
+    render(
+      <TaxReport
+        sessionId="sess_panel"
+        projection={TRANSPARENCY_PROJECTION}
+      />
+    );
+
+    expect(await screen.findByText('Your Deductions — Applied vs Ignored')).toBeInTheDocument();
+    // old-regime applied rows come from the payload explanations
+    expect(screen.getByText(/Old Regime — deductions apply/)).toBeInTheDocument();
+    // every booked head with an amount is listed as ignored under 115BAC
+    const ignored = screen.getAllByText(/not allowed under Sec 115BAC/);
+    expect(ignored.length).toBeGreaterThanOrEqual(3); // 80c, 80d, nps booked
+    // and the regime because-clause is present
+    expect(screen.getByText(/your booked/)).toBeInTheDocument();
+  });
+
+  it('omits the panel when nothing is booked', async () => {
+    render(<TaxReport sessionId="sess_empty" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText('Recommended Strategy')).toBeInTheDocument();
+    expect(screen.queryByText('Your Deductions — Applied vs Ignored')).not.toBeInTheDocument();
+  });
+
+  it('does not double-count the standard deduction in the statement', async () => {
+    render(<TaxReport sessionId="sess_std" projection={{ phase: 'FINAL' }} />);
+
+    // the payload's own 16(ia) explanation is the only std-ded row
+    await waitFor(() => {
+      const rows = screen.getAllByText(/Standard Deduction/);
+      expect(rows.length).toBe(1);
+    });
+  });
 });

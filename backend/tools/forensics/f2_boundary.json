@@ -1,0 +1,159 @@
+{
+  "analysis_rows": 26880,
+  "positives": 1280,
+  "engine_label_mismatches": 0,
+  "models": {
+    "K1-LSE F22 (production 22)": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.01,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.01,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.01,
+        "R": 1.0
+      }
+    },
+    "LogReg F22 (production 22)": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.21000000000000002,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.21000000000000002,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.11,
+        "R": 1.0
+      }
+    },
+    "K1-LSE F22+f21": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.01,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.01,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.01,
+        "R": 1.0
+      }
+    },
+    "LogReg F22+f21": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.21000000000000002,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.21000000000000002,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.12,
+        "R": 1.0
+      }
+    },
+    "K1-LSE F22+f21+f22hyp": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.01,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.01,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.01,
+        "R": 1.0
+      }
+    },
+    "LogReg F22+f21+f22hyp": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.23,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.23,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.12,
+        "R": 1.0
+      }
+    },
+    "K1-LSE F22+f21+f22hyp+f23": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.01,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.01,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.01,
+        "R": 1.0
+      }
+    },
+    "LogReg F22+f21+f22hyp+f23": {
+      "auc": 1.0,
+      "maxF1": {
+        "thr": 0.23,
+        "P": 1.0,
+        "R": 1.0,
+        "F1": 1.0
+      },
+      "bestP_at_Rge090": {
+        "thr": 0.23,
+        "P": 1.0
+      },
+      "bestR_at_Pge095": {
+        "thr": 0.12,
+        "R": 1.0
+      }
+    }
+  },
+  "feature_separation": {
+    "f21": {
+      "mean_pos": 0.5595,
+      "mean_neg": 0.6456
+    },
+    "f22hyp": {
+      "mean_pos": 0.4134,
+      "mean_neg": 0.6149
+    },
+    "f23": {
+      "mean_pos": 0.1108,
+      "mean_neg": 0.1882
+    }
+  },
+  "holdout_note": "fold CV on train rows; headline numbers above use pooled OOF over train+val (model-class diagnostic)",
+  "val_pos_in_analysis": 3840
+}

@@ -58,19 +58,16 @@ def _login(client, email, password=PASSWORD, ua=None):
 def _me(client, ua=None, cookies=None):
     if cookies is None:
         return client.get("/auth/me", headers=ua or UA)
-    # Swap the client's cookie jar for the explicitly provided one (per-
-    # request cookies= is deprecated by httpx and its behavior ambiguous).
-    import httpx
-
-    saved = client.cookies
-    jar = httpx.Cookies()
-    for name, value in cookies.items():
-        jar.set(name, value)
-    client.cookies = jar
-    try:
-        return client.get("/auth/me", headers=ua or UA)
-    finally:
-        client.cookies = saved
+    # Explicit Cookie header (Sprint 4 certification fix): the installed
+    # httpx2 Cookies jar dropped add_cookie_header() — jar-based request
+    # building raises AttributeError — and per-request cookies= is
+    # deprecated/ambiguous anyway. The wire format (a Cookie header) is
+    # exactly what the auth middleware parses, so this is behavior-
+    # identical for the middleware under test.
+    cookie_hdr = "; ".join(f"{name}={value}" for name, value in cookies.items())
+    headers = dict(ua or UA)
+    headers["Cookie"] = cookie_hdr
+    return client.get("/auth/me", headers=headers)
 
 
 def _set_cookie_token(response, name=DEV_COOKIE):

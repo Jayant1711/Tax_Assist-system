@@ -1,0 +1,330 @@
+{
+  "rows_train": 4716,
+  "rows_val": 786,
+  "composite_closure_max_abs_diff": 1.7166682791709889,
+  "plain_ridge": {
+    "val_MAE": 0.184458,
+    "val_max_abs_err": 1.225777,
+    "coef_nonzero": 17
+  },
+  "repo_replication_K48_quantile": {
+    "val_MAE": 14.2999,
+    "mean_effective_rules": 46.14,
+    "note": "registry RUN-003 (previous dataset gen) measured 12.7722"
+  },
+  "sweep": [
+    {
+      "dims": "all20",
+      "K": 4,
+      "placement": "quantile",
+      "val_MAE": 10.113,
+      "mean_effective_rules": 3.83
+    },
+    {
+      "dims": "all20",
+      "K": 4,
+      "placement": "kmeans",
+      "val_MAE": 9.4408,
+      "mean_effective_rules": 3.84
+    },
+    {
+      "dims": "all20",
+      "K": 8,
+      "placement": "quantile",
+      "val_MAE": 10.5453,
+      "mean_effective_rules": 7.78
+    },
+    {
+      "dims": "all20",
+      "K": 8,
+      "placement": "kmeans",
+      "val_MAE": 13.9764,
+      "mean_effective_rules": 7.8
+    },
+    {
+      "dims": "all20",
+      "K": 16,
+      "placement": "quantile",
+      "val_MAE": 10.8068,
+      "mean_effective_rules": 15.61
+    },
+    {
+      "dims": "all20",
+      "K": 16,
+      "placement": "kmeans",
+      "val_MAE": 10.1073,
+      "mean_effective_rules": 15.6
+    },
+    {
+      "dims": "all20",
+      "K": 32,
+      "placement": "quantile",
+      "val_MAE": 11.9864,
+      "mean_effective_rules": 30.72
+    },
+    {
+      "dims": "all20",
+      "K": 32,
+      "placement": "kmeans",
+      "val_MAE": 11.7789,
+      "mean_effective_rules": 31.36
+    },
+    {
+      "dims": "all20",
+      "K": 48,
+      "placement": "quantile",
+      "val_MAE": 15.1419,
+      "mean_effective_rules": 46.89
+    },
+    {
+      "dims": "all20",
+      "K": 48,
+      "placement": "kmeans",
+      "val_MAE": 13.5049,
+      "mean_effective_rules": 46.0
+    },
+    {
+      "dims": "all20",
+      "K": 64,
+      "placement": "quantile",
+      "val_MAE": 14.2641,
+      "mean_effective_rules": 62.51
+    },
+    {
+      "dims": "all20",
+      "K": 64,
+      "placement": "kmeans",
+      "val_MAE": 15.4968,
+      "mean_effective_rules": 62.58
+    },
+    {
+      "dims": "all20",
+      "K": 128,
+      "placement": "quantile",
+      "val_MAE": 15.6601,
+      "mean_effective_rules": 125.02
+    },
+    {
+      "dims": "all20",
+      "K": 128,
+      "placement": "kmeans",
+      "val_MAE": 15.2638,
+      "mean_effective_rules": 125.08
+    },
+    {
+      "dims": "signal8",
+      "K": 4,
+      "placement": "quantile",
+      "val_MAE": 14.5797,
+      "mean_effective_rules": 3.86
+    },
+    {
+      "dims": "signal8",
+      "K": 4,
+      "placement": "kmeans",
+      "val_MAE": 13.8327,
+      "mean_effective_rules": 3.61
+    },
+    {
+      "dims": "signal8",
+      "K": 8,
+      "placement": "quantile",
+      "val_MAE": 20.7829,
+      "mean_effective_rules": 7.59
+    },
+    {
+      "dims": "signal8",
+      "K": 8,
+      "placement": "kmeans",
+      "val_MAE": 18.1272,
+      "mean_effective_rules": 7.61
+    },
+    {
+      "dims": "signal8",
+      "K": 16,
+      "placement": "quantile",
+      "val_MAE": 19.8771,
+      "mean_effective_rules": 14.78
+    },
+    {
+      "dims": "signal8",
+      "K": 16,
+      "placement": "kmeans",
+      "val_MAE": 18.4967,
+      "mean_effective_rules": 15.22
+    },
+    {
+      "dims": "signal8",
+      "K": 32,
+      "placement": "quantile",
+      "val_MAE": 20.3558,
+      "mean_effective_rules": 29.55
+    },
+    {
+      "dims": "signal8",
+      "K": 32,
+      "placement": "kmeans",
+      "val_MAE": 19.8751,
+      "mean_effective_rules": 30.06
+    },
+    {
+      "dims": "signal8",
+      "K": 48,
+      "placement": "quantile",
+      "val_MAE": 19.9652,
+      "mean_effective_rules": 44.36
+    },
+    {
+      "dims": "signal8",
+      "K": 48,
+      "placement": "kmeans",
+      "val_MAE": 20.5173,
+      "mean_effective_rules": 44.83
+    },
+    {
+      "dims": "signal8",
+      "K": 64,
+      "placement": "quantile",
+      "val_MAE": 20.0048,
+      "mean_effective_rules": 59.11
+    },
+    {
+      "dims": "signal8",
+      "K": 64,
+      "placement": "kmeans",
+      "val_MAE": 20.9698,
+      "mean_effective_rules": 59.45
+    },
+    {
+      "dims": "signal8",
+      "K": 128,
+      "placement": "quantile",
+      "val_MAE": 20.0282,
+      "mean_effective_rules": 118.26
+    },
+    {
+      "dims": "signal8",
+      "K": 128,
+      "placement": "kmeans",
+      "val_MAE": 20.3355,
+      "mean_effective_rules": 118.48
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 4,
+      "placement": "quantile",
+      "val_MAE": 9.8021,
+      "mean_effective_rules": 3.73
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 4,
+      "placement": "kmeans",
+      "val_MAE": 8.2405,
+      "mean_effective_rules": 3.94
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 8,
+      "placement": "quantile",
+      "val_MAE": 17.2918,
+      "mean_effective_rules": 7.44
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 8,
+      "placement": "kmeans",
+      "val_MAE": 12.0701,
+      "mean_effective_rules": 7.57
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 16,
+      "placement": "quantile",
+      "val_MAE": 15.8395,
+      "mean_effective_rules": 13.59
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 16,
+      "placement": "kmeans",
+      "val_MAE": 15.9689,
+      "mean_effective_rules": 13.2
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 32,
+      "placement": "quantile",
+      "val_MAE": 16.9587,
+      "mean_effective_rules": 29.58
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 32,
+      "placement": "kmeans",
+      "val_MAE": 17.9706,
+      "mean_effective_rules": 30.06
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 48,
+      "placement": "quantile",
+      "val_MAE": 18.4161,
+      "mean_effective_rules": 44.43
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 48,
+      "placement": "kmeans",
+      "val_MAE": 19.077,
+      "mean_effective_rules": 41.31
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 64,
+      "placement": "quantile",
+      "val_MAE": 18.494,
+      "mean_effective_rules": 59.2
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 64,
+      "placement": "kmeans",
+      "val_MAE": 18.7764,
+      "mean_effective_rules": 59.91
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 128,
+      "placement": "quantile",
+      "val_MAE": 18.7826,
+      "mean_effective_rules": 118.47
+    },
+    {
+      "dims": "signal9_plus_income",
+      "K": 128,
+      "placement": "kmeans",
+      "val_MAE": 19.0531,
+      "mean_effective_rules": 118.78
+    }
+  ],
+  "sweep_best": {
+    "dims": "signal9_plus_income",
+    "K": 4,
+    "placement": "kmeans",
+    "val_MAE": 8.2405,
+    "mean_effective_rules": 3.94
+  },
+  "no_search_K48": {
+    "val_MAE": 15.4305,
+    "mean_effective_rules": 46.24
+  },
+  "winner_full_train": {
+    "dims": "signal9_plus_income",
+    "K": 4,
+    "placement": "kmeans",
+    "val_MAE": 8.2405,
+    "mean_effective_rules": 3.87,
+    "val_MAE_full_train": 10.3481
+  }
+}

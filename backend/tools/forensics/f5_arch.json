@@ -1,0 +1,69 @@
+{
+  "opp_TSK_K2_dims[regime_sig]": {
+    "gate_sweep_best": {
+      "thr": 0.01,
+      "P": 1.0,
+      "R": 1.0,
+      "F1": 1.0
+    },
+    "auc": 1.0
+  },
+  "opp_TSK_K8_dims[regime_sig+sav_ratio]": {
+    "gate_sweep_best": {
+      "thr": 0.35000000000000003,
+      "P": 1.0,
+      "R": 0.0116,
+      "F1": 0.023
+    },
+    "auc": 0.2963
+  },
+  "opp_TSK_K48_dims[regime_sig+sav_ratio]": {
+    "gate_sweep_best": {
+      "thr": 0.15000000000000002,
+      "P": 0.0006,
+      "R": 0.0116,
+      "F1": 0.0012
+    },
+    "auc": 0.1579
+  },
+  "opp_TSK_K48_dims[sav_ratio+delta+head]": {
+    "gate_sweep_best": {
+      "thr": 0.01,
+      "P": 0.0185,
+      "R": 0.8198,
+      "F1": 0.0362
+    },
+    "auc": 0.4222
+  },
+  "sav_TSK_K8_dims[sig+ratio+delta+head]": {
+    "val_material_mape": 0.9942,
+    "val_material_mae_inr": 23644.21
+  },
+  "sav_TSK_K16_dims[sig+ratio+delta+head]": {
+    "val_material_mape": 378.1545,
+    "val_material_mae_inr": 1881226.59
+  },
+  "sav_TSK_K48_dims[sig+ratio+delta+head]": {
+    "val_material_mape": 3.1672,
+    "val_material_mae_inr": 24399.81
+  },
+  "sav_linear_ridge_engineered_interaction": {
+    "val_material_mape": 1.0521,
+    "val_material_mae_inr": 15541.21
+  },
+  "opp_linear_engineered_interaction": {
+    "gate_sweep_best": {
+      "thr": 0.01,
+      "P": 1.0,
+      "R": 1.0,
+      "F1": 1.0
+    },
+    "auc": 1.0
+  },
+  "sav_linear_base_f22_style": {
+    "val_material_mape": 1.8129
+  },
+  "sav_linear_plus_f21_f23": {
+    "val_material_mape": 2.5125
+  }
+}

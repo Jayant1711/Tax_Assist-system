@@ -360,17 +360,36 @@ class TaxEngine:
         # Optimizer Logic
         rec     = "New Regime" if new_res.total_tax <= old_res.total_tax else "Old Regime"
         savings = abs(old_res.total_tax - new_res.total_tax)
+        # Sprint 4 certification (architect-verified ordering defect): the
+        # savings/recommendation binding MUST precede score_efficiency —
+        # the scorer's feature 17 (savings ratio) reads
+        # result["savings"], which was still the dataclass default 0.0
+        # whenever the score was computed first.
+        old_res.savings          = savings
+        new_res.savings          = savings
+        old_res.recommendation   = rec
+        new_res.recommendation   = rec
 
         # ANFIS Industrial Audit Score
         final_res = old_res if rec == "Old Regime" else new_res
         eff_score = self.anfis.score_efficiency(data, final_res.__dict__)
 
+        # Sprint 4 transparency (Phase 4A): deduction_details per regime —
+        # the applied items from the regime's own Explanation list, so the
+        # frontend can render applied-vs-ignored without deriving it. The
+        # booked-vs-ignored reasoning stays frontend-side (it needs the
+        # user's booked keys + the regime rule, both known there).
+        for _res in (old_res, new_res):
+            if not _res.deduction_details:
+                _res.deduction_details = [
+                    {"particular": x.particular, "section": x.section,
+                     "booked": None, "applied": round(float(x.amount), 2),
+                     "status": x.status}
+                    for x in _res.explanations if float(x.amount) != 0.0
+                ]
+
         old_res.efficiency_score = eff_score
         new_res.efficiency_score = eff_score
-        old_res.recommendation   = rec
-        new_res.recommendation   = rec
-        old_res.savings          = savings
-        new_res.savings          = savings
 
         # Risk Analysis
         total_inc = salary + business + rental_gross + other_income

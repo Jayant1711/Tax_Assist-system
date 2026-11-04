@@ -6,6 +6,7 @@ Category: SALARIED or BUSINESS
 """
 
 from difflib import get_close_matches
+import re
 from typing import Optional, Tuple
 
 # -----------------------------------------------------------------------
@@ -129,7 +130,14 @@ SALARIED_ROOTS = [
     "train driver", "loco pilot",
 
     # --- HR, Admin & Secretarial ---
-    "secretary", "personal assistant", "pa", "ea", "office manager",
+    "secretary", "personal assistant", "pa", "ea",
+    # Sprint 4 P1 certification fix: "earner" ("45k earner", "wage earner",
+    # "high earner") is a genuine salaried signal. It used to classify as
+    # Salaried only BY ACCIDENT — the bare-substring pass matched the ≤3-char
+    # root "ea" inside "earner"/"earn"; the word-boundary repair (item 2)
+    # removed that accident, so the signal is now explicit.
+    "earner",
+    "office manager",
     "admin officer", "admin executive", "data entry", "receptionist",
     "front office", "back office", "operations executive",
     "facility manager", "housekeeping manager",
@@ -217,7 +225,12 @@ BUSINESS_ROOTS = [
     "interior contractor", "tiling", "marble",
 
     # --- Professional Services (Self Employed) ---
-    "freelancer", "consultant", "self employed",
+    # Sprint 4 P1 item 2: the "freelance" stem — "freelance designer"
+    # fuzzy-matched "freelancer" in the SALARIED set first (the fuzzy pass
+    # consults the salaried set before the business set) and classified as
+    # Salaried; the exact-substring business pass now wins before any
+    # fuzzy match runs (and "freelance" covers freelancer/freelancing).
+    "freelance", "freelancer", "consultant", "self employed",
     "sole proprietor", "proprietor", "partnership",
     "llp", "pvt ltd owner", "startup founder", "founder",
     "co-founder", "entrepreneur", "business owner",
@@ -284,21 +297,47 @@ def classify_profession(text: str) -> Optional[str]:
     """
     t = text.lower().strip()
 
-    # 0. Ownership/business phrases have highest priority (beat job title matches)
+    # 0. Ownership/business phrases have highest priority (beat job title
+    # matches). Sprint 4 P1 item 1: the literal "business owner" signal —
+    # "I am a business owner and teacher" used to fall through to the
+    # salaried substring pass ("teacher") because "business owner" ends
+    # with "owner" (no trailing space, so the "own " probe missed it).
     ownership_signals = ["own ", "my shop", "my store", "my business", "my factory",
                          "my practice", "run a", "running a", "self employ", "proprietor",
-                         "own practice", "own business"]
+                         "own practice", "own business", "business owner"]
     if any(sig in t for sig in ownership_signals):
         # Unless also contains salaried indicators without business context
         if not any(k in t for k in ["job", "salaried", "employee"]):
             return "Business Owner"
 
-    # 1. Fast exact substring check
+    # 0b. Donation-context guard (Sprint 4 certification fix): a sentence
+    # about DONATING names donees, not employers — "donated 40k to temple
+    # and 20k to an ngo" must not become Salaried via the "ngo" employer
+    # root. A donation cue suppresses the employer-root passes unless an
+    # explicit work cue is present ("ngo worker" still classifies).
+    _donation_cues = ("donated", "donation", "donate", "daan")
+    _work_cues = ("worker", "job", "employee", "employed", "working at",
+                  "work at", "officer")
+    if any(c in t for c in _donation_cues) and \
+            not any(c in t for c in _work_cues):
+        return None
+
+    # 1. Fast exact substring check. Short roots (the acronym entries:
+    # "ig", "ca", "sp", "dm"...) only match on word boundaries — the bare
+    # substring "ig" sits inside "designer", which let the salaried pass
+    # steal "freelance designer" before the business pass ever ran
+    # (Sprint 4 P1 item 2, measured business->salary eval cell).
     for root in SALARIED_ROOTS:
-        if root in t:
+        if len(root) <= 3:
+            if re.search(r"\b" + re.escape(root) + r"\b", t):
+                return "Salaried"
+        elif root in t:
             return "Salaried"
     for root in BUSINESS_ROOTS:
-        if root in t:
+        if len(root) <= 3:
+            if re.search(r"\b" + re.escape(root) + r"\b", t):
+                return "Business Owner"
+        elif root in t:
             return "Business Owner"
 
     # 2. Word-level fuzzy match (handles typos like "enigneer", "doctore")
