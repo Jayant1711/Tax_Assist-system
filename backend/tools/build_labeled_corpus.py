@@ -1215,7 +1215,11 @@ def build_corpus(seed: int = BUILD_SEED,
             ) + "\n"
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(payload, encoding="utf-8")
+            # newline="\n": EOL-deterministic writes — text-mode on Windows
+            # translated \n to \r\n, so the committed split files hashed
+            # CRLF bytes while Linux rebuilds hashed LF (the CI
+            # rebuild-repro failure). LF everywhere; records unchanged.
+            target.write_text(payload, encoding="utf-8", newline="\n")
             files.append(rel)
         manifest_files[split] = files
 
@@ -1257,7 +1261,7 @@ def build_corpus(seed: int = BUILD_SEED,
     }
     (root / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
 
     if verbose:
         _print_summary(manifest, split_records)
