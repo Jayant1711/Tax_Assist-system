@@ -33,7 +33,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tax_intelligence import TaxIntelligence  # noqa: E402
 
-DATA = Path(__file__).resolve().parents[2] / "data" / "anfis_v1"
+DATA = Path(__file__).resolve().parents[2] / "data" / "anfis_v3"
+# Sprint 5: v3 (continuous sampler) supersedes v1 (grid) for training;
+# anfis-v1 remains on disk as the registry-documented v2.1 pilot.
 CANDIDATE = Path(__file__).resolve().parents[1] / "anfis_v5_weights.json"
 METRICS = DATA / "v5_metrics.json"
 

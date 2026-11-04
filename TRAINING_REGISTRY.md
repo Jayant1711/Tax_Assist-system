@@ -44,7 +44,22 @@
 | Verdict | **DEPLOYMENT PATH PASS** — v0.5 ships engine-priced rule heads; TSK heads continue off-deployment; v4 untouched |
 | Report | `ANFIS_V5_EVALUATION_V2.md` · forensics: `ANFIS_ROOT_CAUSE_REPORT.md` |
 
-## RUN-004 — tfidf-intent-v1 (research, 2026-11-01)
+## RUN-004 — anfis-v5 TSK retrain on dataset v3 (2026-11-04)
+| Field | Value |
+|---|---|
+| Data | anfis-v3 (21,964 continuous scenarios / 377,753 opportunity rows / 51,873 positives) — 105× the RUN-003b training rows |
+| Optimizer | ridge-LSE consequents + sigma-scale search + jitter (seed 472) |
+| Results | G1 0.0023 PASS (served composite, exact) · **G4 MAPE 1.5M% FAIL · G5 P/R 0 FAIL · G6 65.26% FAIL** — the regime-flip discontinuity is structural, not data-shaped |
+| Verdict | promotion DENIED (third consecutive, now at 20× data) — exact rule heads remain the deployment (`ANFIS_PROMOTION_REPORT.md`); the falsification is complete across 3 data scales |
+
+## RUN-005 — exact rule heads (deployment, 2026-11-04)
+| Field | Value |
+|---|---|
+| "Model" | deterministic rules over the engine two-pass (no training) |
+| Evidence | P/R 1.0/1.0 · savings MAE 0.00 · implemented in `recommend()` via `rule_*` (ADR-016) |
+| Verdict | deployed in v0.5-sprint4 |
+
+## RUN-006 — tfidf-intent-v1 (research, 2026-11-01)
 | Field | Value |
 |---|---|
 | Data | corpus-v1 training split (1,537 records, 8-class) |

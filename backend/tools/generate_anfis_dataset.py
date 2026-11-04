@@ -35,12 +35,16 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tax_engine import TaxEngine  # noqa: E402
 from tax_intelligence import features_v2  # noqa: E402 — single source
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "data" / "anfis_v1"
+OUT_DIR_V3 = Path(__file__).resolve().parents[2] / "data" / "anfis_v3"
+SAMPLER_VERSION = 3
 
 # --- statutory limits (display/schema constants; docs/tax-verification.md)
 LIMITS: Dict[str, float] = {
@@ -180,6 +184,11 @@ def main() -> int:
     scenario_ids: List[str] = []
 
     scenario_no = 0
+    # Sprint 5 P0 (DATA_STRATEGY_V2): the continuous stratum — seeded,
+    # non-saturating, sized to carry the dataset past >=5,000 positives
+    # with the flip band overweighted.
+    rng = np.random.RandomState(472)
+    continuous = _continuous_scenarios(rng, n_target=16_000)
     EXP_INCOMES = [2_400_000, 3_000_000, 5_000_000, 8_000_000,
                    12_000_000, 20_000_000, 50_000_000]
     expansion = [(p, i, c)
@@ -189,7 +198,8 @@ def main() -> int:
     base_grid = [(p, i, c) for p, i, c in
                  itertools.product(PROFILES, INCOMES,
                                    _sampled_bookings())]
-    for profile, income, combo in itertools.chain(base_grid, expansion):
+    for profile, income, combo in itertools.chain(base_grid, expansion,
+                                                  continuous):
         scenario_no += 1
         sid = f"scn_{scenario_no:05d}"
         age = 35 if profile != "Senior Citizen" else 67
@@ -284,40 +294,37 @@ def main() -> int:
             y_top.append(0.0)
         scenario_ids.append(sid)
 
-    _write_jsonl("utilization.jsonl", util_rows)
-    _write_jsonl("optimization.jsonl", opt_rows)
-    _write_jsonl("recommendation.jsonl", rec_rows)
-    try:
-        import numpy as np
-        np.savez_compressed(OUT_DIR / "features.npz",
-                            X=np.asarray(X, dtype=np.float32),
-                            y_eff=np.asarray(y_eff, dtype=np.float32),
-                            y_top=np.asarray(y_top, dtype=np.float32),
-                            scenario_id=np.asarray(scenario_ids))
-        # per-opportunity savings/opportunity training matrix (schema v2):
-        # rows = [x_hyp(20), delta_norm, head_idx/9]; labels = engine
-        # savings (INR) and the >0 opportunity flag.
-        sav_x, sav_y, opp_y = [], [], []
-        for row in opt_rows:
-            sav_x.append(list(row["x_hyp"]) + [row["delta_norm"],
-                                               row["head_idx"] / 9.0,
-                                               row["f21_old_tax_ratio"]])
-            sav_y.append(float(row["savings_engine"]))
-            opp_y.append(1.0 if row["savings_engine"] > 0 else 0.0)
-        np.savez_compressed(OUT_DIR / "savings.npz",
-                            X=np.asarray(sav_x, dtype=np.float32),
-                            y_sav=np.asarray(sav_y, dtype=np.float32),
-                            y_opp=np.asarray(opp_y, dtype=np.float32))
-    except ImportError:  # numpy-absent fallback: JSON matrix
-        _write_jsonl("features.jsonl",
-                     [{"scenario_id": s, "x": x, "y_eff": e, "y_top": t}
-                      for s, x, e, t in zip(scenario_ids, X, y_eff, y_top)])
+    out_dir = OUT_DIR_V3
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _write_jsonl_to(out_dir, "utilization.jsonl", util_rows)
+    _write_jsonl_to(out_dir, "optimization.jsonl", opt_rows)
+    _write_jsonl_to(out_dir, "recommendation.jsonl", rec_rows)
+
+    # savings/opportunity training matrix (schema v3): rows =
+    # [x_hyp(20), delta_norm, head_idx, f21_old_tax_ratio]; labels =
+    # engine savings (INR) and the >0 opportunity flag.
+    sav_x, sav_y, opp_y = [], [], []
+    for row in opt_rows:
+        sav_x.append(list(row["x_hyp"]) + [row["delta_norm"],
+                                           row["head_idx"] / 9.0,
+                                           row["f21_old_tax_ratio"]])
+        sav_y.append(float(row["savings_engine"]))
+        opp_y.append(1.0 if row["savings_engine"] > 0 else 0.0)
+    np.savez_compressed(out_dir / "features.npz",
+                        X=np.asarray(X, dtype=np.float32),
+                        y_eff=np.asarray(y_eff, dtype=np.float32),
+                        y_top=np.asarray(y_top, dtype=np.float32),
+                        scenario_id=np.asarray(scenario_ids))
+    np.savez_compressed(out_dir / "savings.npz",
+                        X=np.asarray(sav_x, dtype=np.float32),
+                        y_sav=np.asarray(sav_y, dtype=np.float32),
+                        y_opp=np.asarray(opp_y, dtype=np.float32))
 
     print(f"scenarios: {scenario_no}")
     print(f"utilization rows: {len(util_rows)}  optimization rows: "
           f"{len(opt_rows)}  recommendation rows: {len(rec_rows)}")
     print(f"feature matrix: {len(X)} x {len(X[0]) if X else 0}")
-    print(f"output dir: {OUT_DIR}")
+    print(f"output dir: {out_dir}")
     return 0
 
 
@@ -351,6 +358,52 @@ def _sampled_bookings() -> List[Dict[str, float]]:
             seen.add(key)
             unique.append(c)
     return unique
+
+
+def _continuous_scenarios(rng, n_target: int) -> List[Tuple[
+        Optional[str], float, Dict[str, float]]]:
+    """Sprint 5 P0 (DATA_STRATEGY_V2): seeded CONTINUOUS sampling —
+    no grids, no saturation. Incomes log-uniform over 3L-2Cr with the
+    flip band (12L-40L) overweighted; per-head utilizations uniform
+    [0, 1] (booked = u*limit); HRA legs on ~60% of scenarios; CG on
+    ~40%; seniors ~25%. The strata mix is the Phase-5 measured-yield
+    table applied continuously."""
+    scenarios: List[Tuple[Optional[str], float, Dict[str, float]]] = []
+    profiles = ["Salaried", "Salaried", "Business Owner", "Senior Citizen",
+                None]
+    for i in range(n_target):
+        profile = profiles[i % len(profiles)]
+        if profile == "Senior Citizen":
+            age = 67
+        else:
+            age = 35
+        # log-uniform income, flip band overweighted (50%)
+        if i % 2 == 0:
+            income = float(np.exp(rng.uniform(np.log(1_200_000),
+                                              np.log(40_000_000))))
+        else:
+            income = float(np.exp(rng.uniform(np.log(300_000),
+                                              np.log(20_000_000))))
+        booked: Dict[str, float] = {}
+        for head, limit in LIMITS.items():
+            if head == "80ttb" and age < 60:
+                continue
+            if head == "80tta" and age >= 60:
+                continue
+            u = float(rng.uniform(0.0, 1.0))
+            if u > 0.05:  # 95% of heads booked at some utilization
+                booked[head] = round(u * limit, 2)
+        if i % 7 == 0:
+            booked["hra_received"] = round(float(
+                rng.uniform(120_000, 600_000)), 2)
+            booked["rent_paid"] = round(booked["hra_received"]
+                                        * float(rng.uniform(0.8, 2.5)), 2)
+            booked["is_metro"] = bool(i % 2)
+        if i % 5 == 0:
+            cg = round(float(rng.uniform(50_000, 1_500_000)), 2)
+            booked["cg_equity_ltcg" if i % 10 == 0 else "cg_stcg"] = cg
+        scenarios.append((profile, income, booked))
+    return scenarios
 
 
 def _expansion_bookings() -> List[Dict[str, float]]:
@@ -420,7 +473,14 @@ def _expansion_bookings() -> List[Dict[str, float]]:
 
 
 def _write_jsonl(name: str, rows: List[Dict[str, Any]]) -> None:
-    with (OUT_DIR / name).open("w", encoding="utf-8") as handle:
+    _write_jsonl_to(OUT_DIR, name, rows)
+
+
+def _write_jsonl_to(directory: Path, name: str,
+                    rows: List[Dict[str, Any]]) -> None:
+    # newline="\n": EOL-deterministic (the corpus CI lesson — text mode
+    # on Windows translated LF to CRLF and broke content-addressed hashes)
+    with (directory / name).open("w", encoding="utf-8", newline="\n") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
