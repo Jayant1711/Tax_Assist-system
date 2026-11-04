@@ -1,0 +1,101 @@
+{
+  "rows": 71920,
+  "material_total": 1280,
+  "material_train": 1108,
+  "material_val": 172,
+  "variance_decomposition_log1p": {
+    "head": {
+      "val_R2": 0.2348,
+      "cells": 9
+    },
+    "delta_norm": {
+      "val_R2": 0.2053,
+      "cells": 8
+    },
+    "head_x_delta": {
+      "val_R2": 0.3217,
+      "cells": 20
+    },
+    "head_x_delta_x_incdec": {
+      "val_R2": 0.399,
+      "cells": 74
+    }
+  },
+  "log1p_val_sd": 1.2538,
+  "g5_replication_current_data": {
+    "val_positives": 172,
+    "gate_thr": 0.32,
+    "P": 1.0,
+    "R": 0.029069767441860465,
+    "pred_min": 0.0,
+    "pred_max": 0.3702,
+    "pred_mean": 0.0511
+  },
+  "firing_influence_share": {
+    "delta_norm(dim20)": 0.0483,
+    "head_idx(dim21)": 0.03736003,
+    "top3_dims": [
+      [
+        0.073,
+        18
+      ],
+      [
+        0.073,
+        14
+      ],
+      [
+        0.073,
+        9
+      ]
+    ],
+    "mean_unnorm_firing": 12.3
+  },
+  "fix_variants": {
+    "repo_protocol_seed472": {
+      "savings_mape_val_material": 47.3298,
+      "savings_mae_inr": 266823.69,
+      "learned_eff_mae_val": 14.4773,
+      "fit_wall_s": 121.3
+    },
+    "repo_protocol_seed473": {
+      "savings_mape_val_material": 11.2911,
+      "savings_mae_inr": 116682.05,
+      "learned_eff_mae_val": 14.358,
+      "fit_wall_s": 444.3
+    },
+    "repo_protocol_seed474": {
+      "savings_mape_val_material": 19.5777,
+      "savings_mae_inr": 77638.64,
+      "learned_eff_mae_val": 14.4728,
+      "fit_wall_s": 64.1
+    },
+    "reduced_12dim_tsk": {
+      "savings_mape_val_material": 1.1468,
+      "savings_mae_inr": 24728.48
+    },
+    "perhead_80e_K16": {
+      "train_rows": 827,
+      "val_rows": 127,
+      "savings_mape_80e_material": 1.245,
+      "params": 352
+    },
+    "perhead_80e_K8": {
+      "train_rows": 827,
+      "val_rows": 127,
+      "savings_mape_80e_material": 0.9652,
+      "params": 176
+    },
+    "linear_ridge_interactions": {
+      "savings_mape_val_material": 1.5903,
+      "savings_mae_inr": 13625.45
+    }
+  },
+  "g6_diagnostic": {
+    "scenarios_with_ge2_candidates": 4565,
+    "repo_top1_agreement_seed472": 0.8859,
+    "margin_p25": 0.0,
+    "margin_median": 0.0,
+    "share_margins_below_500": 0.9788,
+    "share_exact_zero_ties": 0.9788
+  }
+}

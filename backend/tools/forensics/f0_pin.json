@@ -1,0 +1,310 @@
+{
+  "features_npz": {
+    "X_shape": [
+      5502,
+      20
+    ],
+    "y_eff_shape": [
+      5502
+    ],
+    "keys": [
+      "X",
+      "y_eff",
+      "y_top",
+      "scenario_id"
+    ],
+    "y_eff_min": 30.0,
+    "y_eff_max": 85.83000183105469
+  },
+  "savings_npz": {
+    "X_shape": [
+      71920,
+      22
+    ],
+    "keys": [
+      "X",
+      "y_sav",
+      "y_opp"
+    ],
+    "rows_total": 71920,
+    "positives_y_opp_gt0": 1280,
+    "positive_rate": 0.017797552836484983,
+    "material_y_sav_ge100": 1280,
+    "material_eq_positives": true,
+    "negatives_y_sav_lt0": 0,
+    "rows_0_to_100": 0,
+    "val_rows": 10275,
+    "val_positives": 172,
+    "val_material": 172,
+    "train_positives": 1108,
+    "train_material": 1108
+  },
+  "positive_head_dist": {
+    "80c": 42,
+    "80d": 28,
+    "80d_parents": 38,
+    "nps": 52,
+    "24b": 50,
+    "80g": 87,
+    "80e": 954,
+    "80tta": 19,
+    "80ttb": 10
+  },
+  "positive_delta_norm_values": [
+    0.16670000553131104,
+    0.20000000298023224,
+    0.33329999446868896,
+    0.5,
+    0.6000000238418579,
+    0.666700005531311,
+    0.800000011920929,
+    1.0
+  ],
+  "positive_delta_by_value": {
+    "0.16670000553131104": 9,
+    "0.20000000298023224": 110,
+    "0.33329999446868896": 13,
+    "0.5": 112,
+    "0.6000000238418579": 391,
+    "0.666700005531311": 16,
+    "0.800000011920929": 1,
+    "1.0": 628
+  },
+  "positive_savings_inr": {
+    "min": 260.0,
+    "p25": 5200.0,
+    "median": 16120.0,
+    "p75": 36400.0,
+    "max": 186550.0,
+    "mean": 23539.30078125
+  },
+  "eff_feature_uniqueness": {
+    "income_norm": {
+      "n_unique_eff": 18,
+      "max": 1.0,
+      "min": 0.029999999329447746
+    },
+    "u80c": {
+      "n_unique_eff": 4,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80d": {
+      "n_unique_eff": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80d_parents": {
+      "n_unique_eff": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "unps": {
+      "n_unique_eff": 3,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u_hra": {
+      "n_unique_eff": 3,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u24b": {
+      "n_unique_eff": 3,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80e": {
+      "n_unique_eff": 2,
+      "max": 0.4000000059604645,
+      "min": 0.0
+    },
+    "u80g": {
+      "n_unique_eff": 41,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80tta": {
+      "n_unique_eff": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80u": {
+      "n_unique_eff": 1,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "u80ddb": {
+      "n_unique_eff": 1,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "u80eea": {
+      "n_unique_eff": 1,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "cg_ratio": {
+      "n_unique_eff": 31,
+      "max": 0.5,
+      "min": 0.0
+    },
+    "business_share": {
+      "n_unique_eff": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "regime_signal": {
+      "n_unique_eff": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "savings_ratio": {
+      "n_unique_eff": 1152,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "tax_ratio": {
+      "n_unique_eff": 61,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "senior": {
+      "n_unique_eff": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "80c_headroom": {
+      "n_unique_eff": 4,
+      "max": 1.0,
+      "min": 0.0
+    }
+  },
+  "sav_feature_uniqueness": {
+    "income_norm": {
+      "n_unique": 18,
+      "max": 1.0,
+      "min": 0.029999999329447746
+    },
+    "u80c": {
+      "n_unique": 7,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80d": {
+      "n_unique": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80d_parents": {
+      "n_unique": 3,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "unps": {
+      "n_unique": 3,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u_hra": {
+      "n_unique": 3,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u24b": {
+      "n_unique": 3,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80e": {
+      "n_unique": 5,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80g": {
+      "n_unique": 95,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80tta": {
+      "n_unique": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "u80u": {
+      "n_unique": 1,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "u80ddb": {
+      "n_unique": 1,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "u80eea": {
+      "n_unique": 1,
+      "max": 0.0,
+      "min": 0.0
+    },
+    "cg_ratio": {
+      "n_unique": 31,
+      "max": 0.5,
+      "min": 0.0
+    },
+    "business_share": {
+      "n_unique": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "regime_signal": {
+      "n_unique": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "savings_ratio": {
+      "n_unique": 3047,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "tax_ratio": {
+      "n_unique": 345,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "senior": {
+      "n_unique": 2,
+      "max": 1.0,
+      "min": 0.0
+    },
+    "80c_headroom": {
+      "n_unique": 7,
+      "max": 1.0,
+      "min": 0.0
+    }
+  },
+  "v5_metrics_crosscheck": {
+    "metrics_val_material": 58,
+    "measured_val_material": 172,
+    "metrics_val_rows_sav": 6688,
+    "measured_val_rows": 10275,
+    "metrics_eff_mae_points": 0.0533,
+    "metrics_learned_eff_mae": 12.7722,
+    "metrics_mape": 1.0785,
+    "metrics_opp_P": 0.0,
+    "metrics_opp_R": 0.0,
+    "metrics_top1": 0.5489,
+    "metrics_seed": 472,
+    "metrics_fit_rules": 48
+  },
+  "lse_param_math": {
+    "rules_K": 48,
+    "sav_input_dims": 22,
+    "sav_params": 1104,
+    "eff_params": 1008,
+    "positives_P": 1280,
+    "params_per_positive": 0.86,
+    "positives_per_param": 1.1594,
+    "registry_claimed_positives": 146,
+    "measured_vs_registry": "measured 1280 vs registry 146 (dataset regenerated 2026-11-03 21:47, after v5_metrics.json 21:24)"
+  }
+}

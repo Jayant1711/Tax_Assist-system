@@ -166,7 +166,9 @@ class TestDegradation:
         assert review["available"]
         assert review["recommendations"]
         for rec in review["recommendations"]:
-            assert rec["opportunity_probability"] is None
+            # rule-head semantics: opportunity_probability is the exact
+            # engine-priced rule output (1.0 benefit / 0.0 no-benefit)
+            assert rec["opportunity_probability"] in (0.0, 1.0)
             if rec["verdict"].startswith("RECOMMEND"):
                 assert rec["estimated_savings"] == rec["savings_engine"] > 0
 

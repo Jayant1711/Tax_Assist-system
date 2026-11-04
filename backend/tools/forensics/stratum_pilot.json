@@ -1,0 +1,239 @@
+{
+  "strata": [
+    {
+      "stratum": "S1_old_regime_heavy_24L_2Cr",
+      "scenarios": 300,
+      "probe_rows": 3622,
+      "positives": 2391,
+      "positives_per_scenario": 7.97,
+      "positive_rate_per_probe": 0.6601,
+      "scenarios_with_pos_share": 0.973,
+      "mean_pos_savings": 32289.0,
+      "median_pos_savings": 15600.0,
+      "positives_by_head": {
+        "80c": 301,
+        "nps": 321,
+        "24b": 323,
+        "80g": 457,
+        "80e": 540,
+        "80tta": 449
+      },
+      "probes_by_head": {
+        "80c": 392,
+        "80d_parents": 600,
+        "nps": 418,
+        "24b": 412,
+        "80g": 600,
+        "80e": 600,
+        "80tta": 600
+      },
+      "probes_full_vs_mid": {
+        "full": 1811,
+        "mid": 1811
+      },
+      "engine_calls": 3922,
+      "scenarios_for_2000_positives": 251
+    },
+    {
+      "stratum": "S2_hra_legs_8L_40L",
+      "scenarios": 300,
+      "probe_rows": 4800,
+      "positives": 694,
+      "positives_per_scenario": 2.313,
+      "positive_rate_per_probe": 0.1446,
+      "scenarios_with_pos_share": 0.663,
+      "mean_pos_savings": 34859.0,
+      "median_pos_savings": 17542.0,
+      "positives_by_head": {
+        "80e": 281,
+        "80c": 82,
+        "80d": 39,
+        "80d_parents": 39,
+        "nps": 42,
+        "24b": 126,
+        "80g": 47,
+        "80tta": 38
+      },
+      "probes_by_head": {
+        "80c": 600,
+        "80d": 600,
+        "80d_parents": 600,
+        "nps": 600,
+        "24b": 600,
+        "80g": 600,
+        "80e": 600,
+        "80tta": 600
+      },
+      "probes_full_vs_mid": {
+        "full": 2400,
+        "mid": 2400
+      },
+      "engine_calls": 5100,
+      "scenarios_for_2000_positives": 865
+    },
+    {
+      "stratum": "S3_cg_112A_1.25L",
+      "scenarios": 300,
+      "probe_rows": 4800,
+      "positives": 62,
+      "positives_per_scenario": 0.207,
+      "positive_rate_per_probe": 0.0129,
+      "scenarios_with_pos_share": 0.207,
+      "mean_pos_savings": 13597.0,
+      "median_pos_savings": 12909.0,
+      "positives_by_head": {
+        "80e": 62
+      },
+      "probes_by_head": {
+        "80c": 600,
+        "80d": 600,
+        "80d_parents": 600,
+        "nps": 600,
+        "24b": 600,
+        "80g": 600,
+        "80e": 600,
+        "80tta": 600
+      },
+      "probes_full_vs_mid": {
+        "full": 2400,
+        "mid": 2400
+      },
+      "engine_calls": 5100,
+      "scenarios_for_2000_positives": 9678
+    },
+    {
+      "stratum": "S4_seniors_8L_50L",
+      "scenarios": 300,
+      "probe_rows": 4262,
+      "positives": 43,
+      "positives_per_scenario": 0.143,
+      "positive_rate_per_probe": 0.0101,
+      "scenarios_with_pos_share": 0.143,
+      "mean_pos_savings": 23750.0,
+      "median_pos_savings": 24694.0,
+      "positives_by_head": {
+        "80e": 43
+      },
+      "probes_by_head": {
+        "80c": 374,
+        "80d_parents": 600,
+        "nps": 600,
+        "24b": 600,
+        "80g": 600,
+        "80e": 600,
+        "80ttb": 600,
+        "80d": 288
+      },
+      "probes_full_vs_mid": {
+        "full": 2131,
+        "mid": 2131
+      },
+      "engine_calls": 4562,
+      "scenarios_for_2000_positives": 13954
+    },
+    {
+      "stratum": "S5_control_light_flip_10L_30L",
+      "scenarios": 300,
+      "probe_rows": 4800,
+      "positives": 29,
+      "positives_per_scenario": 0.097,
+      "positive_rate_per_probe": 0.006,
+      "scenarios_with_pos_share": 0.097,
+      "mean_pos_savings": 5299.0,
+      "median_pos_savings": 4348.0,
+      "positives_by_head": {
+        "80e": 29
+      },
+      "probes_by_head": {
+        "80c": 600,
+        "80d": 600,
+        "80d_parents": 600,
+        "nps": 600,
+        "24b": 600,
+        "80g": 600,
+        "80e": 600,
+        "80tta": 600
+      },
+      "probes_full_vs_mid": {
+        "full": 2400,
+        "mid": 2400
+      },
+      "engine_calls": 5100,
+      "scenarios_for_2000_positives": 20690
+    },
+    {
+      "stratum": "S6_80u_80ddb_legs",
+      "scenarios": 300,
+      "probe_rows": 4800,
+      "positives": 82,
+      "positives_per_scenario": 0.273,
+      "positive_rate_per_probe": 0.0171,
+      "scenarios_with_pos_share": 0.273,
+      "mean_pos_savings": 21657.0,
+      "median_pos_savings": 23180.0,
+      "positives_by_head": {
+        "80e": 82
+      },
+      "probes_by_head": {
+        "80c": 600,
+        "80d": 600,
+        "80d_parents": 600,
+        "nps": 600,
+        "24b": 600,
+        "80g": 600,
+        "80e": 600,
+        "80tta": 600
+      },
+      "probes_full_vs_mid": {
+        "full": 2400,
+        "mid": 2400
+      },
+      "engine_calls": 5100,
+      "scenarios_for_2000_positives": 7318
+    },
+    {
+      "stratum": "S4h_seniors_heavy_24L_2Cr",
+      "scenarios": 300,
+      "probe_rows": 3584,
+      "positives": 761,
+      "positives_per_scenario": 2.537,
+      "positive_rate_per_probe": 0.2123,
+      "scenarios_with_pos_share": 0.65,
+      "mean_pos_savings": 33198.0,
+      "median_pos_savings": 15600.0,
+      "positives_by_head": {
+        "80c": 70,
+        "nps": 83,
+        "24b": 82,
+        "80g": 128,
+        "80e": 272,
+        "80ttb": 126
+      },
+      "probes_by_head": {
+        "80c": 366,
+        "80d_parents": 600,
+        "nps": 406,
+        "24b": 412,
+        "80g": 600,
+        "80e": 600,
+        "80ttb": 600
+      },
+      "probes_full_vs_mid": {
+        "full": 1792,
+        "mid": 1792
+      },
+      "engine_calls": 3884,
+      "scenarios_for_2000_positives": 789
+    }
+  ],
+  "scenarios_for_2000_singles": {
+    "S1_old_regime_heavy_24L_2Cr": 251,
+    "S2_hra_legs_8L_40L": 865,
+    "S3_cg_112A_1.25L": 9678,
+    "S4_seniors_8L_50L": 13954,
+    "S5_control_light_flip_10L_30L": 20690,
+    "S6_80u_80ddb_legs": 7318,
+    "S4h_seniors_heavy_24L_2Cr": 789
+  },
+  "note": "sizing = ceil(2000 / (positives per scenario)); strata are not mutually exclusive in production sampling"
+}

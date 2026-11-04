@@ -466,15 +466,17 @@ def recommend(session: Dict[str, Any], engine: Any,
             " (authoritative)",
         ]
         if c["savings_engine"] > 0:
-            # confidence is anchored on the ENGINE price (authoritative);
-            # the learned opportunity head is an experiment and does not
-            # touch served output until its gates pass.
-            c["confidence"] = 0.85
-            c["estimated_savings"] = c["savings_engine"]
+            # exact rule heads (forensics-derived, engine-priced — the
+            # deployment path per ADR-016); the learned TSK heads are
+            # experiments and do not touch served output.
+            c["opportunity_probability"] = rule_opportunity(c["savings_engine"])
+            c["estimated_savings"] = rule_savings(c["savings_engine"])
+            c["confidence"] = rule_confidence(c["savings_engine"])
             c["verdict"] = "RECOMMEND"
         else:
-            c["confidence"] = 0.30
-            c["estimated_savings"] = 0
+            c["opportunity_probability"] = rule_opportunity(c["savings_engine"])
+            c["estimated_savings"] = rule_savings(c["savings_engine"])
+            c["confidence"] = rule_confidence(c["savings_engine"])
             c["verdict"] = "NO BENEFIT (current regime ignores this head)"
     gross = sum(float(session.get(k) or 0)
                 for k in ("salary", "business", "rental", "other_income",

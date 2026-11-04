@@ -44,7 +44,7 @@ See the four registries (authoritative, updated this run). Headlines: corpus-v1 
 
 `SPRINT4_RELEASE_CANDIDATE_REPORT_V2.md`: **RELEASE-READY** — merge checklist complete except the user's tag/PR decision. qa-lead final verdict: RELEASE-READY (1,146/0; vitest 22; extraction PASS; deployment path PASS; ADR-001 audit exact; determinism byte-identical; live E2E with/without 🧠 block both correct).
 
-## 6. New reports (this run)
+## 6. New reports (this run — 8 core + governance)
 
 `ANFIS_ROOT_CAUSE_REPORT.md` · `DATASET_QUALITY_REPORT_V2.md` · `ANFIS_V5_EVALUATION_V2.md` · `EXPLAINABILITY_ENGINE_REPORT.md` · `CA_RECOMMENDATION_ENGINE_REPORT.md` · `INTELLIGENT_RESPONSE_REPORT.md` · `SPRINT4_RELEASE_CANDIDATE_REPORT_V2.md` · this file.
 

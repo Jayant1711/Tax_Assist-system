@@ -1,4 +1,7 @@
 # FINAL_HANDOFF.md — Tax Assist System
+
+> ⚠️ **SUPERSEDED SNAPSHOT (2026-11-04):** this handoff was written before the Sprint-4 completion waves. Current truth: 1,146 pytest / 0 failed (was 1,099+6), head `01661eb`+ (was a5691dc), the intelligence layer + composer + transparency panel are COMMITTED (P1 no longer uncommitted), positives 1,623 (was 146). Use `PROJECT_STATUS_REPORT_V3.md` and `SPRINT4_RELEASE_CANDIDATE_REPORT_V2.md` for current state; keep this file for the reading-order and invariants sections, which remain valid.
+
 **Generated:** 2026-11-02 · **Verified against live repo state** (git, pytest 51.8s run, vitest run, filesystem) · **Audience:** next AI engineer, zero context assumed.
 
 ---

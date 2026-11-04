@@ -37,5 +37,5 @@ Every field of the mission contract is present: **recommendation** (the head + t
 ## 4. Test coverage
 
 - `tests/test_tax_intelligence.py` (12): ADR-001 recomputation, recommendation shape, ranking order, regime advisory, explainability decomposition, offline/engine-only degradation, no-benefit suppression, closing-turn integration, never-breaks-a-turn.
-- `tests/test_response_composer.py` (25): composer determinism/variety/data-awareness (>95% contextual), advisory correctness.
+- `tests/test_response_composer.py` (23): composer determinism/variety/data-awareness (>95% contextual), advisory correctness.
 - Live E2E: consultant flow verified — block correctly absent when the engine prices zero (new-regime consultant), present on old-regime-optimal fixtures.
