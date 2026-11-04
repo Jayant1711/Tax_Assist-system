@@ -24,6 +24,17 @@ ti_mod = pytest.importorskip("tax_intelligence")
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "anfis_v1"
 
+# The dataset is gitignored (runtime/regenerable artifact — see
+# DATASET_REGISTRY.md): CI and fresh clones do not have it. Skip the
+# data-dependent module instead of failing; run tools/generate_anfis_
+# dataset.py locally to produce it.
+_dataset_missing = not (DATA / "features.npz").exists() or     not (DATA / "savings.npz").exists()
+
+pytestmark = pytest.mark.skipif(
+    _dataset_missing,
+    reason="anfis-v1 dataset not generated (run tools/generate_anfis_dataset.py)",
+)
+
 
 @pytest.fixture(scope="module")
 def engine() -> TaxEngine:
