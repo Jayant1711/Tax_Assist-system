@@ -374,6 +374,20 @@ class TaxEngine:
         final_res = old_res if rec == "Old Regime" else new_res
         eff_score = self.anfis.score_efficiency(data, final_res.__dict__)
 
+        # Sprint 4 transparency (Phase 4A): deduction_details per regime —
+        # the applied items from the regime's own Explanation list, so the
+        # frontend can render applied-vs-ignored without deriving it. The
+        # booked-vs-ignored reasoning stays frontend-side (it needs the
+        # user's booked keys + the regime rule, both known there).
+        for _res in (old_res, new_res):
+            if not _res.deduction_details:
+                _res.deduction_details = [
+                    {"particular": x.particular, "section": x.section,
+                     "booked": None, "applied": round(float(x.amount), 2),
+                     "status": x.status}
+                    for x in _res.explanations if float(x.amount) != 0.0
+                ]
+
         old_res.efficiency_score = eff_score
         new_res.efficiency_score = eff_score
 

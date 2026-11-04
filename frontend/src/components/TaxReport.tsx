@@ -95,10 +95,44 @@ export default function TaxReport({ sessionId, projection }: Props) {
 
   const rec = data.recommendation || 'New Regime';
   const best = rec === 'New Regime' ? data.new_regime : data.old_regime;
+  const other = rec === 'New Regime' ? data.old_regime : data.new_regime;
 
   const effScore = data.efficiency_score ?? best?.efficiency_score ?? 85.0;
   const effColor = effScore >= 75 ? 'var(--accent-green)' : effScore >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)';
   const fmt = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
+
+  // ── Sprint 4 Phase 4A: deductions — applied vs ignored transparency ──
+  // The New Regime (Sec 115BAC) allows only the standard deduction: every
+  // booked Chapter VI-A head is ignored there. The engine prices each
+  // booked head in the Old Regime (with statutory caps applied upstream).
+  const BOOKED_LABELS: Record<string, string> = {
+    '80c': 'Section 80C investments', '80d': 'Section 80D health premium',
+    '80d_parents': 'Section 80D (parents)', nps: 'NPS 80CCD(1B)',
+    hra_received: 'HRA', '24b': 'Home-loan interest 24(b)',
+    '80g': 'Section 80G donations', '80e': 'Section 80E interest',
+    '80tta': 'Section 80TTA', '80ttb': 'Section 80TTB',
+    '80u_80dd': 'Section 80U/80DD', '80ddb': 'Section 80DDB',
+    '80eea': 'Section 80EEA',
+  };
+  const bookedDeductions = Object.entries(BOOKED_LABELS)
+    .map(([key, label]) => ({ key, label, amount: Number((projection || {})?.[key] || 0) }))
+    .filter((d) => d.amount > 0);
+  const newAppliedRows = (data?.new_regime?.explanations || []).filter(
+    (e: any) => Number(e.amount) > 0);
+  const oldAppliedRows = (data?.old_regime?.explanations || []).filter(
+    (e: any) => Number(e.amount) > 0);
+  // top old-regime slab rate (for the per-deduction saving estimate)
+  const marginalRate = (() => {
+    let rate = 0;
+    for (const s of data?.old_regime?.slabs_breakdown || []) {
+      if (Number(s.tax) > 0) {
+        const r = parseInt(String(s.rate).replace('%', ''), 10);
+        if (!isNaN(r)) rate = Math.max(rate, r);
+      }
+    }
+    return rate;
+  })();
+
 
   const handlePrint = () => {
     window.print();
@@ -189,6 +223,72 @@ export default function TaxReport({ sessionId, projection }: Props) {
         </div>
       </div>
 
+      {/* ── Sprint 4 Phase 4A: Deductions — Applied vs Ignored ── */}
+      {bookedDeductions.length > 0 && (
+        <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
+          <div className="card-header" style={{ padding: 0, borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
+            <div>
+              <div className="card-title">Your Deductions — Applied vs Ignored</div>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Why your tax moved the way it did: the <strong>{rec}</strong> is cheaper by{' '}
+                <strong style={{ color: 'var(--accent-green)' }}>{fmt(data.savings)}</strong> — your booked
+                deductions apply in the <strong>{rec === 'New Regime' ? 'Old' : 'New'}</strong> regime.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            {/* Old Regime column */}
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary-light)', marginBottom: '0.5rem' }}>
+                Old Regime — deductions apply
+              </div>
+              {oldAppliedRows.map((ex: any, i: number) => (
+                <div key={`oa_${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ color: 'var(--text-sub)' }}>
+                    ✓ {ex.particular} <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>Sec {ex.section}</span>
+                    {marginalRate > 0 && (
+                      <span style={{ color: 'var(--accent-green)', fontSize: '0.68rem' }}>
+                        {' '}· est. saves {fmt((Number(ex.amount) * marginalRate) / 100)}
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ color: 'var(--text-main)' }}>{fmt(ex.amount)}</span>
+                </div>
+              ))}
+              {oldAppliedRows.length === 0 && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No deductions applied.</div>
+              )}
+            </div>
+            {/* New Regime column */}
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary-light)', marginBottom: '0.5rem' }}>
+                New Regime — Sec 115BAC applies
+              </div>
+              {newAppliedRows.map((ex: any, i: number) => (
+                <div key={`na_${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ color: 'var(--text-sub)' }}>✓ {ex.particular} <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>Sec {ex.section}</span></span>
+                  <span style={{ color: 'var(--text-main)' }}>{fmt(ex.amount)}</span>
+                </div>
+              ))}
+              {bookedDeductions.map((d) => (
+                <div key={`ni_${d.key}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ color: 'var(--accent-red)' }}>
+                    ✗ {d.label}
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}> — not allowed under Sec 115BAC</span>
+                  </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{fmt(d.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {marginalRate > 0 && (
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.6rem' }}>
+              Savings estimates use your top Old-Regime slab rate ({marginalRate}%); the report prices every figure exactly.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Tabs for Deeper Analysis ── */}
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
         <button
@@ -250,7 +350,8 @@ export default function TaxReport({ sessionId, projection }: Props) {
                 <td>{fmt(best?.gross_total_income)}</td>
               </tr>
 
-              {/* Deductions */}
+              {/* Deductions (from the engine's per-regime Explanation list —
+                  includes the standard deduction; no client-side rows) */}
               {best?.explanations?.map((ex: any, i: number) => (
                 <tr key={`ded_${i}`} className="deduction-row">
                   <td>Less: {ex.particular} ({ex.reason})</td>
@@ -258,14 +359,6 @@ export default function TaxReport({ sessionId, projection }: Props) {
                   <td>(−) {fmt(ex.amount)}</td>
                 </tr>
               ))}
-
-              {rec === 'New Regime' && (
-                <tr className="deduction-row">
-                  <td>Less: Standard Deduction for Salaried Employees</td>
-                  <td style={{ fontSize: '0.72rem' }}>Sec 16(ia)</td>
-                  <td>(−) {fmt(75000)}</td>
-                </tr>
-              )}
 
               <tr className="final-row">
                 <td colSpan={2}>Net Taxable Income</td>
