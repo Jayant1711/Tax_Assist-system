@@ -1128,23 +1128,30 @@ class NLPEngine:
 
         if "Final audit ready" in plan:
             session["phase"] = "FINAL"
-            tips = self.agent.get_savings_tips(session)
-            tip_text = ("\n\n💡 **Quick Tip**: " + tips[0]) if tips else ""
-            # Sprint 4 vNext (Phase 5): the Tax Intelligence Layer annotates
-            # the closing turn with the top CA-style recommendation. The
-            # block cites only ENGINE-priced savings (ADR-001); when the
-            # layer is offline or finds nothing material, the reply is
-            # unchanged.
-            intel_text = ""
+            # Sprint 5 P2/P3: ONE engine-priced review drives BOTH the
+            # regime-gated tips AND the shown-recommendation events
+            # (stashed on the session for main.py to persist — the API
+            # layer owns storage; nlp_engine never touches the DB).
+            review = None
             try:
                 from tax_engine import TaxEngine
-                from tax_intelligence import advisor_block, get_intelligence
+                from tax_intelligence import (advisor_review,
+                                              advisor_text_from_review,
+                                              get_intelligence)
                 if _TAX_ENGINE is None:
                     _TAX_ENGINE_SET(TaxEngine())
-                intel_text = advisor_block(
-                    session, _TAX_ENGINE, get_intelligence()) or ""
+                review = advisor_review(session, _TAX_ENGINE,
+                                        get_intelligence(), top_n=3)
             except Exception:  # noqa: BLE001 — intelligence never breaks a turn
-                intel_text = ""
+                review = None
+            rec_regime = (review or {}).get("recommendation")
+            tips = self.agent.get_savings_tips(
+                session, recommended_regime=rec_regime)
+            tip_text = ("\n\n💡 **Quick Tip**: " + tips[0]) if tips else ""
+            intel_text = (advisor_text_from_review(review) or "")
+            if review and review.get("recommendations"):
+                session["_recommendations_shown"] = \
+                    review["recommendations"]
             return (ack + composer.ask("closing", turn_idx) + intel_text
                     + f" (tax year {composer.year})" + tip_text)
 

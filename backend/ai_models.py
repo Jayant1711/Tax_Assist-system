@@ -572,10 +572,30 @@ class ReasoningAgent:
 
         return "plan: Final audit ready."
 
-    def get_savings_tips(self, session: Dict[str, Any]) -> List[str]:
+    def get_savings_tips(self, session: Dict[str, Any],
+                         recommended_regime: Optional[str] = None) -> List[str]:
+        """Savings tips, gated by the engine's recommended regime.
+
+        Sprint 5 P3 (measured defect): every legacy tip here is
+        OLD-regime arithmetic — quoting the NPS ₹15,600 tip to a user
+        whose optimal regime is New (Sec 115BAC disallows 80C/80D/24(b)
+        and self-NPS 80CCD(1B)) advertised a saving the engine prices at
+        ₹0. When the recommended regime is New, the Chapter VI-A tips
+        are replaced with the regime-honest guidance; callers that skip
+        the engine pass get the legacy behavior (back-compat).
+        """
         tips = []
         income = float(session.get("salary", 0) or 0) + float(session.get("business", 0) or 0)
         profile = session.get("profile", "General")
+
+        if (recommended_regime or "").strip().lower() == "new regime":
+            tips.append(
+                "New Regime note: Sec 115BAC does not allow 80C/80D/24(b) "
+                "deductions — your levers here are the ₹75,000 standard "
+                "deduction, employer NPS (80CCD(2)), and home-loan interest "
+                "on a LET-OUT property (Sec 24(b))."
+            )
+            return tips
 
         # 1. Section 80C
         c80 = float(session.get("80c", 0) or 0)
