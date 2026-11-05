@@ -207,3 +207,13 @@ ADRs 001-007 document decisions already embodied in the code; ADRs 008-011 were 
 **Decision:** the v0.5 intelligence layer deploys **exact rule heads** — deterministic functions over the engine two-pass (`rule_opportunity`/`rule_savings`/`rule_confidence` in `backend/tax_intelligence.py`): P/R 1.000/1.000 and savings MAE 0.00 INR by construction. The learned TSK heads remain off-deployment experiments (MODEL_REGISTRY) with pre-committed promotion gates (positive-rich continuous-value dataset, `SPRINT5_ROADMAP.md` P0/P1). The served efficiency is the exact composite (ADR-015 unchanged).
 
 **Consequences:** ✅ user-facing intelligence is correct by construction and fully explainable (statutory weights, not model internals); no model error term can reach a rupee. ❌ the intelligence layer's ranking does not yet use learned generalization (engine probes at recommend time are exact but bounded to probed top-ups); the TSK program continues as research until the data exists.
+
+## ADR-017 — Recommendation acceptance events (shown → action capture)
+
+**Date:** 2026-11-04 (Sprint 5 Wave 1)
+
+**Context:** the v0.5 intelligence layer recommends opportunities but captures no feedback — acceptance rates, head popularity, and confidence calibration have no data. Recommendations are computed per closing turn and not persisted.
+
+**Decision:** a dedicated `recommendation_events` table (Migration 3): one row per recommendation SHOWN on a closing turn (session_id, user_id, head, delta, savings_engine, confidence, created_at); the user's action (accepted/rejected/ignored) lands via `POST /sessions/{sid}/recommendations/{event_id}/action` (ownership double-checked: event → session → user). Capture is best-effort and never fatal to the turn. The stash travels on the session under `_recommendations_shown` and is scrubbed from projections (`audit_logger.DROPPED_STATE_KEYS`).
+
+**Consequences:** ✅ acceptance rates per head × confidence band become measurable (P2 feedback loop); the P2 acceptance dataset (acceptance-v1) has a source. ❌ no free text is captured (DPDP-minimized); unaccepted events accumulate (purge policy deferred until volume justifies it); the shown-capture fires only on the closing turn.

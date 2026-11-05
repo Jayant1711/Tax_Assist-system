@@ -5,7 +5,7 @@
  * plus KPI tiles, the 500 error banner, and fy_label rendering.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import TaxReport from '../TaxReport';
 
 const apiFetchMock = vi.fn();
@@ -169,5 +169,123 @@ describe('TaxReport', () => {
       const rows = screen.getAllByText(/Standard Deduction/);
       expect(rows.length).toBe(1);
     });
+  });
+
+  // ── Sprint 6 Phase 3: intelligence cards (recommendation + acceptance) ──
+  const CARDS_RESPONSE = {
+    ...CALCULATE_RESPONSE,
+    recommendations: [
+      {
+        rec_id: 'rec_80c',
+        head: '80c',
+        delta: 150000,
+        estimated_savings: 46875,
+        confidence: 0.85,
+        reason: 'Booked 80C is priced at ₹0 in the recommended New Regime (Sec 115BAC).',
+        evidence: [
+          '80C booked: ₹1,50,000 of ₹1,50,000',
+          'engine-priced: a top-up of ₹46,875 saves ₹46,875 (authoritative)',
+        ],
+        verdict: 'RECOMMEND',
+      },
+      {
+        rec_id: 'rec_80d',
+        head: '80d',
+        delta: 50000,
+        estimated_savings: 0,
+        confidence: 0.3,
+        reason: 'Priced in both regimes — no benefit.',
+        verdict: 'PRICE_ONLY',
+      },
+    ],
+  };
+
+  it('renders the ranked intelligence cards with confidence, savings, and reason', async () => {
+    apiFetchMock.mockResolvedValue(okResponse(CARDS_RESPONSE));
+
+    render(<TaxReport sessionId="sess_cards" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText('CA Recommendations — Ranked Opportunities')).toBeInTheDocument();
+    expect(screen.getByText(/Section 80C$/)).toBeInTheDocument();
+    expect(screen.getByText(/confidence 85%/)).toBeInTheDocument();
+    expect(screen.getByText(/est. saves ₹46,875/)).toBeInTheDocument();
+    expect(screen.getByText(/Booked 80C is priced at/)).toBeInTheDocument();
+    // the engine-priced evidence trail is shown, not just the verdict
+    expect(screen.getByText(/engine-priced: a top-up/)).toBeInTheDocument();
+    // acceptance actions only on RECOMMEND cards
+    expect(screen.getByText('✓ Apply this')).toBeInTheDocument();
+    expect(screen.getByText('✕ Not for me')).toBeInTheDocument();
+    // the priced-no-benefit card is labelled and has no action row of its own
+    expect(screen.getByText(/Section 80D — no benefit/)).toBeInTheDocument();
+  });
+
+  it('posts the acceptance action to the event endpoint on click', async () => {
+    apiFetchMock.mockResolvedValue(okResponse(CARDS_RESPONSE));
+
+    render(<TaxReport sessionId="sess_cards" projection={{ phase: 'FINAL' }} />);
+
+    fireEvent.click(await screen.findByText('✓ Apply this'));
+
+    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(2));
+    const [url, init] = apiFetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url).toBe('/sessions/sess_cards/recommendations/rec_80c/action');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ action: 'accepted' });
+  });
+
+  it('omits the intelligence cards when the payload has no recommendations', async () => {
+    render(<TaxReport sessionId="sess_nocards" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText('Recommended Strategy')).toBeInTheDocument();
+    expect(screen.queryByText('CA Recommendations — Ranked Opportunities')).not.toBeInTheDocument();
+  });
+
+  it('hides acceptance buttons until the FINAL phase (ADR-017 shown events)', async () => {
+    apiFetchMock.mockResolvedValue(okResponse(CARDS_RESPONSE));
+
+    render(<TaxReport sessionId="sess_cards_pre" projection={{ phase: 'PROFILING' }} />);
+
+    expect(await screen.findByText('CA Recommendations — Ranked Opportunities')).toBeInTheDocument();
+    expect(screen.queryByText('✓ Apply this')).not.toBeInTheDocument();
+    expect(screen.getByText(/Acceptance unlocks in the final report/)).toBeInTheDocument();
+  });
+
+  it('renders the exact per-deduction impact table (Sprint 6 Phase 5)', async () => {
+    apiFetchMock.mockResolvedValue(okResponse({
+      ...CALCULATE_RESPONSE,
+      deduction_impact: [
+        {
+          head: '80c',
+          entered: 150000,
+          applied_in_regime: false,
+          tax_reduction: 0,
+          tax_reduction_other_regime: 46875,
+          reason: 'Not allowed under the New Regime (Sec 115BAC) — applies in the Old Regime only',
+        },
+        {
+          head: '24b',
+          entered: 200000,
+          applied_in_regime: true,
+          tax_reduction: 32500,
+          tax_reduction_other_regime: 0,
+          reason: 'Section 24(b) — capped at ₹2,00,000 (self-occupied)',
+        },
+      ],
+    }));
+
+    render(<TaxReport sessionId="sess_impact" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText('Per-Deduction Impact — Exact (Engine-Priced)')).toBeInTheDocument();
+    expect(screen.getByText('24B')).toBeInTheDocument();
+    expect(screen.getByText('₹32,500')).toBeInTheDocument();
+    expect(screen.getByText('✗ 115BAC')).toBeInTheDocument();
+    expect(screen.getByText(/capped at ₹2,00,000/)).toBeInTheDocument();
+  });
+
+  it('omits the impact table when the payload has no deduction_impact', async () => {
+    render(<TaxReport sessionId="sess_noimpact" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText('Recommended Strategy')).toBeInTheDocument();
+    expect(screen.queryByText('Per-Deduction Impact — Exact (Engine-Priced)')).not.toBeInTheDocument();
   });
 });

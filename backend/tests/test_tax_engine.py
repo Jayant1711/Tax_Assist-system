@@ -135,3 +135,34 @@ def test_pure_agricultural_income_exempt_no_integration_notice() -> None:
         for obs in result["old_regime"].audit_observations
     )
     _assert_result_invariants(result)
+
+
+# ── Sprint 6 Phase 5: exact per-deduction impact (leave-one-out) ────────
+
+def test_deduction_impact_reduction_is_positive_when_item_delivers() -> None:
+    """The tax_reduction is the tax the item DELIVERED: tax without it
+    minus tax with it (positive). Regression: the first cut computed the
+    negated delta and surfaced ₹-1,30,000 for a ₹1,30,000 benefit."""
+    engine = TaxEngine()
+    state = {"salary": 1_500_000, "80e": 500_000, "24b": 200_000}
+    rows = {r["head"]: r for r in engine.deduction_impact(state)}
+    assert rows["80e"]["entered"] == 500_000
+    assert rows["80e"]["tax_reduction"] == 130_000.0
+    assert rows["80e"]["applied_in_regime"] is True
+    assert rows["24b"]["tax_reduction"] == 41_600.0
+    # a delivered benefit is never negative (monotone within a regime)
+    assert all(r["tax_reduction"] >= 0 for r in rows.values())
+
+
+def test_deduction_impact_115bac_heads_price_zero_in_new_regime() -> None:
+    """A New-Regime-recommended profile: 80C is ignored by the recommended
+    regime — ₹0 delivered, not applied — but still prices in the Old
+    Regime (the informational cross-regime field)."""
+    engine = TaxEngine()
+    state = {"salary": 4_600_000, "80c": 150_000, "80d": 50_000,
+             "nps": 50_000}
+    rows = {r["head"]: r for r in engine.deduction_impact(state)}
+    assert rows["80c"]["tax_reduction"] == 0.0
+    assert rows["80c"]["applied_in_regime"] is False
+    assert rows["80c"]["tax_reduction_other_regime"] > 0
+    assert "115BAC" in rows["80c"]["reason"]

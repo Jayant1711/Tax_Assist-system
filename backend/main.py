@@ -112,6 +112,7 @@ import config
 import corpus
 import db
 import observability
+import tax_intelligence
 from audit_logger import AuditLogger, scrub_state
 from nlp_engine import NLPEngine
 from rate_limit import RateLimiter
@@ -1107,6 +1108,69 @@ def create_app(app_env: str = "dev") -> FastAPI:
         _row, state = _load_owned_state(session_id, user)
         return session_projection(state)
 
+    @app.get("/sessions/{session_id}/recommendations")
+    async def list_recommendation_events_endpoint(
+        session_id: str,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> List[Dict[str, Any]]:
+        """Shown-recommendation events for one owned session (Sprint 5
+        P2 / ADR-017; 404 foreign/unknown). Powers the frontend cards."""
+        _row, state = _load_owned_state(session_id, user)
+        return [
+            dict(row) for row in db.list_recommendation_events(
+                session_id, user.user_id)
+        ]
+
+    @app.get("/sessions/{session_id}/recommendations/analytics")
+    async def recommendation_analytics_endpoint(
+        session_id: str,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, Any]:
+        """Acceptance funnel per head + session totals (Sprint 6 Phase 1/4;
+        404 foreign/unknown). The Recommendation Effectiveness Dashboard's
+        data source."""
+        _row, state = _load_owned_state(session_id, user)
+        return db.recommendation_analytics(session_id, user.user_id)
+
+    @app.post("/sessions/{session_id}/recommendations/{event_id}/action",
+              status_code=200)
+    async def record_recommendation_action_endpoint(
+        session_id: str,
+        event_id: str,
+        request: Request,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, Any]:
+        """Record the user's action on a shown recommendation (Sprint 5
+        P2 acceptance capture; 404 foreign/unknown; 404 unknown event)."""
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid JSON body")
+        action = body.get("action")
+        if action not in ("accepted", "rejected", "ignored", "viewed",
+                          "dismissed"):
+            raise HTTPException(
+                status_code=422,
+                detail="action must be accepted/rejected/ignored/"
+                       "viewed/dismissed",
+            )
+        # Ownership: the event must belong to THIS owned session AND to
+        # the caller (double-checked in SQL).
+        conn = db.get_connection()
+        row = conn.execute(
+            """
+            SELECT id FROM recommendation_events
+            WHERE id = ? AND session_id = ? AND user_id = ?
+            """,
+            (event_id, session_id, user.user_id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        if not db.record_recommendation_action(event_id, user.user_id,
+                                               action):
+            raise HTTPException(status_code=404, detail="Event not found")
+        return {"event_id": event_id, "action": action}
+
     @app.delete("/sessions/{session_id}", status_code=204)
     async def delete_app_session_endpoint(
         session_id: str,
@@ -1213,6 +1277,26 @@ def create_app(app_env: str = "dev") -> FastAPI:
             "audit": tax_result,
             "user_id": user_id,
         })
+
+        # 5b. Sprint 5 P2 / ADR-017: record SHOWN recommendations (the
+        # closing turn stashes the ranked review on the session). The
+        # user's action lands later via the action endpoint. Best-effort —
+        # never fatal to the turn.
+        shown = result["session"].get("_recommendations_shown")
+        if result.get("plan") == "Final audit ready." and shown:
+            try:
+                for rec in shown:
+                    db.record_recommendation_shown(
+                        session_id=session_id,
+                        user_id=user_id,
+                        rec_id=rec["rec_id"],
+                        head=rec["head"],
+                        delta=rec["delta"],
+                        savings_engine=rec["savings_engine"],
+                        confidence=rec["confidence"],
+                    )
+            except Exception:  # noqa: BLE001 — capture never breaks a turn
+                logger.warning("recommendation shown-capture failed")
 
         # 6. Full-fidelity corpus capture (Sprint 3 follow-up — the
         # dataset strategy from Sprint4_AI_Modernization.md). Opt-in via
@@ -1324,6 +1408,26 @@ def create_app(app_env: str = "dev") -> FastAPI:
         # pin; both are registry-validated (request model + state validator).
         tax_year = req.tax_year if req.tax_year is not None else state.get("tax_year")
         results = engine.calculate_tax_advanced(state, tax_year=tax_year)
+        # Sprint 6 Phase 3: attach the live ranked review so the frontend
+        # intelligence cards render recommendation + confidence + savings +
+        # reason + evidence + acceptance. rec_ids are deterministic (uuid5
+        # of session|head), so a card's acceptance action resolves the
+        # shown event recorded at the closing turn (ADR-017). Attached only
+        # at FINAL — mid-flow profiles would rank zero-benefit noise.
+        # Best-effort: a review failure must never break the calculation.
+        if state.get("phase") == "FINAL":
+            review = tax_intelligence.advisor_review(
+                state, engine, tax_intelligence.get_intelligence())
+            if review:
+                results["recommendations"] = review["recommendations"]
+            # Sprint 6 Phase 5: exact per-deduction impact (leave-one-out,
+            # ADR-001 — recomputed by this engine, no ML) for the report's
+            # impact table. Best-effort like the review.
+            try:
+                results["deduction_impact"] = engine.deduction_impact(
+                    state, tax_year)
+            except Exception:  # noqa: BLE001 — never fatal to the calc
+                logger.warning("deduction impact attach failed")
         return clean_json(results)
 
     return app

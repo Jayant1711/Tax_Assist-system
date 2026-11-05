@@ -66,7 +66,8 @@ LEGACY_FILENAME = "session_audit.json"  # read-only compat fallback
 
 # PII minimization: state keys never persisted (dropped recursively).
 DROPPED_STATE_KEYS = frozenset(
-    {"history", "memory", "_last_val", "_prev_salary", "_last_question"}
+    {"history", "memory", "_last_val", "_prev_salary", "_last_question",
+     "_recommendations_shown"}
 )
 
 # Compact tax totals: numeric totals kept per regime node, advisory text

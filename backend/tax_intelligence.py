@@ -33,6 +33,7 @@ the feature definition; this module consumes, never re-derives).
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -359,9 +360,18 @@ def features_v2(session: Dict[str, Any], result: Dict[str, Any],
         clip(float(hra_leg) / 200_000),
         clip(float(session.get("24b") or 0) / 200_000),
         clip(float(session.get("80e") or 0) / 500_000),
-        clip(float(session.get("80g") or 0) / (inc * 0.1 + 1)),
+        # f9 (P0.1 fix): align with the composite's own u80g normalization
+        # (booked/100k, forensics-measured 1,564-row mismatch at the old
+        # income-scaled denominator).
+        clip(float(session.get("80g") or 0) / 100_000),
         clip(float(session.get("80tta") or 0) / 10_000),
-        clip(float(session.get("80u_80dd") or 0) / 125_000),
+        # f11 (P0.1 fix): the flat-amount guard books the 80U/80DD CATEGORY
+        # enum, never a numeric amount — derive utilization from it.
+        (
+            0.6 if session.get("80u_80dd_category") == "40_79"
+            else 1.0 if session.get("80u_80dd_category") == "80_plus"
+            else 0.0
+        ),
         clip(float(session.get("80ddb") or 0) / 100_000),
         clip(float(session.get("80eea") or 0) / 150_000),
         clip(gains_amt / inc),
@@ -443,6 +453,13 @@ def recommend(session: Dict[str, Any], engine: Any,
         # always present (ADR-001); the learned heads only decorate when
         # their weights are deployed and gate-passing.
         cands.append({
+            # Sprint 6 Phase 3 (ADR-017 acceptance wiring): the rec_id is
+            # DETERMINISTIC — uuid5 of (session id, head) — so the id on a
+            # /calculate card is identical to the id recorded as a shown
+            # event at the closing turn, and the action endpoint resolves
+            # it. A random uuid4 would orphan every card click.
+            "rec_id": uuid.uuid5(uuid.NAMESPACE_URL,
+                                 f"{session.get('id', '')}|{head}").hex,
             "head": head, "delta": delta, "headroom": headroom,
             "savings_engine": savings_engine,
             "savings_estimate": savings_engine,
@@ -601,22 +618,30 @@ def ti_mod_feature_names() -> List[str]:
             "savings_ratio", "tax_ratio", "senior", "80c_headroom"]
 
 
-def advisor_block(session: Dict[str, Any], engine: Any,
-                  ti: Optional[TaxIntelligence]) -> Optional[str]:
-    """Phase 5 — the composer-facing intelligence block (top-1 only).
+def advisor_review(session: Dict[str, Any], engine: Any,
+                   ti: Optional[TaxIntelligence],
+                   top_n: int = 3) -> Optional[Dict[str, Any]]:
+    """Phase 5 — the ranked CA-style review (engine-priced two-pass).
 
-    Format: recommendation + reason + confidence + estimated savings +
-    next best action. Returns None when the model finds nothing material
-    or the engine prices zero benefit — the reply then stays exactly as
-    the composer built it (ADR-001: no invented value enters the reply).
-    Engine-only mode (ti=None) still recommends: every rupee cited is
-    engine-priced.
+    Returns the full review dict (available/recommendation/regime_advisory/
+    band_position/recommendations[...]) or None when the layer cannot run.
+    Each candidate carries a rec_id for shown-event tracking (Sprint 5 P2).
     """
     try:
-        review = recommend(session, engine, ti, top_n=1)
+        return recommend(session, engine, ti, top_n=top_n)
     except Exception:  # noqa: BLE001 — intelligence must never break a turn
         return None
-    if not review.get("available") or not review.get("recommendations"):
+
+
+def advisor_text_from_review(
+        review: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Render the top-1 RECOMMEND from a review as the closing-turn block.
+    Returns None when nothing material is available — the reply then stays
+    exactly as the composer built it (ADR-001: no invented value enters
+    the reply). Engine-only reviews still recommend: every rupee cited is
+    engine-priced."""
+    if not review or not review.get("available") \
+            or not review.get("recommendations"):
         return None
     rec = review["recommendations"][0]
     if rec["verdict"] != "RECOMMEND" or rec["estimated_savings"] <= 0:
@@ -628,6 +653,13 @@ def advisor_block(session: Dict[str, Any], engine: Any,
             f"(confidence {int(rec['confidence'] * 100)}%; engine-verified "
             "in your report). "
             f"Why: {rec['reason'].rstrip('.')}.")
+
+
+def advisor_block(session: Dict[str, Any], engine: Any,
+                  ti: Optional[TaxIntelligence]) -> Optional[str]:
+    """Compat wrapper: review + text in one call."""
+    return advisor_text_from_review(advisor_review(session, engine, ti,
+                                                   top_n=1))
 
 
 

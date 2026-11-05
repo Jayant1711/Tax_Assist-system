@@ -289,6 +289,125 @@ export default function TaxReport({ sessionId, projection }: Props) {
         </div>
       )}
 
+      {/* ── Sprint 6 Phase 3: Intelligence Cards (ranked CA recommendations) ── */}
+      {(() => {
+        const review = (data as any)?.recommendations as
+          | Array<{ rec_id: string; head: string; delta: number;
+                    estimated_savings: number; confidence: number;
+                    reason: string; verdict: string;
+                    evidence?: string[] }> | undefined;
+        if (!review?.length) return null;
+        // ADR-017: acceptance actions resolve persisted shown events —
+        // they exist only once the closing turn ran, i.e. the FINAL phase.
+        const finalPhase = (projection?.phase || '') === 'FINAL';
+        const act = (recId: string, action: string) => {
+          apiFetch(
+            `/sessions/${sessionId}/recommendations/${recId}/action`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action }) },
+          );
+        };
+        return (
+          <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
+            <div className="card-header" style={{ padding: 0, borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
+              <div className="card-title">CA Recommendations — Ranked Opportunities</div>
+            </div>
+            {review.map((card: any, i: number) => {
+              const recommend = card.verdict === 'RECOMMEND';
+              return (
+                <div key={card.rec_id} style={{ padding: '0.75rem 0', borderBottom: i < review.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: recommend ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                      {i + 1}. Section {card.head.replace(/_/g, ' ').toUpperCase()}
+                      {recommend ? '' : ' — no benefit'}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      confidence {Math.round(card.confidence * 100)}%
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem' }}>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-sub)' }}>{card.reason}</span>
+                    <span style={{ fontSize: '0.76rem', fontWeight: 600, color: recommend ? 'var(--accent-green)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {recommend ? `est. saves ${fmt(card.estimated_savings)}` : '₹0'}
+                    </span>
+                  </div>
+                  {card.evidence && card.evidence.length > 0 && (
+                    <ul style={{ margin: '0.35rem 0 0 1rem', padding: 0, fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                      {card.evidence.map((e: string, j: number) => (
+                        <li key={j}>{e}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {recommend && finalPhase && (
+                    <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.5rem' }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => act(card.rec_id, 'accepted')}>
+                        ✓ Apply this
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => act(card.rec_id, 'rejected')}>
+                        ✕ Not for me
+                      </button>
+                    </div>
+                  )}
+                  {recommend && !finalPhase && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                      Acceptance unlocks in the final report.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* ── Sprint 6 Phase 5: exact per-deduction impact (leave-one-out) ── */}
+      {(() => {
+        const impacts = (data as any)?.deduction_impact as
+          | Array<{ head: string; entered: number; applied_in_regime: boolean;
+                    tax_reduction: number; tax_reduction_other_regime: number;
+                    reason: string }> | undefined;
+        if (!impacts?.length) return null;
+        return (
+          <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
+            <div className="card-header" style={{ padding: 0, borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
+              <div>
+                <div className="card-title">Per-Deduction Impact — Exact (Engine-Priced)</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Leave-one-out recomputation by the TaxEngine (ADR-001): the tax each booked
+                  item actually removed in the recommended regime. Exact arithmetic — no estimates.
+                </p>
+              </div>
+            </div>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Deduction</th>
+                  <th style={{ textAlign: 'right' }}>Entered (₹)</th>
+                  <th style={{ textAlign: 'right' }}>Applied</th>
+                  <th style={{ textAlign: 'right' }}>Tax Reduced (₹)</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {impacts.map((imp) => (
+                  <tr key={imp.head}>
+                    <td style={{ fontWeight: 600 }}>{imp.head.replace(/_/g, ' ').toUpperCase()}</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(imp.entered)}</td>
+                    <td style={{ textAlign: 'right', color: imp.applied_in_regime ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                      {imp.applied_in_regime ? '✓' : '✗ 115BAC'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, color: imp.tax_reduction > 0 ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                      {fmt(imp.tax_reduction)}
+                    </td>
+                    <td style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{imp.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
       {/* ── Tabs for Deeper Analysis ── */}
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
         <button

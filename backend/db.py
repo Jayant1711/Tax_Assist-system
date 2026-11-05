@@ -120,6 +120,32 @@ _MIGRATIONS: Tuple[Tuple[int, str, Tuple[str, ...]], ...] = (
             """,
         ),
     ),
+    # Migration 3 (Sprint 5 P2 / ADR-017): recommendation acceptance
+    # events. One row per recommendation SHOWN on a closing turn; the
+    # user's action (accepted/rejected/ignored) lands later via the
+    # action endpoint. PII-minimized by design: head/delta/savings/
+    # confidence only — no free text, no amounts beyond the priced
+    # recommendation itself.
+    (
+        3,
+        "recommendation_events",
+        (
+            """
+            CREATE TABLE IF NOT EXISTS recommendation_events (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL REFERENCES app_sessions(id) ON DELETE CASCADE,
+                user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+                head TEXT NOT NULL,
+                delta REAL NOT NULL,
+                savings_engine REAL NOT NULL,
+                confidence REAL NOT NULL,
+                action TEXT,
+                created_at TEXT NOT NULL,
+                resolved_at TEXT
+            )
+            """,
+        ),
+    ),
 )
 
 # Module state: the resolved path of the active database. Guarded by a
@@ -365,6 +391,125 @@ def delete_owned_session(session_id: str, user_id: str) -> bool:
             (session_id, user_id),
         )
         return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Sprint 5 P2 / ADR-017: recommendation acceptance events. One row per
+# recommendation SHOWN on a closing turn; the user's action lands later
+# through the action endpoint. PII-minimized: head/delta/savings/
+# confidence only.
+# ---------------------------------------------------------------------------
+
+def record_recommendation_shown(
+    session_id: str,
+    user_id: Optional[str],
+    rec_id: str,
+    head: str,
+    delta: float,
+    savings_engine: float,
+    confidence: float,
+) -> bool:
+    """Insert one shown-recommendation event; True iff written (the
+    session row must still exist — a vanished owner deletes nothing)."""
+    conn = get_connection()
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO recommendation_events (
+                    id, session_id, user_id, head, delta, savings_engine,
+                    confidence, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    rec_id, session_id, user_id, head, float(delta),
+                    float(savings_engine), float(confidence), utcnow_iso(),
+                ),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        # The session row vanished concurrently (deleted mid-turn):
+        # nothing to attach the event to — silently skip (best-effort).
+        return False
+
+
+def record_recommendation_action(
+    event_id: str, user_id: str, action: str
+) -> bool:
+    """Set the user's action on one of THEIR shown events (ownership
+    checked in SQL via the app_sessions join); True iff updated."""
+    conn = get_connection()
+    with conn:
+        cursor = conn.execute(
+            """
+            UPDATE recommendation_events
+            SET action = ?, resolved_at = ?
+            WHERE id = ? AND user_id = ?
+              AND session_id IN (SELECT id FROM app_sessions
+                                 WHERE user_id = ?)
+            """,
+            (action, utcnow_iso(), event_id, user_id, user_id),
+        )
+        return cursor.rowcount > 0
+
+
+def recommendation_analytics(
+    session_id: str, user_id: str
+) -> Dict[str, Any]:
+    """Sprint 6 Phase 1/4: the acceptance funnel for one owned session.
+
+    Returns per-head aggregates (shown/accepted/rejected/ignored/viewed/
+    dismissed counts + engine-priced savings) and the session totals —
+    the Recommendation Effectiveness Dashboard's data source.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT head, action, savings_engine, confidence
+        FROM recommendation_events
+        WHERE session_id = ? AND user_id = ?
+        """,
+        (session_id, user_id),
+    ).fetchall()
+    funnel: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        entry = funnel.setdefault(row["head"], {
+            "shown": 0, "accepted": 0, "rejected": 0, "ignored": 0,
+            "viewed": 0, "dismissed": 0, "savings_engine": 0.0,
+        })
+        entry["shown"] += 1
+        if row["action"]:
+            entry[row["action"]] = entry.get(row["action"], 0) + 1
+        entry["savings_engine"] = max(entry["savings_engine"],
+                                      float(row["savings_engine"]))
+    accepted = sum(1 for row in rows if row["action"] == "accepted")
+    return {
+        "session_id": session_id,
+        "total_shown": len(rows),
+        "total_accepted": accepted,
+        "acceptance_rate": round(accepted / len(rows), 4) if rows else 0.0,
+        "per_head": [
+            {"head": head, **stats}
+            for head, stats in sorted(funnel.items())
+        ],
+    }
+
+
+def list_recommendation_events(
+    session_id: str, user_id: str
+) -> List[sqlite3.Row]:
+    """All shown events for one owned session, newest first."""
+    conn = get_connection()
+    return conn.execute(
+        """
+        SELECT id, session_id, head, delta, savings_engine, confidence,
+               action, created_at, resolved_at
+        FROM recommendation_events
+        WHERE session_id = ? AND user_id = ?
+        ORDER BY created_at DESC
+        """,
+        (session_id, user_id),
+    ).fetchall()
 
 
 # init at import: the store always exists before the first request.
