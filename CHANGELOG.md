@@ -2,7 +2,7 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
-## [Unreleased] — sprint6
+## [0.6.0-sprint6] — 2026-11-05
 
 Sprint 6: Feedback + Acceptance Learning + Confidence Calibration + Recommendation Analytics + Intelligence Quality. Full details in `PROJECT_STATUS_REPORT_SPRINT6.md`.
 
