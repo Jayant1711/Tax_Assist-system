@@ -80,6 +80,88 @@ class TestClosingTurnCapture:
         assert all(ev["session_id"] == sid for ev in events)
 
 
+class TestEndOverrideCapture:
+    def test_end_override_records_shown_events(self) -> None:
+        """Sprint 6 regression: the /end override runs the SHARED closing
+        intelligence — the ranked review is stashed and captured as shown
+        events. (The old early return skipped the stash entirely, so /end
+        sessions had no events and the cards' acceptance actions 404'd.)"""
+        import os
+
+        import db as db_mod
+        from fastapi.testclient import TestClient
+
+        from main import app
+
+        previous_cwd = os.getcwd()
+        os.chdir(BACKEND_DIR)
+        client = None
+        try:
+            db_mod.init_db()
+            client = TestClient(app)
+            email = register_and_login(client)
+            sid = make_session(client)
+            r = client.post("/chat", json={
+                "message": "I am a software engineer earning 24 lakhs",
+                "session_id": sid})
+            assert r.status_code == 200
+            r = client.post("/chat", json={"message": "/end",
+                                           "session_id": sid})
+            assert r.status_code == 200
+            user_id = db_mod.get_connection().execute(
+                "SELECT id FROM users WHERE email = ?", (email,)
+            ).fetchone()[0]
+            events = db_mod.list_recommendation_events(sid, user_id)
+            assert len(events) >= 1, (
+                "the /end override must capture shown events")
+        finally:
+            os.chdir(previous_cwd)
+
+
+class TestCalculateIntelligenceAttach:
+    def test_calculate_attaches_review_and_impact_at_final(self) -> None:
+        """Sprint 6: /calculate at FINAL carries the ranked review (with
+        DETERMINISTIC rec_ids, so card actions resolve the shown events)
+        and the exact per-deduction impact rows."""
+        import os
+
+        import db as db_mod
+        from fastapi.testclient import TestClient
+
+        from main import app
+
+        previous_cwd = os.getcwd()
+        os.chdir(BACKEND_DIR)
+        client = None
+        try:
+            db_mod.init_db()
+            client = TestClient(app)
+            register_and_login(client)
+            sid = make_session(client)
+            for msg in ["I am a software engineer earning 24 lakhs",
+                        "1.5 lakhs in PPF", "/end"]:
+                r = client.post("/chat", json={"message": msg,
+                                               "session_id": sid})
+                assert r.status_code == 200
+            r = client.post("/calculate", json={"session_id": sid})
+            assert r.status_code == 200
+            data = r.json()
+            recs = data.get("recommendations") or []
+            assert recs, "FINAL /calculate must carry the ranked review"
+            assert recs[0]["rec_id"]
+            impacts = data.get("deduction_impact") or []
+            assert impacts, "FINAL /calculate must carry impact rows"
+            heads = {row["head"] for row in impacts}
+            assert "80c" in heads
+            # deterministic rec_ids: a second call returns the same ids
+            r2 = client.post("/calculate", json={"session_id": sid})
+            recs2 = r2.json().get("recommendations") or []
+            assert [c["rec_id"] for c in recs] == \
+                [c["rec_id"] for c in recs2]
+        finally:
+            os.chdir(previous_cwd)
+
+
 # ---------------------------------------------------------------------------
 # action endpoint (auth + ownership + validation)
 # ---------------------------------------------------------------------------

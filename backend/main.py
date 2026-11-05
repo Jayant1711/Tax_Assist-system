@@ -112,6 +112,7 @@ import config
 import corpus
 import db
 import observability
+import tax_intelligence
 from audit_logger import AuditLogger, scrub_state
 from nlp_engine import NLPEngine
 from rate_limit import RateLimiter
@@ -1120,6 +1121,17 @@ def create_app(app_env: str = "dev") -> FastAPI:
                 session_id, user.user_id)
         ]
 
+    @app.get("/sessions/{session_id}/recommendations/analytics")
+    async def recommendation_analytics_endpoint(
+        session_id: str,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, Any]:
+        """Acceptance funnel per head + session totals (Sprint 6 Phase 1/4;
+        404 foreign/unknown). The Recommendation Effectiveness Dashboard's
+        data source."""
+        _row, state = _load_owned_state(session_id, user)
+        return db.recommendation_analytics(session_id, user.user_id)
+
     @app.post("/sessions/{session_id}/recommendations/{event_id}/action",
               status_code=200)
     async def record_recommendation_action_endpoint(
@@ -1135,10 +1147,12 @@ def create_app(app_env: str = "dev") -> FastAPI:
         except Exception:
             raise HTTPException(status_code=422, detail="Invalid JSON body")
         action = body.get("action")
-        if action not in ("accepted", "rejected", "ignored"):
+        if action not in ("accepted", "rejected", "ignored", "viewed",
+                          "dismissed"):
             raise HTTPException(
                 status_code=422,
-                detail="action must be accepted/rejected/ignored",
+                detail="action must be accepted/rejected/ignored/"
+                       "viewed/dismissed",
             )
         # Ownership: the event must belong to THIS owned session AND to
         # the caller (double-checked in SQL).
@@ -1394,6 +1408,26 @@ def create_app(app_env: str = "dev") -> FastAPI:
         # pin; both are registry-validated (request model + state validator).
         tax_year = req.tax_year if req.tax_year is not None else state.get("tax_year")
         results = engine.calculate_tax_advanced(state, tax_year=tax_year)
+        # Sprint 6 Phase 3: attach the live ranked review so the frontend
+        # intelligence cards render recommendation + confidence + savings +
+        # reason + evidence + acceptance. rec_ids are deterministic (uuid5
+        # of session|head), so a card's acceptance action resolves the
+        # shown event recorded at the closing turn (ADR-017). Attached only
+        # at FINAL — mid-flow profiles would rank zero-benefit noise.
+        # Best-effort: a review failure must never break the calculation.
+        if state.get("phase") == "FINAL":
+            review = tax_intelligence.advisor_review(
+                state, engine, tax_intelligence.get_intelligence())
+            if review:
+                results["recommendations"] = review["recommendations"]
+            # Sprint 6 Phase 5: exact per-deduction impact (leave-one-out,
+            # ADR-001 — recomputed by this engine, no ML) for the report's
+            # impact table. Best-effort like the review.
+            try:
+                results["deduction_impact"] = engine.deduction_impact(
+                    state, tax_year)
+            except Exception:  # noqa: BLE001 — never fatal to the calc
+                logger.warning("deduction impact attach failed")
         return clean_json(results)
 
     return app

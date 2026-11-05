@@ -453,6 +453,48 @@ def record_recommendation_action(
         return cursor.rowcount > 0
 
 
+def recommendation_analytics(
+    session_id: str, user_id: str
+) -> Dict[str, Any]:
+    """Sprint 6 Phase 1/4: the acceptance funnel for one owned session.
+
+    Returns per-head aggregates (shown/accepted/rejected/ignored/viewed/
+    dismissed counts + engine-priced savings) and the session totals —
+    the Recommendation Effectiveness Dashboard's data source.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT head, action, savings_engine, confidence
+        FROM recommendation_events
+        WHERE session_id = ? AND user_id = ?
+        """,
+        (session_id, user_id),
+    ).fetchall()
+    funnel: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        entry = funnel.setdefault(row["head"], {
+            "shown": 0, "accepted": 0, "rejected": 0, "ignored": 0,
+            "viewed": 0, "dismissed": 0, "savings_engine": 0.0,
+        })
+        entry["shown"] += 1
+        if row["action"]:
+            entry[row["action"]] = entry.get(row["action"], 0) + 1
+        entry["savings_engine"] = max(entry["savings_engine"],
+                                      float(row["savings_engine"]))
+    accepted = sum(1 for row in rows if row["action"] == "accepted")
+    return {
+        "session_id": session_id,
+        "total_shown": len(rows),
+        "total_accepted": accepted,
+        "acceptance_rate": round(accepted / len(rows), 4) if rows else 0.0,
+        "per_head": [
+            {"head": head, **stats}
+            for head, stats in sorted(funnel.items())
+        ],
+    }
+
+
 def list_recommendation_events(
     session_id: str, user_id: str
 ) -> List[sqlite3.Row]:

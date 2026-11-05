@@ -644,11 +644,42 @@ class NLPEngine:
     #  Main entry-point
     # ------------------------------------------------------------------ #
 
+    def _closing_intelligence(self, session: Dict[str, Any]) -> tuple:
+        """Sprint 6 / ADR-017: the closing-turn intelligence — ONE
+        engine-priced review drives the regime-gated tips, the advisor
+        text, AND the shown-recommendation stash (main.py persists it as
+        shown events). Shared by the natural closing turn and the /end
+        override so both capture identically (the /end early-return used
+        to skip the stash entirely — /end sessions had no shown events
+        and the cards' acceptance actions 404'd)."""
+        review = None
+        try:
+            from tax_engine import TaxEngine
+            from tax_intelligence import (advisor_review,
+                                          advisor_text_from_review,
+                                          get_intelligence)
+            if _TAX_ENGINE is None:
+                _TAX_ENGINE_SET(TaxEngine())
+            review = advisor_review(session, _TAX_ENGINE,
+                                    get_intelligence(), top_n=3)
+        except Exception:  # noqa: BLE001 — intelligence never breaks a turn
+            review = None
+        if review and review.get("recommendations"):
+            session["_recommendations_shown"] = review["recommendations"]
+        rec_regime = (review or {}).get("recommendation")
+        tips = self.agent.get_savings_tips(
+            session, recommended_regime=rec_regime)
+        tip_text = ("\n\n💡 **Quick Tip**: " + tips[0]) if tips else ""
+        intel_text = (advisor_text_from_review(review) or "")
+        return intel_text, tip_text
+
     def process_message(self, text: str, session: Dict[str, Any]) -> Dict[str, Any]:
         # ── /end override ──────────────────────────────────────────────
         if text.strip().lower() in ("/end", "end", "/done", "done", "finish", "complete"):
             session["phase"] = "FINAL"
-            response = "✨ Override activated. Generating your Tax Optimization Report now…"
+            intel_text, tip_text = self._closing_intelligence(session)
+            response = ("✨ Override activated. Generating your Tax "
+                        "Optimization Report now…" + intel_text + tip_text)
             if "history" not in session:
                 session["history"] = []
             session["history"].append({"user": text, "ai": response})
@@ -1128,30 +1159,12 @@ class NLPEngine:
 
         if "Final audit ready" in plan:
             session["phase"] = "FINAL"
-            # Sprint 5 P2/P3: ONE engine-priced review drives BOTH the
-            # regime-gated tips AND the shown-recommendation events
-            # (stashed on the session for main.py to persist — the API
-            # layer owns storage; nlp_engine never touches the DB).
-            review = None
-            try:
-                from tax_engine import TaxEngine
-                from tax_intelligence import (advisor_review,
-                                              advisor_text_from_review,
-                                              get_intelligence)
-                if _TAX_ENGINE is None:
-                    _TAX_ENGINE_SET(TaxEngine())
-                review = advisor_review(session, _TAX_ENGINE,
-                                        get_intelligence(), top_n=3)
-            except Exception:  # noqa: BLE001 — intelligence never breaks a turn
-                review = None
-            rec_regime = (review or {}).get("recommendation")
-            tips = self.agent.get_savings_tips(
-                session, recommended_regime=rec_regime)
-            tip_text = ("\n\n💡 **Quick Tip**: " + tips[0]) if tips else ""
-            intel_text = (advisor_text_from_review(review) or "")
-            if review and review.get("recommendations"):
-                session["_recommendations_shown"] = \
-                    review["recommendations"]
+            # Sprint 5 P2/P3 / Sprint 6: ONE engine-priced review drives
+            # the regime-gated tips, the advisor text, AND the shown-
+            # recommendation events (stashed on the session for main.py
+            # to persist — the API layer owns storage; nlp_engine never
+            # touches the DB). Shared with the /end override.
+            intel_text, tip_text = self._closing_intelligence(session)
             return (ack + composer.ask("closing", turn_idx) + intel_text
                     + f" (tax year {composer.year})" + tip_text)
 

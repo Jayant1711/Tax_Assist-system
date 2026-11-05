@@ -517,6 +517,97 @@ class TaxEngine:
             "efficiency_score": round(eff_score, 1),
         }
 
+    def deduction_impact(self, data: Dict[str, Any],
+                         tax_year: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Sprint 6 Phase 5 — EXACT per-deduction impact (leave-one-out).
+
+        For every booked deduction head: the amount entered, the amount
+        the RECOMMENDED regime actually applied, the tax reduction that
+        item delivered in the recommended regime (base tax minus the
+        tax with the item zeroed — recomputed by this engine, so it is
+        authoritative per ADR-001), and the statutory reason. No ML.
+        """
+        rules = tax_rules.get_rules(
+            tax_year if tax_year is not None else tax_rules.DEFAULT_TAX_YEAR
+        )
+        base = self.calculate_tax_advanced(dict(data), tax_year)
+        rec = base["recommendation"]
+        rec_key = "old_regime" if rec == "Old Regime" else "new_regime"
+        base_tax = float(base[rec_key].total_tax)
+        heads = ("80c", "80d", "80d_parents", "nps", "80e", "80g",
+                 "80tta", "80ttb", "80u_80dd", "80ddb", "80eea", "24b",
+                 "hra_received")
+        rows: List[Dict[str, Any]] = []
+        for head in heads:
+            entered = float(data.get(head, 0) or 0)
+            if entered <= 0:
+                continue
+            without = dict(data)
+            without[head] = 0
+            if head == "hra_received":
+                # Rule 2A leave-one-out: the exemption needs BOTH legs —
+                # zeroing the HRA received leg alone correctly collapses
+                # the exemption to zero in the recomputation below.
+                pass
+            res_without = self.calculate_tax_advanced(without, tax_year)
+            rec_without = (res_without["old_regime"] if rec == "Old Regime"
+                           else res_without["new_regime"])
+            # the tax the item DELIVERED: tax without it minus tax with it
+            # (positive = the item reduced tax). Within one regime a
+            # deduction is monotone, so this is exact; recomputed by this
+            # engine per ADR-001.
+            reduction = round(float(rec_without.total_tax) - base_tax, 2)
+            # applied = the item actually changed the recommended regime's
+            # taxable income (24b on a LET-OUT property IS allowed under
+            # 115BAC — the taxable delta is the regime-honest test, not a
+            # head list)
+            applied = (float(rec_without.taxable_income)
+                       > float(base[rec_key].taxable_income))
+            # informational: the same item priced in the OTHER regime —
+            # baseline is the OTHER regime's own tax without the item
+            other_key = ("new_regime" if rec == "Old Regime"
+                         else "old_regime")
+            other_base = float(base[other_key].total_tax)
+            reduction_other = round(
+                float(res_without[other_key].total_tax) - other_base, 2)
+            if rec == "New Regime" and head == "24b":
+                reason = ("Section 24(b) — let-out property interest is "
+                          "allowed under Sec 115BAC; self-occupied is not")
+            elif rec == "New Regime" and head not in (
+                    "80tta", "80ttb", "80u_80dd", "80ddb"):
+                reason = ("Not allowed under the New Regime "
+                          "(Sec 115BAC) — applies in the Old Regime only")
+            elif head == "80d_parents":
+                reason = ("Section 80D(parents) — capped at ₹25,000, or "
+                          "₹50,000 for senior-citizen parents")
+            elif head == "80d":
+                reason = ("Section 80D — capped at ₹25,000 self/family "
+                          "(₹50,000 senior citizens)")
+            elif head == "80c":
+                reason = "Section 80C — capped at ₹1,50,000"
+            elif head == "nps":
+                reason = "Section 80CCD(1B) — capped at ₹50,000"
+            elif head == "24b":
+                reason = ("Section 24(b) — capped at ₹2,00,000 "
+                          "(self-occupied)")
+            elif head == "80g":
+                reason = ("Section 80G — rate per donee category, "
+                          "qualifying limits may apply")
+            elif head == "hra_received":
+                reason = ("HRA exemption — Rule 2A least-of-three "
+                          "(Sec 10(13A)); Old Regime only")
+            else:
+                reason = f"Section {head.upper()} — statutory limits apply"
+            rows.append({
+                "head": head,
+                "entered": entered,
+                "applied_in_regime": applied,
+                "tax_reduction": reduction,
+                "tax_reduction_other_regime": reduction_other,
+                "reason": reason,
+            })
+        return rows
+
     def _calc_old(self, salary, business, agri, rental, other, cg_data, ded, prof_tax, is_senior, is_vsr, rules, is_metro=None) -> TaxResult:
         res = TaxResult()
         std_ded = rules.standard_deduction["old"] if salary > 0 else 0

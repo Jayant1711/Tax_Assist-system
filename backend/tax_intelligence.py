@@ -453,7 +453,13 @@ def recommend(session: Dict[str, Any], engine: Any,
         # always present (ADR-001); the learned heads only decorate when
         # their weights are deployed and gate-passing.
         cands.append({
-            "rec_id": uuid.uuid4().hex,
+            # Sprint 6 Phase 3 (ADR-017 acceptance wiring): the rec_id is
+            # DETERMINISTIC — uuid5 of (session id, head) — so the id on a
+            # /calculate card is identical to the id recorded as a shown
+            # event at the closing turn, and the action endpoint resolves
+            # it. A random uuid4 would orphan every card click.
+            "rec_id": uuid.uuid5(uuid.NAMESPACE_URL,
+                                 f"{session.get('id', '')}|{head}").hex,
             "head": head, "delta": delta, "headroom": headroom,
             "savings_engine": savings_engine,
             "savings_estimate": savings_engine,
