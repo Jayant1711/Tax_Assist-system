@@ -2,6 +2,21 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
+## [Unreleased] — sprint6
+
+Sprint 6: Feedback + Acceptance Learning + Confidence Calibration + Recommendation Analytics + Intelligence Quality. Full details in `PROJECT_STATUS_REPORT_SPRINT6.md`.
+
+### Added
+- **Acceptance analytics v1** (ADR-017 completion): shown-event capture from BOTH closing paths (natural + `/end`, via the shared `_closing_intelligence` helper), action enum extended to viewed/dismissed, `GET /sessions/{sid}/recommendations/analytics` funnel (totals + per-head), `GET /sessions/{sid}/recommendations` listing. `ACCEPTANCE_ANALYTICS_V1.md`.
+- **Confidence calibration framework** (`backend/calibration.py`): standard ECE (10 bins) with reliability tables + a known-answer canary (ECE 0.0 required; flipped set must flag). G7 gate defined: no learned confidence until ECE ≤ 0.05 on ≥ 30 resolved acceptance events. `CONFIDENCE_CALIBRATION_REPORT.md`.
+- **Frontend intelligence cards**: ranked CA recommendations in the FINAL report — recommendation, confidence, estimated savings, reason, engine-priced evidence, acceptance buttons wired to the action endpoint (gated on FINAL phase). `INTELLIGENCE_CARDS_REPORT.md`.
+- **Per-deduction impact engine** (`TaxEngine.deduction_impact()`): exact leave-one-out recomputation per booked head (entered / applied / tax reduced / reason, both regimes, ADR-001 — no ML), surfaced at `/calculate` FINAL and rendered as the report's impact table. `DEDUCTION_IMPACT_REPORT.md`.
+
+### Fixed
+- `/end` override skipped the closing intelligence entirely — `/end` sessions recorded zero shown events and every card acceptance 404'd (regression-pinned).
+- Card `rec_id` made deterministic (`uuid5(session|head)`) — random per-call ids could never match persisted shown events.
+- `deduction_impact` sign inversion (a ₹1,30,000 benefit displayed as ₹-1,30,000) and `applied_in_regime` now derived from the taxable-income delta (let-out 24(b) correctly allowed under 115BAC).
+- TaxReport.tsx bracket corruption from a partially-failed batch edit (vitest collection restored).
 ## [0.5.0-sprint4] — 2026-11-04
 
 Sprint 4: Tax Intelligence Layer (ANFIS v5), Explainability Engine, CA-style recommendations, computation transparency, and the extraction certification wave. Branch `sprint-4-ai-modernization`; baseline `v0.4-sprint3`. Full details in `SPRINT4_RELEASE_CANDIDATE_REPORT_V2.md` and `V0_5_RELEASE_PACKAGE_FINAL.md`.
