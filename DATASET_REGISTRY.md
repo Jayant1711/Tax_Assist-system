@@ -14,4 +14,4 @@
 
 **Artifact versioning note:** `data/anfis_v1/` is gitignored (runtime/regenerable) — the frozen artifacts are unversioned by design and reproduce deterministically from the committed generator (seed 472 grids).
 
-**Excluded from training (by design):** production `data/taxassist.db` (user data — never a training source; DPDP constraint, `Sprint4_AI_Modernization.md` §1.2).
+**Excluded from training (by design):** production `data/taxassist.db` (user data — never a training source; DPDP constraint, `docs/reports/Sprint4_AI_Modernization.md` §1.2).

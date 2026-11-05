@@ -1,5 +1,5 @@
 # PROJECT_BASELINE_CURRENT.md — Sprint 7 Starting Baseline
-**Frozen:** 2026-11-05 at the v0.6-sprint6 release (PR #5 merged, main `46051d8` + changelog `d3e7a0b`) · **Purpose:** the authoritative starting state for future planning — supersedes `PROJECT_BASELINE_V0_5.md` · every number measured, not transcribed
+**Frozen:** 2026-11-05 at the v0.6-sprint6 release (PR #5 merged, main `46051d8` + changelog `d3e7a0b`) · **Purpose:** the authoritative starting state for future planning — supersedes `docs/reports/PROJECT_BASELINE_V0_5.md` · every number measured, not transcribed
 
 ---
 
@@ -66,7 +66,7 @@ instruments are the deliverable, volume accumulates from real usage.
 | Calibration | canary ECE 0.0 (framework proven); live N below measurement threshold |
 | Security | APPROVE posture maintained; ownership double-checks on all new endpoints |
 
-## 6. Carried items (Sprint 7 candidates — see SPRINT7_PRIORITY_MATRIX.md)
+## 6. Carried items (Sprint 7 candidates — see docs/reports/SPRINT7_PRIORITY_MATRIX.md)
 
 1. Effectiveness Dashboard (cross-session/per-user funnel view).
 2. Auto-fire `viewed` events from the card renderer.

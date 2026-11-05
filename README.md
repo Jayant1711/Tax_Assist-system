@@ -1,148 +1,101 @@
+# Tax Assist AI (India) — Transparent AI Tax Consultant 🇮🇳
 
+![Release](https://img.shields.io/badge/Release-v0.6--sprint6-blue?style=for-the-badge)
+![FY](https://img.shields.io/badge/Tax_Year-FY_2025--26_(AY_2026--27)-orange?style=for-the-badge)
+![Backend Tests](https://img.shields.io/badge/pytest-1%2C166_passed-brightgreen?style=for-the-badge)
+![Frontend Tests](https://img.shields.io/badge/vitest-31_passed-brightgreen?style=for-the-badge)
+![CI](https://img.shields.io/badge/CI-GitHub_Actions-passing?style=for-the-badge&logo=githubactions&logoColor=white)
 
+An AI-powered tax consultant for Indian taxpayers that pairs a **deterministic, rules-exact tax engine** with a **conversational NLP discovery flow** — and shows its work: every rupee it quotes is recomputed by the engine, every recommendation carries its evidence, and the system learns from what you accept.
 
-# Tax Assist AI (India) - Deep Consultant 🇮🇳
+> **Core invariant:** the rules engine is the *only* thing in the system that computes tax. No model, heuristic, or estimate ever produces a rupee figure (ADR-001).
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript&logoColor=white)
-![Tax Compliance](https://img.shields.io/badge/Tax_Compliance-FY_2024--25-orange?style=for-the-badge&logo=google-keep&logoColor=white)
-![Test Suite](https://img.shields.io/badge/Test_Suite-97%2F97_Passed_(100%25)-brightgreen?style=for-the-badge)
+## ✨ What it does
 
-An advanced, AI-powered tax filing assistance system specifically designed for Indian taxpayers. This system combines the precision of a **Rule-Based Engine** with the intelligence of **Conversational AI** to provide a deep-thinking tax consultant experience.
+- **Guided discovery (NLP)** — a conversational flow (English + Hinglish) maps profession, income, and deductions into a validated session; ambiguous input triggers ask-backs instead of guesses.
+- **Dual-regime computation, exactly** — Old vs New (Sec 115BAC) regimes computed side-by-side from a versioned rules registry, including surcharge, marginal relief, 87A rebate, HRA Rule-2A, cess.
+- **Intelligence cards** — at the final report, ranked opportunities show recommendation, confidence, engine-priced savings, reason, and an evidence trail — with **Apply / Not-for-me** actions that the system records (ADR-017) and aggregates into an acceptance funnel.
+- **Applied-vs-Ignored transparency** — the report shows which of your deductions each regime actually applied, and why (115BAC), so the regime choice is never a black box.
+- **Exact per-deduction impact** — a leave-one-out recomputation prices what each booked deduction *actually* removed from your tax, in both regimes. Exact arithmetic, no estimates.
+- **CA-style outputs** — ITR-format computational statement, slab-by-slab breakdown, audit observations, and regime-gated savings tips.
 
+## 🚀 Quickstart (Docker)
 
-
-## 🚀 Overview
-
-Tax filing in India is complex, with two distinct regimes and numerous sections for deductions and exemptions. **Tax Assist AI** simplifies this by guiding users through a deep financial discovery process, helping them identify legitimate tax-saving opportunities they might have missed.
-
-## 📚 Documentation
-
-Full engineering documentation lives in [`docs/`](docs/index.md) — start with the [documentation index](docs/index.md) (architecture, API reference, NLP pipeline, tax rules as coded, testing, security, deployment, roadmap, and ADRs).
-
-## ✨ Key Features (Anfis v3 + Industrial Overhaul v5.0)
-
-- **Industrial "Black Box" Recorder**: High-fidelity JSON logging (`logs/blackbox`) capturing every NLP neuron-fire, agent plan, and state transition for perfect audit traceability.
-- **CA-Ready Audit Statement**: Professional-grade **Computational Statement of Income** including detailed Slab Analysis, Section-wise itemization, and 4% Cess breakdown.
-- **Zero-Sentinel Loop Breaker**: Advanced negative intent detection (skip, none, nil, 0) to eliminate conversational loops and force discovery forward.
-- **Interactive Visual Analytics**: Real-time **Regime Comparison Graphs** and Savings Sparklines that react instantly to data inputs.
-- **Profile-Locked Semantic Mapping**: Neural category resolution that binds "Profession" (e.g., Trader) to "Income Mapping" to prevent Salary/Business cross-contamination.
-- **ANFIS v3.5 Optimization**: Refined fuzzy inference scoring for tax efficiency (R2=0.88) with integrated Marginal Relief calculations for high-net-worth individuals.
-- **EE-Bat Swarm Intelligence**: Automated optimization of tax-saving recommendations based on industrial test scenarios.
-
-## 📊 Mathematical & AI Foundations (Optimized Parameters)
-
-For future engineering reference, the following optimized constants and hyper-parameters are currently active in the **Anfis v3.5** engine:
-
-### **1. Semantic Attention & NLP Neuron Scores**
-| Parameter | Value | Description |
-| :--- | :--- | :--- |
-| **Contextual Prior Boost** | `+30.0` | Probability boost for categories the AI just asked about. |
-| **Nuclear Profile Penalty** | `0.1x` | 90% score reduction for cross-profile mapping (e.g. Salary for a Trader). |
-| **Negative Intent Weight** | `-10.0` | Score applied when "don't", "no", or "nil" are detected near a keyword. |
-| **Proximity Decay** | `0.95^d` | Scoring decay where `d` is distance from value to keyword. |
-
-### **2. ANFIS v3.5 Neuro-Fuzzy Architecture**
-- **Inference Engine**: Adaptive Neuro-Fuzzy with EE-Bat Swarm Optimization.
-- **Hidden Layers**: 128 Fuzzy Rule Neurons.
-- **Training Optimization**: Adam Optimizer (Learning Rate = `0.005`).
-- **Statistical Performance**: 
-  - **R² Score**: `0.88` (High precision regression)
-  - **MAE (Mean Absolute Error)**: `₹2.14` per ₹1,00,000.
-
-### **3. Tax Compliance Constants (FY 2024-25)**
-- **Standard Deduction**: ₹75,000 (New Regime) | ₹50,000 (Old Regime).
-- **Tax Rebate (Sec 87A)**: ₹7,00,000 (New) | ₹5,00,000 (Old).
-- **Marginal Relief Threshold**: ₹50,00,000 (Surcharge entry point).
-- **HRA Baseline**: `40%` of Salary (Non-metro standard).
-
----
-
-## 🛠️ Technology Stack
-
-### **Frontend (Core UI)**
-- **Framework**: [Next.js 16](https://nextjs.org/) (App Router Architecture)
-- **Language**: [TypeScript](https://www.typescriptlang.org/) for robust type safety
-- **Styling**: [Vanilla CSS](https://developer.mozilla.org/en-US/docs/Web/CSS) (Glassmorphism, Dark Mode, Premium Micro-animations)
-
-### **Backend (Intelligence Layer)**
-- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (High-performance Python API)
-- **Runtime**: [Python 3.10+](https://www.python.org/)
-- **Auditing**: Built-in `AuditLogger` for session traceability.
-
-### **AI & Logic Engine**
-- **NLP Strategy**: Custom **Smarter Entity Extraction** using Regex and proximity-based keyword mapping.
-- **Conversation Flow**: Dynamic **State Machine** (Profiling → Income → Expenditure → Recall → Final).
-- **Tax Engine**: Deterministic **Rule-Based Engine** covering Sections 80C, 80D, 80E, 80G, 24(a), 112A, and 111A.
-- **Compliance Guard**: Automated validation against **Indian Income Tax Rules (FY 2024-25)**.
-
-### **Development & Deployment**
-- **Version Control**: [Git](https://git-scm.com/)
-- **Package Managers**: [npm](https://www.npmjs.com/) (Frontend) and [pip](https://pip.pypa.io/) (Backend)
-- **Environment**: [Node.js](https://nodejs.org/)
-
-## 📁 Project Structure
-
-```text
-.
-├── backend/
-│   ├── main.py             # FastAPI API Endpoints (with /history)
-│   ├── tax_engine.py       # Core Rule-Based Logic + ANFIS Scoring
-│   ├── nlp_engine.py       # Conversational Logic & Phase Management
-│   ├── ai_models.py        # ANFIS, UniversalParser, ReasoningAgent
-│   ├── audit_logger.py     # Session persistence & Audit trail
-│   ├── test_suite.py       # 97+ High-coverage test scenarios
-│   └── requirements.txt
-└── frontend/
-    ├── src/app/            # Next.js Pages & Global Styles
-    └── src/components/     # ChatInterface (with Debug) & TaxReport
-```
-
-## ⚙️ First-Time Setup & ANFIS Training
-
-Follow these steps to replicate the exact production environment and train the neuro-fuzzy engine on a new machine:
-
-### **1. Clone & Environment Setup**
 ```bash
 git clone https://github.com/Jayant1711/Tax_Assist-system.git
 cd Tax_Assist-system
+docker compose up -d --build
 ```
 
-### **2. Backend: Install & Train ANFIS**
-The **ANFIS v3.5** engine requires a one-time training pass to calibrate its fuzzy membership functions:
+Then open **http://127.0.0.1:3000** (use `127.0.0.1`, not `localhost` — the bundled `.env` pins CORS and the API URL to the loopback address).
+
+**Demo login:** `demo@student.local` / `DemoPass@123`
+
+Run a consultation: type your profile (e.g. *"I am a software engineer earning 24 LPA, 1.5L in 80C, 25k in 80D"*), answer the follow-ups, and type `/end` to generate the final report with the intelligence cards.
+
+### Local development (without Docker)
+
 ```bash
-cd backend
-pip install -r requirements.txt
-# Run the training suite (Optimized via EE-Bat + Adam)
-python anfis_trainer.py
+# backend — Python 3.10+
+cd backend && pip install -r requirements.txt
+uvicorn main:app --port 8000
 
-python main.py
+# frontend — Node 18+
+cd frontend && npm install && npm run dev
 ```
-*Note: This will generate `anfis_weights.json`, which is required for the audit engine to score efficiency.*
 
-### **3. Frontend: Install UI Dependencies(in new terminal)**
+## 🧪 Verification
+
+| Suite | Status |
+|---|---|
+| Backend (pytest) | **1,166 passed** / 0 failures |
+| Frontend (vitest + tsc) | **31 passed**, TypeScript clean |
+| NLP extraction gate | macro **F1 1.000** (certified, `docs/reports/NLP_EVALUATION_REPORT.md`) |
+| CI | GitHub Actions — backend, frontend, e2e (Playwright) green on every push |
+
 ```bash
-cd frontend
-npm install
-npm run dev
+cd backend && python -m pytest tests/ -q     # backend suite
+cd frontend && npx vitest run                 # frontend suite
 ```
 
-### **4. Launch the Industrial Stack**
-To start the full consulting dashboard:
-1. **Start Backend**: `cd backend && python main.py` (Port 8000)
-2. **Start Frontend**: `cd frontend && npm run dev` (Port 3000)
+## 🏗️ Architecture
 
----
+```
+frontend/  Next.js 16 + React 19 + TypeScript — chat UI, intelligence cards,
+           Applied-vs-Ignored panel, exact-impact table, regime comparison
+    │      REST + HttpOnly cookie sessions
+backend/   FastAPI — 17 endpoints, auth, rate limits, append-only audit
+    ├──   nlp_engine.py — prepass guards → UniversalParser → SemanticAttention
+    │     → waterfall extraction → response composer → shared closing intelligence
+    ├──   tax_engine.py — THE calculator (+ exact per-deduction impact)
+    │     tax_rules/{fy_2024_25, fy_2025_26} — versioned statutory rules
+    ├──   tax_intelligence.py — composite efficiency, exact rule heads, ranked review
+    ├──   calibration.py — confidence-calibration instrument (ECE + canary, G7 gate)
+    └──   SQLite (WAL) — users, sessions, recommendation_events (ADR-017)
+data/      corpus-v1 (sha256-pinned) · anfis-v3 benchmark dataset (regenerable)
+nlp_research/  research models (one-way dependency; never in the serving path)
+docs/      engineering documentation + full sprint report archive (docs/reports/)
+```
 
-## ⚖️ Disclaimer
+**How the intelligence stays honest:** candidates are priced by running the actual engine on hypothetical top-ups (two-pass), ranked by exact engine savings, and decorated with rule heads that are exact by construction (P/R 1.0, savings MAE ₹0.00). Learned components that failed their gates (TSK heads) were denied promotion on evidence and stay off the serving path — see `docs/reports/TSK_PROMOTION_REPORT.md` and `docs/reports/ML_NEGATIVE_RESULTS.md`.
 
-This tool is designed for assistance and informational purposes only. It is based on publicly available Indian tax rules for FY 2024-25 and does not constitute professional tax advice.
+## 📚 Documentation
 
----
+| Start here | What it is |
+|---|---|
+| [`docs/index.md`](docs/index.md) | full engineering documentation (architecture, API, NLP pipeline, tax rules as coded, security, testing, deployment) |
+| [`docs/decisions.md`](docs/decisions.md) | Architecture Decision Records (ADR-001 … ADR-017) |
+| [`CHANGELOG.md`](CHANGELOG.md) | every release, sprint by sprint |
+| [`PROJECT_BASELINE_CURRENT.md`](PROJECT_BASELINE_CURRENT.md) | the frozen current-state baseline (facts + metrics) |
+| `DATASET_REGISTRY.md` / `MODEL_REGISTRY.md` / `TRAINING_REGISTRY.md` / `EXPERIMENT_REGISTRY.md` | living traceability registries |
+| [`docs/reports/`](docs/reports/) | complete sprint-report archive (89 engineering reports, audits, reviews) |
 
----
+## 🗺️ Status & roadmap
 
-## 🎓 Project Origin
-This repository represents my **Summer Internship Project**, designed and developed to streamline tax analysis and compliance.
+- **Released:** `v0.4-sprint3` → `v0.5-sprint4` → `v0.6-sprint6` (Sprints 5–6: acceptance loop, calibration, intelligence cards, exact impact).
+- **Next (proposed, not started):** adoption sprint — effectiveness dashboard, viewed-events, one-click Apply. See `docs/reports/SPRINT7_PROPOSAL.md`.
+- **Honest limits:** salaried profiles are deepest; business/capital-gains flows are partial; FY 2025-26 is the certified year; this is an advisory/education tool — it does not file returns.
+
+## ⚖️ Governance
+
+Tax rules are versioned per FY in `backend/tax_rules/` and verified against the statute (`docs/tax-verification.md`). Every architectural decision has an ADR; every model attempt — successful or not — is registered. The system never invents tax law, and the audit log is append-only.

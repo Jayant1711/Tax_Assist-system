@@ -17,7 +17,7 @@ Conversations that are **intelligent, contextual, explainable and measurable**. 
 3. **Eval framework** (`backend/nlp_eval.py` + `tests/test_nlp_eval.py`): runs the extraction pipeline per record; per-category precision/recall/F1 (macro+micro), 21×21 confusion matrix, ≥95% gate on income heads + major deduction sections (advisory until P1 verdict), metric self-tests against hand-computed toy values (canary: a sabotaged predictor must FAIL the gate), no-leakage + coverage-floor meta-tests.
 4. **Corpus quality metrics**: per-category counts, source distribution, template diversity, duplicate/near-duplicate detection.
 5. **Funnel analytics** (`backend/funnel.py` + endpoint or tool): from `app_sessions` — sessions per phase, turns per phase, completion rate (FINAL+report), drop-off per phase; rendered as a report (JSON/markdown). Baseline recorded.
-6. **Dataset Health Report** (`Dataset_Health_Report.md` generator in the same tool): counts, coverage, distribution, splits, leakage status.
+6. **Dataset Health Report** (`docs/reports/Dataset_Health_Report.md` generator in the same tool): counts, coverage, distribution, splits, leakage status.
 
 ## P1 — Deterministic extraction improvements (each red→green)
 1. Mixed professions: "business owner and teacher" → Business Owner (ownership signals before salaried substring pass; add the literal signal).
@@ -55,4 +55,4 @@ Output: KEEP/IMPROVE/REPLACE verdict per NLP component (parser, keyword resolver
 `LLM_INTEGRATION_PLAN.md`: the pipeline `User → Extractor → TaxEngine → Response Composer → [Optional LLM Polisher] → Response`; TaxEngine remains the source of truth. Cover: output validation (LLM text may rephrase, never restate numbers differently than the engine), DPDP compliance (no PII to external APIs without consent; local-model option), audit trail (polish events logged), fallback path (composer output ships if the LLM fails/times out), deterministic override. NO implementation.
 
 ## Completion artifacts
-`Sprint4_RELEASE_NOTES.md` · `AI_Value_Report.md` · `Dataset_Health_Report.md` · `NLP_Evaluation_Report.md` · CHANGELOG v0.5.0-sprint4 · independent audit · scores (incl. **Intelligence**) · PR to main · release v0.5-sprint4.
+`Sprint4_RELEASE_NOTES.md` · `AI_Value_Report.md` · `docs/reports/Dataset_Health_Report.md` · `NLP_Evaluation_Report.md` · CHANGELOG v0.5.0-sprint4 · independent audit · scores (incl. **Intelligence**) · PR to main · release v0.5-sprint4.

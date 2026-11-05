@@ -20,7 +20,7 @@
 | Loss | MSE (0–1 scale) |
 | Result | **G1 FAIL** — MAE 11.09 (loss still descending at cut-off); rollback held |
 | Conclusion | all-param evolutionary search cannot converge at this budget → closed-form consequents required (the v5 design) |
-| Report | `ANFIS_EVALUATION_REPORT.md` §3 |
+| Report | `docs/reports/ANFIS_EVALUATION_REPORT.md` §3 |
 
 ## RUN-003 — anfis-v5 LSE multi-head (this run, 2026-11-03)
 | Field | Value |
@@ -42,7 +42,7 @@
 | Results | G1 0.136 PASS · G2 −0.112 PASS · G3 100% PASS · **G6 95.72% PASS** (engine-ordered protocol; TSK-ordered top-1 57.04%) · TSK G4 MAPE 795% / G5 P 0 R 0 FAIL → **exact rule heads deployed instead: P 1.000 / R 1.000 / savings MAE 0.00 (engine-priced by construction)** |
 | Wall time | 65.5 s |
 | Verdict | **DEPLOYMENT PATH PASS** — v0.5 ships engine-priced rule heads; TSK heads continue off-deployment; v4 untouched |
-| Report | `ANFIS_V5_EVALUATION_V2.md` · forensics: `ANFIS_ROOT_CAUSE_REPORT.md` |
+| Report | `docs/reports/ANFIS_V5_EVALUATION_V2.md` · forensics: `docs/reports/ANFIS_ROOT_CAUSE_REPORT.md` |
 
 ## RUN-004 — anfis-v5 TSK retrain on dataset v3 (2026-11-04)
 | Field | Value |

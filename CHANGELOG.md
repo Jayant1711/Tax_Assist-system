@@ -4,13 +4,13 @@ All notable changes to Tax Assist AI are documented here. Format follows [Keep a
 
 ## [0.6.0-sprint6] — 2026-11-05
 
-Sprint 6: Feedback + Acceptance Learning + Confidence Calibration + Recommendation Analytics + Intelligence Quality. Full details in `PROJECT_STATUS_REPORT_SPRINT6.md`.
+Sprint 6: Feedback + Acceptance Learning + Confidence Calibration + Recommendation Analytics + Intelligence Quality. Full details in `docs/reports/PROJECT_STATUS_REPORT_SPRINT6.md`.
 
 ### Added
-- **Acceptance analytics v1** (ADR-017 completion): shown-event capture from BOTH closing paths (natural + `/end`, via the shared `_closing_intelligence` helper), action enum extended to viewed/dismissed, `GET /sessions/{sid}/recommendations/analytics` funnel (totals + per-head), `GET /sessions/{sid}/recommendations` listing. `ACCEPTANCE_ANALYTICS_V1.md`.
-- **Confidence calibration framework** (`backend/calibration.py`): standard ECE (10 bins) with reliability tables + a known-answer canary (ECE 0.0 required; flipped set must flag). G7 gate defined: no learned confidence until ECE ≤ 0.05 on ≥ 30 resolved acceptance events. `CONFIDENCE_CALIBRATION_REPORT.md`.
-- **Frontend intelligence cards**: ranked CA recommendations in the FINAL report — recommendation, confidence, estimated savings, reason, engine-priced evidence, acceptance buttons wired to the action endpoint (gated on FINAL phase). `INTELLIGENCE_CARDS_REPORT.md`.
-- **Per-deduction impact engine** (`TaxEngine.deduction_impact()`): exact leave-one-out recomputation per booked head (entered / applied / tax reduced / reason, both regimes, ADR-001 — no ML), surfaced at `/calculate` FINAL and rendered as the report's impact table. `DEDUCTION_IMPACT_REPORT.md`.
+- **Acceptance analytics v1** (ADR-017 completion): shown-event capture from BOTH closing paths (natural + `/end`, via the shared `_closing_intelligence` helper), action enum extended to viewed/dismissed, `GET /sessions/{sid}/recommendations/analytics` funnel (totals + per-head), `GET /sessions/{sid}/recommendations` listing. `docs/reports/ACCEPTANCE_ANALYTICS_V1.md`.
+- **Confidence calibration framework** (`backend/calibration.py`): standard ECE (10 bins) with reliability tables + a known-answer canary (ECE 0.0 required; flipped set must flag). G7 gate defined: no learned confidence until ECE ≤ 0.05 on ≥ 30 resolved acceptance events. `docs/reports/CONFIDENCE_CALIBRATION_REPORT.md`.
+- **Frontend intelligence cards**: ranked CA recommendations in the FINAL report — recommendation, confidence, estimated savings, reason, engine-priced evidence, acceptance buttons wired to the action endpoint (gated on FINAL phase). `docs/reports/INTELLIGENCE_CARDS_REPORT.md`.
+- **Per-deduction impact engine** (`TaxEngine.deduction_impact()`): exact leave-one-out recomputation per booked head (entered / applied / tax reduced / reason, both regimes, ADR-001 — no ML), surfaced at `/calculate` FINAL and rendered as the report's impact table. `docs/reports/DEDUCTION_IMPACT_REPORT.md`.
 
 ### Fixed
 - `/end` override skipped the closing intelligence entirely — `/end` sessions recorded zero shown events and every card acceptance 404'd (regression-pinned).
@@ -19,7 +19,7 @@ Sprint 6: Feedback + Acceptance Learning + Confidence Calibration + Recommendati
 - TaxReport.tsx bracket corruption from a partially-failed batch edit (vitest collection restored).
 ## [0.5.0-sprint4] — 2026-11-04
 
-Sprint 4: Tax Intelligence Layer (ANFIS v5), Explainability Engine, CA-style recommendations, computation transparency, and the extraction certification wave. Branch `sprint-4-ai-modernization`; baseline `v0.4-sprint3`. Full details in `SPRINT4_RELEASE_CANDIDATE_REPORT_V2.md` and `V0_5_RELEASE_PACKAGE_FINAL.md`.
+Sprint 4: Tax Intelligence Layer (ANFIS v5), Explainability Engine, CA-style recommendations, computation transparency, and the extraction certification wave. Branch `sprint-4-ai-modernization`; baseline `v0.4-sprint3`. Full details in `docs/reports/SPRINT4_RELEASE_CANDIDATE_REPORT_V2.md` and `docs/reports/V0_5_RELEASE_PACKAGE_FINAL.md`.
 
 ### Added
 - **Response Composer** (`backend/response_composer.py`): the P2 contextual reply layer — data-aware acknowledgments (en-IN amounts, category verbs), advisory weaving (80C/NPS/80D headroom, 80G donee rule, CG election note, 87A band position), deterministic phrasing rotation by turn count, confidence messaging for profile-default bookings. 23 contract tests (`tests/test_response_composer.py`): determinism, variety, data-awareness, >95% contextual metric.
@@ -37,15 +37,15 @@ Sprint 4: Tax Intelligence Layer (ANFIS v5), Explainability Engine, CA-style rec
 - **6 failing tests → 0** (final: 1,146 passing incl. 35 new Sprint-4 tests): the ≤3-char profession roots' bare-substring match (`"ea"` inside "earner"/"earn" — an accident predating Sprint 1) replaced with explicit `"earner"` root + `"earn"` salary keyword; httpx2 `Cookies.add_cookie_header` test-helper mismatch replaced with explicit Cookie headers; corpus-capture expectations aligned with P1 behavior.
 - **`"ngo"` donee vs employer ambiguity**: donation-context guard in `classify_profession` + bare `"ngo"` 80G donee anchor ("donated … 20k to an ngo" booked SALARY).
 - **Word-bounded family flags**: `"maa"` fired inside "main" (`has_parents` false positive) — the flag now shares the preparse guard's `_FAMILY_WORD_RE`.
-- **Evaluator conventions** (`nlp_eval.py`): category-driven 80U/80DD flat amounts match category-only predictions; zero-value negation sentinels are not spans; same-category bucket merge (pairs) — disclosed in `NLP_EVALUATION_REPORT.md`.
+- **Evaluator conventions** (`nlp_eval.py`): category-driven 80U/80DD flat amounts match category-only predictions; zero-value negation sentinels are not spans; same-category bucket merge (pairs) — disclosed in `docs/reports/NLP_EVALUATION_REPORT.md`.
 
 ### Changed
 - Hinglish numerals: `"hazaar"/"hajar"` thousand units in the parser (digit + word forms).
-- Evaluator metrics after certification: macro F1 1.000, gate PASS, abstention 17/17 (`NLP_EVALUATION_REPORT.md`).
+- Evaluator metrics after certification: macro F1 1.000, gate PASS, abstention 17/17 (`docs/reports/NLP_EVALUATION_REPORT.md`).
 
 ## [0.3.0-sprint2] — 2026-10-31
 
-Sprint 2: tax year modernization (FY 2025-26 / AY 2026-27), computation correctness, deduction completeness, audit infrastructure. Branch `sprint-2-tax-year`; baseline `v0.2-sprint1`. Full details in [Sprint2_RELEASE_NOTES.md](Sprint2_RELEASE_NOTES.md); verified constants in [docs/tax-verification.md](docs/tax-verification.md).
+Sprint 2: tax year modernization (FY 2025-26 / AY 2026-27), computation correctness, deduction completeness, audit infrastructure. Branch `sprint-2-tax-year`; baseline `v0.2-sprint1`. Full details in [docs/reports/Sprint2_RELEASE_NOTES.md](docs/reports/Sprint2_RELEASE_NOTES.md); verified constants in [docs/tax-verification.md](docs/tax-verification.md).
 
 ### Added — Tax year modernization (Objective A; C1 closed)
 - Versioned tax-rules registry (`backend/tax_rules/`): `fy_2024_25.py` (byte-identical parity, 300-scenario fixture) and `fy_2025_26.py` (Finance Act 2025 constants, verified against authoritative sources before implementation — `docs/tax-verification.md`).
@@ -83,7 +83,7 @@ Sprint 2: tax year modernization (FY 2025-26 / AY 2026-27), computation correctn
 
 ## [0.4.0-sprint3] — 2026-11-01
 
-Sprint 3: authentication, server-side sessions, deployment platform, security hardening, frontend testing, observability. Branch `sprint-3-production`; baseline `v0.3-sprint2`. Full details in [Sprint3_RELEASE_NOTES.md](Sprint3_RELEASE_NOTES.md).
+Sprint 3: authentication, server-side sessions, deployment platform, security hardening, frontend testing, observability. Branch `sprint-3-production`; baseline `v0.3-sprint2`. Full details in [docs/reports/Sprint3_RELEASE_NOTES.md](docs/reports/Sprint3_RELEASE_NOTES.md).
 
 ### Added — Authentication (Objective A; C5 closed; ADR-012)
 - Email/password accounts with stdlib scrypt hashing (memory-hard, per-hash parameters, timing-equalized logins) — zero new runtime dependencies.
@@ -110,7 +110,7 @@ Sprint 3: authentication, server-side sessions, deployment platform, security ha
 - Structured JSON logging with request-ID correlation; app-log rotation (`TAX_APP_LOG_*`); engine-failure diagnostics with graceful degradation; `docs/backup-recovery.md` + `backend/tools/backup_db.py` (SQLite backup, JSONL stream copies, recovery runbook).
 
 ### Added — Planning
-- `Sprint4_AI_Modernization.md`: dataset strategy, model candidates, evaluation framework, confidence scoring, explainability (planning only — no ANFIS/NLP changes).
+- `docs/reports/Sprint4_AI_Modernization.md`: dataset strategy, model candidates, evaluation framework, confidence scoring, explainability (planning only — no ANFIS/NLP changes).
 
 ### Fixed
 - `/health` db probe reads the header (`PRAGMA schema_version`) instead of `SELECT 1` — a corrupt/non-sqlite `TAX_DB_PATH` returned 200 on Linux CI (platform bug caught by the pipeline).
@@ -120,7 +120,7 @@ Sprint 3: authentication, server-side sessions, deployment platform, security ha
 
 ## [0.2.0-sprint1] — 2026-10-31
 
-Sprint 1: correctness, security hardening, testing foundation. Baseline `main @ 50d8eda`. Full details in [Sprint1_RELEASE_NOTES.md](Sprint1_RELEASE_NOTES.md).
+Sprint 1: correctness, security hardening, testing foundation. Baseline `main @ 50d8eda`. Full details in [docs/reports/Sprint1_RELEASE_NOTES.md](docs/reports/Sprint1_RELEASE_NOTES.md).
 
 ### Security
 - **Fixed (Critical C6):** client-controlled `session.id` joined into a filesystem path (arbitrary file write). Session IDs are now validated (`^[A-Za-z0-9_-]{4,64}$`) at the API boundary and deterministically aliased at the persistence layer (`backend/validation.py`, new). — Issue #1

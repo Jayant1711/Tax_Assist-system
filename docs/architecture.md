@@ -97,7 +97,7 @@ Remediation sequencing lives in [roadmap.md](roadmap.md); decision records in [d
 
 ```text
 Tax_Assist-system-main/
-├── AGENTS.md, README.md, research_report.md
+├── AGENTS.md, README.md, docs/reports/research_report.md
 ├── backend/
 │   ├── main.py               # FastAPI entry
 │   ├── tax_engine.py         # calculation core

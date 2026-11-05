@@ -69,7 +69,7 @@ Structured JSON logs (timestamp/level/logger/message/request_id/user_id/path/sta
 
 ## 8. Sprint 4 AI modernization (planning only)
 
-`Sprint4_AI_Modernization.md`: dataset strategy (labeled corpus from blackbox JSONL + synthetic augmentation; template-based splits; DPDP constraints on stored text); model candidates (in-paradigm improvements; small local intent classifier as extractor with deterministic guardrail; LLM-assisted behind flag — ADR-001 stands); evaluation framework (per-category P/R ≥95% targets, corpus as CI eval, drift replay); confidence scoring (margin/entropy, abstain-and-ask below threshold); explainability (span attribution, rule-ID traceability). No ANFIS/NLP redesign this sprint.
+`docs/reports/Sprint4_AI_Modernization.md`: dataset strategy (labeled corpus from blackbox JSONL + synthetic augmentation; template-based splits; DPDP constraints on stored text); model candidates (in-paradigm improvements; small local intent classifier as extractor with deterministic guardrail; LLM-assisted behind flag — ADR-001 stands); evaluation framework (per-category P/R ≥95% targets, corpus as CI eval, drift replay); confidence scoring (margin/entropy, abstain-and-ask below threshold); explainability (span attribution, rule-ID traceability). No ANFIS/NLP redesign this sprint.
 
 ## 9. Build order + gates (tests-first red → implement → full suite green → parity/corpus untouched → commit → CI)
 
@@ -83,7 +83,7 @@ Structured JSON logs (timestamp/level/logger/message/request_id/user_id/path/sta
 | F | Dockerfiles + compose + deployment/backup-recovery docs + ADR-012/013/014 |
 | G | Playwright suite + CI e2e job |
 | H | structured logs + request IDs + app-log rotation + backup tooling + test_observability |
-| I | Sprint4_AI_Modernization.md |
+| I | docs/reports/Sprint4_AI_Modernization.md |
 | Cert | security checklist re-verification (survive/supersede-with-rationale) + regression guard + re-score |
 
 ## 10. Regression guard
@@ -92,7 +92,7 @@ Engine/NLP/parity/corpus/FY-matrix/HRA/CG/deduction/audit-internal tests are **u
 
 ## 11. Validation checklist
 
-- Wire contains session_id, never a session dict (grep + Playwright network assertion) · unauth → 401, foreign history → 404, demo never unlocks history · cookie HttpOnly/Secure-prod/Lax/__Host-; token sha256-at-rest; revoke same-cycle; absolute cap · CSRF cross-site POST → 403 · scrypt params in stored strings; 12-1024 policy; timing smoke · **no new runtime dependency** · CORS fail-closed, no wildcard, credentials=True · 429 + Retry-After; /health exempt · 413 >1MB; headers on every response; /docs 404 in prod · /health 200/503 semantics; verbose dev-only · audit envs honored; user_id additive; concurrency/corrupt tests green; blackbox contract intact · compose up → register→chat→report E2E; volumes survive down/up · Vitest + Playwright green in CI; MCP acceptance protocol with screenshots · regression: 776 + 97/97 + parity + corpus after adaptation · ADR-012/013/014 + CHANGELOG breaking entry + docs updated + Sprint4_AI_Modernization.md drafted.
+- Wire contains session_id, never a session dict (grep + Playwright network assertion) · unauth → 401, foreign history → 404, demo never unlocks history · cookie HttpOnly/Secure-prod/Lax/__Host-; token sha256-at-rest; revoke same-cycle; absolute cap · CSRF cross-site POST → 403 · scrypt params in stored strings; 12-1024 policy; timing smoke · **no new runtime dependency** · CORS fail-closed, no wildcard, credentials=True · 429 + Retry-After; /health exempt · 413 >1MB; headers on every response; /docs 404 in prod · /health 200/503 semantics; verbose dev-only · audit envs honored; user_id additive; concurrency/corrupt tests green; blackbox contract intact · compose up → register→chat→report E2E; volumes survive down/up · Vitest + Playwright green in CI; MCP acceptance protocol with screenshots · regression: 776 + 97/97 + parity + corpus after adaptation · ADR-012/013/014 + CHANGELOG breaking entry + docs updated + docs/reports/Sprint4_AI_Modernization.md drafted.
 
 ## 12. Top risks
 

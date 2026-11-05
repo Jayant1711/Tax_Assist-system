@@ -43,7 +43,7 @@
 | 1 | Frontend Vitest unit tests (SavingsGraph/TaxReport math display) + Playwright chat→report happy path | H8 | Tests green in CI |
 | 2 | Remove the 400 ms artificial reply delay; `next/font`; drop the duplicate `/calculate` fetch by reusing `/chat`'s `tax_report` | P4, P6 | One engine run per turn |
 | 3 | Re-train ANFIS against **live-engine** outputs (regenerate ground truth from `TaxEngine`) or label the score "beta" in the UI | W4 | Score provenance documented |
-| 4 | Align README + `research_report.md` with reality (200k training cases, R² target, supported FY, security posture); add an FY selector/warning in the UI | Doc drift | Docs match code |
+| 4 | Align README + `docs/reports/research_report.md` with reality (200k training cases, R² target, supported FY, security posture); add an FY selector/warning in the UI | Doc drift | Docs match code |
 | 5 | Tag `v0.2`; file the audit findings as issues; re-run the engineering-suite audit (Mode 9) to re-score | — | New scorecard recorded |
 
 ## 60-day horizon

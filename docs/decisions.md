@@ -111,7 +111,8 @@ ADRs 001-007 document decisions already embodied in the code; ADRs 008-011 were 
 
 **Status:** Proposed (roadmap Week 2)
 
-**Decision (proposed):** Replace read-modify-write with append-only JSONL (one line per turn) or SQLite in WAL mode; never truncate on read error; add rotation and a retention policy; sanitize `session_id` to `^[w-]{8,64}$`.
+**Decision (proposed):** Replace read-modify-write with append-only JSONL (one line per turn) or SQLite in WAL mode; never truncate on read error; add rotation and a retention policy; sanitize `session_id` to `^[
+w-]{8,64}$`.
 
 **Consequences:** ✅ O(1) writes, no lost entries, audit trail survives corruption, closes the path-traversal hole.
 
@@ -194,7 +195,7 @@ ADRs 001-007 document decisions already embodied in the code; ADRs 008-011 were 
 
 **Context:** The Sprint-4 plan pre-committed a decision rule (docs/sprint4-execution.md §P3): if the P0 evaluation framework measures income-head + major-section precision/recall ≥ 95% on the labeled corpus, the deterministic extraction pipeline is KEPT and a learned extractor is not warranted; revisit at ≥5,000 organic turns.
 
-**Decision:** KEEP the deterministic pipeline as the sole production extractor. Measured 2026-11-02 on the eval split (434 records, template-disjoint): macro F1 1.000 across all 21 categories, gate PASS with zero failing categories, abstention accuracy 17/17, zero pipeline errors (`NLP_EVALUATION_REPORT.md`, `MODEL_DECISION_REPORT.md`, tool: `backend/tools/run_eval.py`). The research-layer TF-IDF intent classifier (96.41%, 8 classes) remains a research artifact — never a production component.
+**Decision:** KEEP the deterministic pipeline as the sole production extractor. Measured 2026-11-02 on the eval split (434 records, template-disjoint): macro F1 1.000 across all 21 categories, gate PASS with zero failing categories, abstention accuracy 17/17, zero pipeline errors (`docs/reports/NLP_EVALUATION_REPORT.md`, `docs/reports/MODEL_DECISION_REPORT.md`, tool: `backend/tools/run_eval.py`). The research-layer TF-IDF intent classifier (96.41%, 8 classes) remains a research artifact — never a production component.
 
 **Consequences:** ✅ Explainable, auditable, offline extraction (ADR-003 intact); the extraction ceiling analysis moves from "precision problem" to "coverage problem" — future work is corpus growth, not model substitution. ❌ Long-tail utterances outside the template grammar still fall through to profile defaults (guarded: `is_default` bookings never overwrite stated values and are surfaced as tentative by the response composer); the decision is pre-committed to re-open at the organic-corpus trigger.
 
@@ -202,9 +203,9 @@ ADRs 001-007 document decisions already embodied in the code; ADRs 008-011 were 
 
 **Date:** 2026-11-03 (Sprint 4 v5 completion)
 
-**Context:** The Phase-6 retraining on the expanded dataset (76,960 opportunity rows, 1,623 positives) passed the ranking gate (G6 95.72%) but the TSK savings/opportunity heads still failed G4 (MAPE 795%) and G5 (P 0/R 0). Failure forensics (`ANFIS_ROOT_CAUSE_REPORT.md`) measured: (a) the opportunity label is exactly `regime_signal == 0` (zero exceptions); (b) the savings label is exactly linear in the base/hypothetical min-paid ratios (val MAPE 1.6e-14); (c) the additive TSK rule base dilutes separable signal as rule count grows (AUC 1.0 → 0.30).
+**Context:** The Phase-6 retraining on the expanded dataset (76,960 opportunity rows, 1,623 positives) passed the ranking gate (G6 95.72%) but the TSK savings/opportunity heads still failed G4 (MAPE 795%) and G5 (P 0/R 0). Failure forensics (`docs/reports/ANFIS_ROOT_CAUSE_REPORT.md`) measured: (a) the opportunity label is exactly `regime_signal == 0` (zero exceptions); (b) the savings label is exactly linear in the base/hypothetical min-paid ratios (val MAPE 1.6e-14); (c) the additive TSK rule base dilutes separable signal as rule count grows (AUC 1.0 → 0.30).
 
-**Decision:** the v0.5 intelligence layer deploys **exact rule heads** — deterministic functions over the engine two-pass (`rule_opportunity`/`rule_savings`/`rule_confidence` in `backend/tax_intelligence.py`): P/R 1.000/1.000 and savings MAE 0.00 INR by construction. The learned TSK heads remain off-deployment experiments (MODEL_REGISTRY) with pre-committed promotion gates (positive-rich continuous-value dataset, `SPRINT5_ROADMAP.md` P0/P1). The served efficiency is the exact composite (ADR-015 unchanged).
+**Decision:** the v0.5 intelligence layer deploys **exact rule heads** — deterministic functions over the engine two-pass (`rule_opportunity`/`rule_savings`/`rule_confidence` in `backend/tax_intelligence.py`): P/R 1.000/1.000 and savings MAE 0.00 INR by construction. The learned TSK heads remain off-deployment experiments (MODEL_REGISTRY) with pre-committed promotion gates (positive-rich continuous-value dataset, `docs/reports/SPRINT5_ROADMAP.md` P0/P1). The served efficiency is the exact composite (ADR-015 unchanged).
 
 **Consequences:** ✅ user-facing intelligence is correct by construction and fully explainable (statutory weights, not model internals); no model error term can reach a rupee. ❌ the intelligence layer's ranking does not yet use learned generalization (engine probes at recommend time are exact but bounded to probed top-ups); the TSK program continues as research until the data exists.
 
