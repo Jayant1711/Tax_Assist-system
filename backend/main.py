@@ -1173,6 +1173,66 @@ def create_app(app_env: str = "dev") -> FastAPI:
             raise HTTPException(status_code=404, detail="Event not found")
         return {"event_id": event_id, "action": action}
 
+    @app.get("/analytics/overview")
+    async def adoption_overview_endpoint(
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, Any]:
+        """Sprint 7 S7.1: the cross-session Adoption Dashboard payload —
+        funnel totals, per-head adoption, Accepted-Rupee, and the
+        resolved-event count the calibration gate consumes (401
+        unauthenticated; scoped to the caller's own events)."""
+        return db.user_adoption_overview(user.user_id)
+
+    @app.post("/sessions/{session_id}/recommendations/{event_id}/apply",
+              status_code=200)
+    async def apply_recommendation_endpoint(
+        session_id: str, event_id: str,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, Any]:
+        """Sprint 7 S7.3: one-click Apply — book the recommendation's
+        top-up into the owned session (clamped to the statutory cap) and
+        reprice through the engine. The returned calculation is the
+        authoritative new report payload; the engine remains the only
+        calculator."""
+        _row, state = _load_owned_state(session_id, user)
+        conn = db.get_connection()
+        row = conn.execute(
+            """
+            SELECT head, delta FROM recommendation_events
+            WHERE id = ? AND session_id = ? AND user_id = ?
+            """,
+            (event_id, session_id, user.user_id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        head = row["head"]
+        cap = tax_intelligence.LIMITS.get(head)
+        if cap is None:
+            raise HTTPException(status_code=422,
+                                detail="Head not applicable for apply")
+        booked = float(state.get(head) or 0)
+        target = min(float(cap), booked + max(0.0, float(row["delta"])))
+        if target <= booked:
+            raise HTTPException(status_code=409,
+                                detail="Headroom already fully applied")
+        state[head] = target
+        _validate_loaded_state(state)
+        if not db.save_state(session_id, state):
+            raise HTTPException(status_code=404, detail="Session not found")
+        # Applying IS accepting: record it so the adoption funnel and the
+        # Accepted-Rupee metric reflect the action (best-effort).
+        try:
+            db.record_recommendation_action(event_id, user.user_id,
+                                            "accepted")
+        except Exception:  # noqa: BLE001 — capture never breaks apply
+            logger.warning("apply acceptance-capture failed")
+        results = engine.calculate_tax_advanced(
+            state, tax_year=state.get("tax_year"))
+        return clean_json({
+            "applied": True, "head": head, "new_value": target,
+            "calculation": results,
+        })
+
     @app.delete("/sessions/{session_id}", status_code=204)
     async def delete_app_session_endpoint(
         session_id: str,

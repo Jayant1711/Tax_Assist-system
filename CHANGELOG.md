@@ -8,6 +8,10 @@ All notable changes to Tax Assist AI are documented here. Format follows [Keep a
 - **Explainable CA layer** (`backend/fuzzy_ca.py`): authored, readable fuzzy rule base (10 rules) with trapezoid memberships and a full rulebook decoder — explainable by construction, never computes rupees, never imports the engine (pinned). Fires CA-style reasoning notes into the FINAL `/calculate` payload.
 - **CA-style savings plans** (`backend/ca_plans.py`): plans composed from the layer's suggested levers, each priced by exactly one engine recomputation; combination plans priced as a single recomputation (levers interact through the regime choice). Steps carry the fired reasoning.
 - **Frontend "CA-Style Savings Plans" card** in the final report (plan steps + engine-priced savings).
+- **Adoption Dashboard view (S7.1)**: new sidebar view + `GET /analytics/overview` — cross-session funnel totals, per-head adoption, the Accepted-Rupee metric, and calibration-gate progress (resolved events / 30).
+- **One-click Apply (S7.3)**: `POST /sessions/{sid}/recommendations/{event_id}/apply` books the recommendation's top-up into the owned session (clamped to the statutory cap), records the acceptance, and returns the engine-repriced report; the card shows "Applied" and the whole report re-runs.
+- **Action finality + viewed auto-fire (S7.2)**: accepted/rejected are final (auto-fired `viewed` can never overwrite them, SQL-enforced); cards fire `viewed` once per render; cards show their recorded decision.
+- **24(b) impact reason is occupancy-aware** (S7.4): let-out vs self-occupied wording from the session.
 - Reviewed by tax-expert (two P0 statutory corrections: 80E is old-regime-only per 115BAC(2)(i); 87A bands restated), qa-lead (firing-semantics and tax_year pins added), security-auditor (approve-with-nits, hardening applied).
 
 ## [0.6.0-sprint6] — 2026-11-05

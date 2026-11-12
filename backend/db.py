@@ -437,18 +437,29 @@ def record_recommendation_action(
     event_id: str, user_id: str, action: str
 ) -> bool:
     """Set the user's action on one of THEIR shown events (ownership
-    checked in SQL via the app_sessions join); True iff updated."""
+    checked in SQL via the app_sessions join); True iff updated.
+
+    Action finality (Sprint 7 S7.2): accepted/rejected are FINAL — a
+    later viewed/dismissed auto-fire can never overwrite them. viewed
+    only writes onto an unresolved (NULL) event, so repeated report
+    renders cannot clobber a real decision."""
     conn = get_connection()
     with conn:
         cursor = conn.execute(
             """
             UPDATE recommendation_events
-            SET action = ?, resolved_at = ?
+            SET action = CASE
+                    WHEN action IS NULL OR action = 'viewed'
+                        THEN ? ELSE action END,
+                resolved_at = CASE
+                    WHEN action IS NULL
+                         OR (action = 'viewed' AND ? != 'viewed')
+                        THEN ? ELSE resolved_at END
             WHERE id = ? AND user_id = ?
               AND session_id IN (SELECT id FROM app_sessions
                                  WHERE user_id = ?)
             """,
-            (action, utcnow_iso(), event_id, user_id, user_id),
+            (action, action, utcnow_iso(), event_id, user_id, user_id),
         )
         return cursor.rowcount > 0
 
@@ -491,6 +502,57 @@ def recommendation_analytics(
         "per_head": [
             {"head": head, **stats}
             for head, stats in sorted(funnel.items())
+        ],
+    }
+
+
+def user_adoption_overview(user_id: str) -> Dict[str, Any]:
+    """Sprint 7 S7.1: the cross-session Adoption Dashboard's data source.
+
+    Aggregates ALL of a user's recommendation events across sessions:
+    funnel totals, per-head adoption, the Accepted-Rupee metric (engine-
+    priced savings of the events the user actually accepted), and the
+    resolved-event count the calibration gate consumes.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT head, action, savings_engine, confidence
+        FROM recommendation_events
+        WHERE user_id = ?
+        ORDER BY created_at ASC
+        """,
+        (user_id,),
+    ).fetchall()
+    funnel: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        entry = funnel.setdefault(row["head"], {
+            "shown": 0, "accepted": 0, "rejected": 0, "ignored": 0,
+            "viewed": 0, "dismissed": 0, "savings_engine": 0.0,
+            "accepted_savings": 0.0,
+        })
+        entry["shown"] += 1
+        if row["action"]:
+            entry[row["action"]] = entry.get(row["action"], 0) + 1
+        entry["savings_engine"] = max(entry["savings_engine"],
+                                      float(row["savings_engine"]))
+        if row["action"] == "accepted":
+            entry["accepted_savings"] += float(row["savings_engine"])
+    resolved = [(float(r["confidence"]), 1 if r["action"] == "accepted"
+                 else 0) for r in rows
+                if r["action"] in ("accepted", "rejected", "ignored")]
+    accepted = sum(1 for row in rows if row["action"] == "accepted")
+    accepted_rupees = round(sum(float(r["savings_engine"]) for r in rows
+                                if r["action"] == "accepted"), 2)
+    return {
+        "total_shown": len(rows),
+        "total_accepted": accepted,
+        "acceptance_rate": round(accepted / len(rows), 4) if rows else 0.0,
+        "accepted_rupees": accepted_rupees,
+        "resolved_events": len(resolved),
+        "calibration_gate": {"target": 30, "met": len(resolved) >= 30},
+        "per_head": [
+            {"head": head, **stats} for head, stats in sorted(funnel.items())
         ],
     }
 

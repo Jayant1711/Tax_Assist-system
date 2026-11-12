@@ -588,8 +588,13 @@ class TaxEngine:
             elif head == "nps":
                 reason = "Section 80CCD(1B) — capped at ₹50,000"
             elif head == "24b":
-                reason = ("Section 24(b) — capped at ₹2,00,000 "
-                          "(self-occupied)")
+                if float(data.get("rental") or 0) > 0:
+                    reason = ("Section 24(b) — let-out property interest; "
+                              "no rupee cap in this regime (loss set-off "
+                              "capped at ₹2,00,000)")
+                else:
+                    reason = ("Section 24(b) — capped at ₹2,00,000 "
+                              "(self-occupied)")
             elif head == "80g":
                 reason = ("Section 80G — rate per donee category, "
                           "qualifying limits may apply")

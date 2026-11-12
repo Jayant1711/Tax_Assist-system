@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ChatInterface from '@/components/ChatInterface';
 import TaxReport from '@/components/TaxReport';
+import AdoptionDashboard from '@/components/AdoptionDashboard';
 import { apiFetch, onUnauthorized } from '@/lib/api';
 
 /**
@@ -22,7 +23,7 @@ export default function Home() {
   const [authPhase, setAuthPhase] = useState<AuthPhase>('checking');
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [showReport, setShowReport] = useState(false);
-  const [activeView, setActiveView] = useState<'chat' | 'summary' | 'graph'>('chat');
+  const [activeView, setActiveView] = useState<'chat' | 'summary' | 'graph' | 'adoption'>('chat');
 
   // Central 401 hook → client-side redirect to /login (App Router,
   // no middleware). Any apiFetch 401 (expired/revoked cookie) lands here.
@@ -203,6 +204,22 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          <div
+            className={`nav-item ${activeView === 'adoption' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveView('adoption');
+              setShowReport(true);
+            }}
+          >
+            <span className="icon">🎯</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>Adoption Dashboard</div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                Accepted-Rupee & recommendation funnel
+              </div>
+            </div>
+          </div>
         </nav>
 
         <div className="nav-section-label">Quick Rules (FY 2025-26)</div>
@@ -298,7 +315,9 @@ export default function Home() {
           </div>
 
           <div className="report-body">
-            {showReport || hasData ? (
+            {activeView === 'adoption' ? (
+              <AdoptionDashboard />
+            ) : showReport || hasData ? (
               <TaxReport
                 sessionId={sessionId}
                 projection={projection}

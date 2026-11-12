@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SavingsGraph from './SavingsGraph';
 import { apiFetch } from '../lib/api';
 
@@ -21,6 +21,11 @@ export default function TaxReport({ sessionId, projection }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'computation' | 'slabs' | 'advice'>('computation');
+  // Sprint 7 S7.2: the user's recorded decision per card (rec_id), and
+  // S7.3: a reload tick so one-click Apply re-runs the whole report.
+  const [acted, setActed] = useState<Record<string, string>>({});
+  const [reloadTick, setReloadTick] = useState(0);
+  const viewedFired = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!sessionId) return;
@@ -56,7 +61,52 @@ export default function TaxReport({ sessionId, projection }: Props) {
     return () => {
       isMounted = false;
     };
-  }, [sessionId, projection]);
+  }, [sessionId, projection, reloadTick]);
+
+  // Sprint 7 S7.2: auto-fire the `viewed` action once per card when the
+  // FINAL report renders (ADR-017). The backend treats viewed as a
+  // passive action that never overwrites accepted/rejected, so re-fires
+  // are harmless no-ops on the store.
+  const recIds: string[] = (data?.recommendations ?? [])
+    .map((r: any) => r.rec_id)
+    .filter(Boolean);
+  useEffect(() => {
+    if (!sessionId || recIds.length === 0) return;
+    const fresh = recIds.filter((id) => !viewedFired.current.has(id));
+    if (fresh.length === 0) return;
+    fresh.forEach((id) => viewedFired.current.add(id));
+    fresh.forEach((id) => {
+      apiFetch(
+        `/sessions/${sessionId}/recommendations/${id}/action`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'viewed' }) },
+      ).catch(() => {/* best-effort capture */});
+    });
+  }, [sessionId, recIds.join('|')]);
+
+  const applyRecommendation = async (recId: string) => {
+    setActed((prev) => ({ ...prev, [recId]: 'applied' }));
+    try {
+      const res = await apiFetch(
+        `/sessions/${sessionId}/recommendations/${recId}/apply`,
+        { method: 'POST' },
+      );
+      if (res.ok) {
+        setReloadTick((t) => t + 1); // re-runs the whole priced report
+      }
+    } catch {
+      // surfaced on the next manual recalculation; never fatal
+    }
+  };
+
+  const decideRecommendation = (recId: string, action: string) => {
+    setActed((prev) => ({ ...prev, [recId]: action }));
+    apiFetch(
+      `/sessions/${sessionId}/recommendations/${recId}/action`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }) },
+    ).catch(() => {/* best-effort capture */});
+  };
 
   if (loading) {
     return (
@@ -300,13 +350,6 @@ export default function TaxReport({ sessionId, projection }: Props) {
         // ADR-017: acceptance actions resolve persisted shown events —
         // they exist only once the closing turn ran, i.e. the FINAL phase.
         const finalPhase = (projection?.phase || '') === 'FINAL';
-        const act = (recId: string, action: string) => {
-          apiFetch(
-            `/sessions/${sessionId}/recommendations/${recId}/action`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action }) },
-          );
-        };
         return (
           <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
             <div className="card-header" style={{ padding: 0, borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
@@ -338,12 +381,30 @@ export default function TaxReport({ sessionId, projection }: Props) {
                       ))}
                     </ul>
                   )}
-                  {recommend && finalPhase && (
+                  {recommend && finalPhase && acted[card.rec_id] === 'applied' && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--accent-green)', fontWeight: 600 }}>
+                      ✓ Applied — headroom booked, report re-priced below.
+                    </div>
+                  )}
+                  {recommend && finalPhase && acted[card.rec_id] === 'accepted' && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--accent-green)', fontWeight: 600 }}>
+                      ✓ Accepted — recorded in your adoption history.
+                    </div>
+                  )}
+                  {recommend && finalPhase && acted[card.rec_id] === 'rejected' && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      ✕ Rejected — recorded in your adoption history.
+                    </div>
+                  )}
+                  {recommend && finalPhase && !acted[card.rec_id] && (
                     <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.5rem' }}>
-                      <button className="btn btn-primary btn-sm" onClick={() => act(card.rec_id, 'accepted')}>
+                      <button className="btn btn-primary btn-sm" onClick={() => applyRecommendation(card.rec_id)}>
                         ✓ Apply this
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => act(card.rec_id, 'rejected')}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => decideRecommendation(card.rec_id, 'accepted')}>
+                        👍 Keep as accepted
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => decideRecommendation(card.rec_id, 'rejected')}>
                         ✕ Not for me
                       </button>
                     </div>

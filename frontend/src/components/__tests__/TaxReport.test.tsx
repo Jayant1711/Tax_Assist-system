@@ -219,18 +219,83 @@ describe('TaxReport', () => {
     expect(screen.getByText(/Section 80D — no benefit/)).toBeInTheDocument();
   });
 
+  it('fires the viewed action once per card at FINAL (S7.2)', async () => {
+    apiFetchMock.mockResolvedValue(okResponse(CARDS_RESPONSE));
+
+    render(<TaxReport sessionId="sess_cards" projection={{ phase: 'FINAL' }} />);
+
+    await waitFor(() => {
+      const viewed = apiFetchMock.mock.calls.filter(
+        ([url]) => String(url).includes('/action'),
+      );
+      expect(viewed.length).toBe(2); // one per card
+    });
+    const viewedUrls = apiFetchMock.mock.calls
+      .map(([url]) => String(url))
+      .filter((u) => u.includes('/action'));
+    expect(viewedUrls[0]).toContain('/recommendations/rec_80c/action');
+    const init = apiFetchMock.mock.calls.find(
+      ([url]) => String(url).includes('/recommendations/rec_80c/action'),
+    )![1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({ action: 'viewed' });
+  });
+
   it('posts the acceptance action to the event endpoint on click', async () => {
     apiFetchMock.mockResolvedValue(okResponse(CARDS_RESPONSE));
 
     render(<TaxReport sessionId="sess_cards" projection={{ phase: 'FINAL' }} />);
 
-    fireEvent.click(await screen.findByText('✓ Apply this'));
+    fireEvent.click(await screen.findByText('👍 Keep as accepted'));
 
-    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(2));
-    const [url, init] = apiFetchMock.mock.calls[1] as [string, RequestInit];
+    await waitFor(() => {
+      const actionCalls = apiFetchMock.mock.calls.filter(
+        ([url, init]) => String(url).includes('/action') &&
+          JSON.parse(String((init as RequestInit).body)).action === 'accepted',
+      );
+      expect(actionCalls.length).toBe(1);
+    });
+    const [url, init] = apiFetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes('/recommendations/rec_80c/action') &&
+        JSON.parse(String((init as RequestInit).body)).action === 'accepted',
+    ) as [string, RequestInit];
     expect(url).toBe('/sessions/sess_cards/recommendations/rec_80c/action');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(String(init.body))).toEqual({ action: 'accepted' });
+  });
+
+  it('Apply re-books the headroom and re-runs the priced report (S7.3)', async () => {
+    apiFetchMock.mockImplementation((url: string) => {
+      if (String(url).includes('/apply')) {
+        return Promise.resolve(okResponse({ applied: true, head: '80c',
+                                             new_value: 150000 }));
+      }
+      return Promise.resolve(okResponse(CARDS_RESPONSE));
+    });
+
+    render(<TaxReport sessionId="sess_cards" projection={{ phase: 'FINAL' }} />);
+
+    fireEvent.click(await screen.findByText('✓ Apply this'));
+
+    await waitFor(() => {
+      const applyCalls = apiFetchMock.mock.calls.filter(
+        ([url]) => String(url).includes('/apply'),
+      );
+      expect(applyCalls.length).toBe(1);
+    });
+    const [applyUrl, applyInit] = apiFetchMock.mock.calls.find(
+      ([url]) => String(url).includes('/apply'),
+    ) as [string, RequestInit];
+    expect(applyUrl).toBe(
+      '/sessions/sess_cards/recommendations/rec_80c/apply');
+    expect(applyInit.method).toBe('POST');
+    // the report re-runs /calculate after a successful apply
+    await waitFor(() => {
+      const calcCalls = apiFetchMock.mock.calls.filter(
+        ([url]) => String(url).endsWith('/calculate'),
+      );
+      expect(calcCalls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.getByText(
+      /Applied — headroom booked, report re-priced below/)).toBeInTheDocument();
   });
 
   it('omits the intelligence cards when the payload has no recommendations', async () => {
