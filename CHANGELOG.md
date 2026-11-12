@@ -2,6 +2,14 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
+## [Unreleased] — sprint7 (adoption + explainability, in progress)
+
+### Added
+- **Explainable CA layer** (`backend/fuzzy_ca.py`): authored, readable fuzzy rule base (10 rules) with trapezoid memberships and a full rulebook decoder — explainable by construction, never computes rupees, never imports the engine (pinned). Fires CA-style reasoning notes into the FINAL `/calculate` payload.
+- **CA-style savings plans** (`backend/ca_plans.py`): plans composed from the layer's suggested levers, each priced by exactly one engine recomputation; combination plans priced as a single recomputation (levers interact through the regime choice). Steps carry the fired reasoning.
+- **Frontend "CA-Style Savings Plans" card** in the final report (plan steps + engine-priced savings).
+- Reviewed by tax-expert (two P0 statutory corrections: 80E is old-regime-only per 115BAC(2)(i); 87A bands restated), qa-lead (firing-semantics and tax_year pins added), security-auditor (approve-with-nits, hardening applied).
+
 ## [0.6.0-sprint6] — 2026-11-05
 
 Sprint 6: Feedback + Acceptance Learning + Confidence Calibration + Recommendation Analytics + Intelligence Quality. Full details in `docs/reports/PROJECT_STATUS_REPORT_SPRINT6.md`.

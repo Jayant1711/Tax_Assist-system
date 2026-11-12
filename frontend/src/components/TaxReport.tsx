@@ -408,6 +408,47 @@ export default function TaxReport({ sessionId, projection }: Props) {
         );
       })()}
 
+      {/* ── Sprint 7 X3: CA-style savings plans (explainable layer +
+          engine-priced) ── */}
+      {(() => {
+        const plans = (data as any)?.ca_plans as
+          | Array<{ name: string; levers: string[]; savings_engine: number;
+                    steps: Array<{ head: string; delta: number;
+                                  sentence: string }> }> | undefined;
+        if (!plans?.length) return null;
+        return (
+          <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
+            <div className="card-header" style={{ padding: 0, borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
+              <div>
+                <div className="card-title">CA-Style Savings Plans</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Readable rule-based suggestions, priced line by line by the tax engine. Every rupee is a recomputation.
+                </p>
+              </div>
+            </div>
+            {plans.map((plan, i) => (
+              <div key={plan.name} style={{ padding: '0.85rem 0', borderBottom: i < plans.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--primary-light)' }}>
+                    {plan.name}
+                  </span>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-green)' }}>
+                    est. saves {fmt(plan.savings_engine)}
+                  </span>
+                </div>
+                <ul style={{ margin: '0.4rem 0 0 1.1rem', padding: 0 }}>
+                  {plan.steps.map((st, j) => (
+                    <li key={j} style={{ fontSize: '0.74rem', color: 'var(--text-sub)', marginBottom: '0.25rem' }}>
+                      {st.sentence}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* ── Tabs for Deeper Analysis ── */}
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
         <button

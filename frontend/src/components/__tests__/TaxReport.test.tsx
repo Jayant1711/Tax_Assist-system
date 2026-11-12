@@ -288,4 +288,31 @@ describe('TaxReport', () => {
     expect(await screen.findByText('Recommended Strategy')).toBeInTheDocument();
     expect(screen.queryByText('Per-Deduction Impact — Exact (Engine-Priced)')).not.toBeInTheDocument();
   });
+
+  it('renders CA-style savings plans when the payload carries them', async () => {
+    apiFetchMock.mockResolvedValue(okResponse({
+      ...CALCULATE_RESPONSE,
+      ca_plans: [{
+        name: 'Plan A',
+        levers: ['80c'],
+        savings_engine: 46875,
+        steps: [{ head: '80c', delta: 150000,
+                  sentence: 'Top up Section 80C (investments, Rs 1.5 lakh cap) by Rs 1,50,000 (Rs 1.5 lakh cap).' }],
+      }],
+    }));
+
+    render(<TaxReport sessionId="sess_plans" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText('CA-Style Savings Plans')).toBeInTheDocument();
+    expect(screen.getByText('Plan A')).toBeInTheDocument();
+    expect(screen.getByText(/est. saves ₹46,875/)).toBeInTheDocument();
+    expect(screen.getByText(/Top up Section 80C/)).toBeInTheDocument();
+  });
+
+  it('omits the plans card when the payload has none', async () => {
+    render(<TaxReport sessionId="sess_noplans" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText('Recommended Strategy')).toBeInTheDocument();
+    expect(screen.queryByText('CA-Style Savings Plans')).not.toBeInTheDocument();
+  });
 });

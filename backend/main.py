@@ -108,9 +108,11 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.types import ASGIApp
 
 import auth
+import ca_plans
 import config
 import corpus
 import db
+import fuzzy_ca
 import observability
 import tax_intelligence
 from audit_logger import AuditLogger, scrub_state
@@ -1416,8 +1418,12 @@ def create_app(app_env: str = "dev") -> FastAPI:
         # at FINAL — mid-flow profiles would rank zero-benefit noise.
         # Best-effort: a review failure must never break the calculation.
         if state.get("phase") == "FINAL":
-            review = tax_intelligence.advisor_review(
-                state, engine, tax_intelligence.get_intelligence())
+            try:
+                review = tax_intelligence.advisor_review(
+                    state, engine, tax_intelligence.get_intelligence())
+            except Exception:  # noqa: BLE001 — never fatal to the calc
+                logger.warning("advisor review attach failed")
+                review = None
             if review:
                 results["recommendations"] = review["recommendations"]
             # Sprint 6 Phase 5: exact per-deduction impact (leave-one-out,
@@ -1428,6 +1434,21 @@ def create_app(app_env: str = "dev") -> FastAPI:
                     state, tax_year)
             except Exception:  # noqa: BLE001 — never fatal to the calc
                 logger.warning("deduction impact attach failed")
+            # Sprint 7 X2/X3: the explainable CA layer — fired CA-style
+            # notes (readable authored rules, NO rupees) and savings
+            # plans whose levers come from those rules and whose prices
+            # come exclusively from the engine. Best-effort, never fatal.
+            try:
+                results["ca_notes"] = fuzzy_ca.explain(
+                    state, tax_intelligence.LIMITS)
+            except Exception:  # noqa: BLE001 — never fatal to the calc
+                logger.warning("ca_notes attach failed")
+            try:
+                results["ca_plans"] = ca_plans.propose_plans(
+                    state, engine, tax_intelligence.LIMITS,
+                    tax_year=tax_year)
+            except Exception:  # noqa: BLE001 — never fatal to the calc
+                logger.warning("ca_plans attach failed")
         return clean_json(results)
 
     return app
