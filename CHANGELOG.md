@@ -2,7 +2,7 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
-## [Unreleased] — sprint7 (adoption + explainability, in progress)
+## [0.7.0-sprint7] — 2026-11-13
 
 ### Added
 - **Explainable CA layer** (`backend/fuzzy_ca.py`): authored, readable fuzzy rule base (10 rules) with trapezoid memberships and a full rulebook decoder — explainable by construction, never computes rupees, never imports the engine (pinned). Fires CA-style reasoning notes into the FINAL `/calculate` payload.
