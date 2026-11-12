@@ -1,10 +1,10 @@
 # Phase D: BiLSTM NER Report
 
 **Entity types:** MONEY, TAX_SECTION, INCOME_TYPE, DEDUCTION_TYPE, DATE, PERCENTAGE
-**Corpus size:** 51 annotated samples (seed=472)
-**Training samples:** 40
-**Test samples:** 11
-**Epochs:** 8
+**Corpus size:** 471 annotated samples (seed=472)
+**Training samples:** 376
+**Test samples:** 95
+**Epochs:** 20
 
 ## Entity Type Definitions
 - **MONEY:** Numeric amounts (including Indian comma grouping: 1,25,000), rupees, lakhs, emi, pf
@@ -18,20 +18,21 @@
 - **BiLSTM** with embedding layer (128-dim)
 - **Hidden dimension:** 256 (bidirectional)
 - **Output:** NER tag per token (BIO scheme, 6 entity types + O)
-- **Optimizer:** Adam, lr=1e-3
-- **Loss:** Cross-entropy with ignore_index for 'O' tags
+- **Optimizer:** Adam, lr=5e-4, gradient clipping at 1.0
+- **Vocabulary:** 116 corpus-built entries (deterministic; replaces the randomized hash() mapping)
+- **Loss:** Cross-entropy; padding ignored (-100), real 'O' tokens supervised
 
 ## Evaluation Results
-- **Overall accuracy:** 0.143
-- **Macro F1:** 0.0
+- **Overall accuracy:** 0.9136
+- **Macro F1:** 0.756
 
 ### Per-class breakdown
-- **MONEY:** precision=0.0, recall=0.0, F1=0.0, support=0
-- **TAX_SECTION:** precision=0.0, recall=0.0, F1=0.0, support=0
-- **INCOME_TYPE:** precision=0.0, recall=0.0, F1=0.0, support=0
-- **DEDUCTION_TYPE:** precision=0.0, recall=0.0, F1=0.0, support=0
-- **DATE:** precision=0.0, recall=0.0, F1=0.0, support=0
-- **PERCENTAGE:** precision=0.0, recall=0.0, F1=0.0, support=0
+- **MONEY:** precision=0.867, recall=0.591, F1=0.703, support=22
+- **TAX_SECTION:** precision=1.0, recall=0.385, F1=0.556, support=13
+- **INCOME_TYPE:** precision=0.98, recall=0.98, F1=0.98, support=49
+- **DEDUCTION_TYPE:** precision=0.421, recall=0.667, F1=0.516, support=12
+- **DATE:** precision=1.0, recall=1.0, F1=1.0, support=7
+- **PERCENTAGE:** precision=0.782, recall=0.782, F1=0.782, support=101
 
 ---
 *Generated automatically by Phase D BiLSTM NER pipeline.*

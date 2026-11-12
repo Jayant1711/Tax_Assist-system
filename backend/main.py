@@ -1233,6 +1233,54 @@ def create_app(app_env: str = "dev") -> FastAPI:
             "calculation": results,
         })
 
+    @app.post("/sessions/{session_id}/apply_plan", status_code=200)
+    async def apply_plan_endpoint(
+        session_id: str, request: Request,
+        user: auth.CurrentUser = Depends(_current_user),
+    ) -> Dict[str, Any]:
+        """Sprint 7: one-click Apply for a WHOLE CA-style plan — book
+        every plan lever into the owned session (server-side clamped to
+        the statutory caps; the client's deltas are never trusted) and
+        reprice through the engine."""
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid JSON body")
+        levers = body.get("levers")
+        if not isinstance(levers, list) or not levers:
+            raise HTTPException(
+                status_code=422, detail="levers must be a non-empty list")
+        if len(levers) > 16:
+            raise HTTPException(status_code=422, detail="too many levers")
+        _row, state = _load_owned_state(session_id, user)
+        applied: List[Dict[str, Any]] = []
+        for lever in levers:
+            if not isinstance(lever, dict) or "head" not in lever:
+                raise HTTPException(status_code=422,
+                                    detail="each lever needs a head")
+            head = lever["head"]
+            cap = tax_intelligence.LIMITS.get(head)
+            if cap is None:
+                raise HTTPException(
+                    status_code=422, detail=f"Unknown head: {head}")
+            booked = float(state.get(head) or 0)
+            wanted = float(lever.get("delta") or 0)
+            target = min(float(cap), booked + max(0.0, wanted))
+            if target > booked:
+                state[head] = target
+                applied.append({"head": head, "new_value": target})
+        if not applied:
+            raise HTTPException(status_code=409,
+                                detail="All plan headroom already applied")
+        _validate_loaded_state(state)
+        if not db.save_state(session_id, state):
+            raise HTTPException(status_code=404, detail="Session not found")
+        results = engine.calculate_tax_advanced(
+            state, tax_year=state.get("tax_year"))
+        return clean_json({
+            "applied": applied, "calculation": results,
+        })
+
     @app.delete("/sessions/{session_id}", status_code=204)
     async def delete_app_session_endpoint(
         session_id: str,

@@ -12,6 +12,7 @@ All notable changes to Tax Assist AI are documented here. Format follows [Keep a
 - **One-click Apply (S7.3)**: `POST /sessions/{sid}/recommendations/{event_id}/apply` books the recommendation's top-up into the owned session (clamped to the statutory cap), records the acceptance, and returns the engine-repriced report; the card shows "Applied" and the whole report re-runs.
 - **Action finality + viewed auto-fire (S7.2)**: accepted/rejected are final (auto-fired `viewed` can never overwrite them, SQL-enforced); cards fire `viewed` once per render; cards show their recorded decision.
 - **24(b) impact reason is occupancy-aware** (S7.4): let-out vs self-occupied wording from the session.
+- **NER research track corrected (S7.5)**: the reported 0.143 was a fabricated metric (softmax confidence + synthesized per-class numbers + label collapse); after the evaluator/label/vocab/split fixes and expanded templates, the BiLSTM measures 91.36% token accuracy / 0.756 macro F1 — documented in `nlp_research/artifacts/NER_REPORT.md`, pinned torch-free.
 - Reviewed by tax-expert (two P0 statutory corrections: 80E is old-regime-only per 115BAC(2)(i); 87A bands restated), qa-lead (firing-semantics and tax_year pins added), security-auditor (approve-with-nits, hardening applied).
 
 ## [0.6.0-sprint6] — 2026-11-05

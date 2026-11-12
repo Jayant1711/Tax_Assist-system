@@ -39,6 +39,23 @@ CAP_TEXT = {
     "hra": "Rule 2A least-of-three",
 }
 
+# Sprint 7 validator fix — the PHANTOM ACTUALS bug: a CONTRIBUTION head
+# can be topped up at will (anyone may invest in PPF/ELSS, buy health
+# cover, contribute to NPS); an ACTUAL head reflects a real-world fact
+# (an education loan, a home loan, deposits, donations) and must NEVER
+# be suggested as a top-up unless the user already booked it — otherwise
+# the plan layer solicits claims to which the client is not entitled
+# ("Add Rs 2,00,000 home-loan interest" for a renter).
+CONTRIBUTION_HEADS = {"80c", "80d", "80d_parents", "nps"}
+
+# suitability/lock-in notes appended to step sentences
+SUITABILITY = {
+    "80c": "Lock-ins: ELSS 3 years, PPF 15 years.",
+    "80d": "Health cover renews annually.",
+    "nps": "NPS locks in until 60 (partial withdrawal rules apply).",
+    "80d_parents": "Parents' policy must be in the taxpayer's name.",
+}
+
 
 def _paid(engine: Any, session: Dict[str, Any],
           tax_year: Optional[str]) -> float:
@@ -48,6 +65,12 @@ def _paid(engine: Any, session: Dict[str, Any],
                float(res["new_regime"].total_tax))
 
 
+def _price(engine: Any, session: Dict[str, Any],
+           tax_year: Optional[str]) -> Any:
+    """Full engine result for one session — one engine call."""
+    return engine.calculate_tax_advanced(dict(session), tax_year=tax_year)
+
+
 def _step_sentence(session: Dict[str, Any], head: str, delta: float,
                    fired: Dict[str, Any]) -> str:
     label = fuzzy_ca.SECTION_LABEL.get(head, head)
@@ -55,6 +78,8 @@ def _step_sentence(session: Dict[str, Any], head: str, delta: float,
     base = (f"Top up {label} by Rs {delta:,.0f} ({cap}).")
     if head in fired:
         return base + " Why: " + fired[head]["sentence"]
+    if head in SUITABILITY:
+        return base + " " + SUITABILITY[head]
     return base
 
 
@@ -75,31 +100,42 @@ def propose_plans(session: Dict[str, Any], engine: Any,
             if lever != "regime_switch" and lever not in fired_by_head:
                 fired_by_head[lever] = note
 
-    # candidate levers: any head with open headroom; fuzzy-suggested
-    # levers sort first, then the rest by size
+    # candidate levers: any CONTRIBUTION head with open headroom, plus
+    # ACTUAL heads only when the user already booked them (the fact
+    # exists). The validator caught plans soliciting claims to which
+    # the client was not entitled.
     open_heads = []
     for head, limit in (limits or {}).items():
         booked = float(session.get(head) or 0)
         delta = max(0.0, float(limit) - booked)
         if not (delta == delta) or delta == float("inf"):
             continue  # non-finite bookkeeping — never surface it
-        if delta > 0:
-            open_heads.append((head, round(delta, 2)))
+        if delta <= 0:
+            continue
+        if head not in CONTRIBUTION_HEADS and booked <= 0:
+            continue  # phantom actual — no underlying fact, no lever
+        open_heads.append((head, round(delta, 2)))
     open_heads.sort(key=lambda h: (h[0] not in fired_by_head, -h[1]))
 
-    paid_before = _paid(engine, session, tax_year)
+    base = _price(engine, session, tax_year)
+    paid_before = min(float(base["old_regime"].total_tax),
+                      float(base["new_regime"].total_tax))
     if paid_before <= 0:
         return []
+    regime_before = base["recommendation"]
 
     # single-lever plans first (bounded: <= len(limits) engine calls)
     singles: List[Dict[str, Any]] = []
     for head, delta in open_heads:
         mod = dict(session)
         mod[head] = float(session.get(head) or 0) + delta
-        paid_after = _paid(engine, mod, tax_year)
+        res_after = _price(engine, mod, tax_year)
+        paid_after = min(float(res_after["old_regime"].total_tax),
+                         float(res_after["new_regime"].total_tax))
         savings = round(paid_before - paid_after, 2)
         singles.append({
             "head": head, "delta": delta, "savings": savings,
+            "regime_after": res_after["recommendation"],
             "steps": [{
                 "head": head, "delta": delta,
                 "sentence": _step_sentence(session, head, delta,
@@ -116,6 +152,8 @@ def propose_plans(session: Dict[str, Any], engine: Any,
             "levers": [p["head"]],
             "steps": p["steps"],
             "savings_engine": p["savings"],
+            "regime_before": regime_before,
+            "regime_after": p["regime_after"],
         })
 
     # one combination plan from the top two positive singles, if both
@@ -126,8 +164,11 @@ def propose_plans(session: Dict[str, Any], engine: Any,
         mod = dict(session)
         for p in (a, b):
             mod[p["head"]] = float(session.get(p["head"]) or 0) + p["delta"]
-        paid_after = _paid(engine, mod, tax_year)
+        res_after = _price(engine, mod, tax_year)
+        paid_after = min(float(res_after["old_regime"].total_tax),
+                         float(res_after["new_regime"].total_tax))
         combo_savings = round(paid_before - paid_after, 2)
+        combo_regime_after = res_after["recommendation"]
         if combo_savings > 0:
             # fresh step dicts — the singles' steps are already
             # referenced by the returned plans above
@@ -140,6 +181,8 @@ def propose_plans(session: Dict[str, Any], engine: Any,
                 "levers": [a["head"], b["head"]],
                 "steps": steps,
                 "savings_engine": combo_savings,
+                "regime_before": regime_before,
+                "regime_after": combo_regime_after,
             })
             plans.sort(key=lambda p: -p["savings_engine"])
             plans = plans[:top_n]

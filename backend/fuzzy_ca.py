@@ -69,6 +69,13 @@ HEADROOM = {
     "large": (0.8, 1.5, 1e9, 1e9),
 }
 
+# annual rent in lakhs — its OWN scale (the validator caught R06 reading
+# rent against HEADROOM, which zeroed out above Rs 1.2L rent and made
+# the HRA note unreachable for exactly the metro renters it is for)
+RENT = {
+    "some": (0.05, 0.3, 1.5, 6.0),
+}
+
 SECTION_LABEL = {
     "80c": "Section 80C (investments, Rs 1.5 lakh cap)",
     "80d": "Section 80D (health insurance)",
@@ -151,7 +158,7 @@ def _mu(table: Dict[str, Tuple[float, ...]], set_name: str,
 RULES: List[Dict[str, Any]] = [
     {
         "id": "R01",
-        "conditions": [("income_l", INCOME, "low", 0.35)],
+        "conditions": [("income_l", INCOME, "low", 0.3)],
         "levers": [],
         "sentence": ("Income may sit in a 87A rebate band — under the new "
                      "regime the Rs 60,000 rebate zeroes tax up to Rs 12 "
@@ -159,8 +166,9 @@ RULES: List[Dict[str, Any]] = [
                      "salaried after the standard deduction, marginal "
                      "relief just above), while the old-regime band stops "
                      "at Rs 5 lakh (Rs 12,500). The rebate does not cover "
-                     "special-rate income such as LTCG u/s 112A. Price the "
-                     "levers before assuming they help."),
+                     "special-rate income such as LTCG u/s 112A (a "
+                     "new-regime proviso), and residency is required. "
+                     "Price the levers before assuming they help."),
     },
     {
         "id": "R02",
@@ -207,7 +215,7 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "id": "R06",
-        "conditions": [("rent_paid_l", HEADROOM, "some", 0.3),
+        "conditions": [("rent_paid_l", RENT, "some", 0.3),
                        ("income_l", INCOME, "mid", 0.3)],
         "levers": ["hra"],
         "sentence": ("Rent is being paid but the HRA exemption legs look "
@@ -228,7 +236,7 @@ RULES: List[Dict[str, Any]] = [
     },
     {
         "id": "R08",
-        "conditions": [("income_l", INCOME, "high", 0.35),
+        "conditions": [("income_l", INCOME, "high", 0.3),
                        ("util_80c", UTIL, "maxed", 0.3),
                        ("util_nps", UTIL, "maxed", 0.3),
                        ("util_80d", UTIL, "maxed", 0.25)],
@@ -247,13 +255,13 @@ RULES: List[Dict[str, Any]] = [
                        ("headroom_80ttb", HEADROOM, "some", 0.3)],
         "levers": ["80ttb"],
         "sentence": ("Senior-citizen deposit interest under 80TTB "
-                     "(resident seniors) has unused headroom — Rs 50,000 "
+                     "(resident seniors, old regime only) has unused headroom — Rs 50,000 "
                      "of interest income can sit deductible."),
     },
     {
         "id": "R10",
         "conditions": [("income_l", INCOME, "mid", 0.3),
-                       ("headroom_80g", HEADROOM, "large", 0.5)],
+                       ("headroom_80g", HEADROOM, "large", 0.25)],
         "levers": [],
         "sentence": ("Nothing is booked under 80G (an old-regime "
                      "deduction, rate per donee); worth using only if "
@@ -269,14 +277,18 @@ RULES: List[Dict[str, Any]] = [
 
 def _rule_strength(rule: Dict[str, Any],
                    feats: Dict[str, Any]) -> Tuple[float, List[str]]:
-    """Product of the rule's condition memberships (min-strength floor
-    per condition); returns (strength, failed_condition_names)."""
+    """Product of the rule's condition memberships. Each condition's
+    min-strength floor is a HARD gate (Sprint 7 validator fix: the
+    floors were decorative, so R01 fired at 15L income and R10 at any
+    income — documenting gating that never happened). Returns
+    (strength, failed_condition_names); strength 0.0 when gated."""
     strength = 1.0
     failed = []
     for key, table, set_name, floor in rule["conditions"]:
         mu = _mu(table, set_name, feats[key])
         if mu < floor:
             failed.append(f"{key}<{set_name}")
+            return 0.0, failed
         strength *= mu
     return _clip01(strength), failed
 

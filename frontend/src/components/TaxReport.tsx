@@ -24,6 +24,8 @@ export default function TaxReport({ sessionId, projection }: Props) {
   // Sprint 7 S7.2: the user's recorded decision per card (rec_id), and
   // S7.3: a reload tick so one-click Apply re-runs the whole report.
   const [acted, setActed] = useState<Record<string, string>>({});
+  const [appliedPlans, setAppliedPlans] = useState<Record<string, boolean>>({});
+  const [planError, setPlanError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const viewedFired = useRef<Set<string>>(new Set());
 
@@ -85,17 +87,44 @@ export default function TaxReport({ sessionId, projection }: Props) {
   }, [sessionId, recIds.join('|')]);
 
   const applyRecommendation = async (recId: string) => {
-    setActed((prev) => ({ ...prev, [recId]: 'applied' }));
     try {
       const res = await apiFetch(
         `/sessions/${sessionId}/recommendations/${recId}/apply`,
         { method: 'POST' },
       );
+      // the success state is written ONLY after the server confirms —
+      // an optimistic write showed "Applied" on failed applies (S7 QA fix)
       if (res.ok) {
+        setActed((prev) => ({ ...prev, [recId]: 'applied' }));
         setReloadTick((t) => t + 1); // re-runs the whole priced report
+      } else {
+        setActed((prev) => ({ ...prev, [recId]: `error:${res.status}` }));
       }
     } catch {
-      // surfaced on the next manual recalculation; never fatal
+      setActed((prev) => ({ ...prev, [recId]: 'error:network' }));
+    }
+  };
+
+  // Sprint 7: one-click Apply for a WHOLE CA-style plan — the server
+  // clamps every lever to its statutory cap before booking.
+  const applyPlan = async (planName: string,
+                           levers: Array<{ head: string; delta: number }>) => {
+    try {
+      const res = await apiFetch(
+        `/sessions/${sessionId}/apply_plan`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ levers }) },
+      );
+      if (res.ok) {
+        setAppliedPlans((prev) => ({ ...prev, [planName]: true }));
+        setReloadTick((t) => t + 1);
+      } else {
+        setAppliedPlans((prev) => ({ ...prev, [planName]: false }));
+        setPlanError(`Apply failed (${res.status})`);
+      }
+    } catch {
+      setAppliedPlans((prev) => ({ ...prev, [planName]: false }));
+      setPlanError('Apply failed — network error');
     }
   };
 
@@ -396,6 +425,11 @@ export default function TaxReport({ sessionId, projection }: Props) {
                       ✕ Rejected — recorded in your adoption history.
                     </div>
                   )}
+                  {recommend && finalPhase && acted[card.rec_id]?.startsWith('error') && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--accent-red, #e5484d)' }}>
+                      ✕ Apply failed — nothing was booked. Try again or recalculate.
+                    </div>
+                  )}
                   {recommend && finalPhase && !acted[card.rec_id] && (
                     <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.5rem' }}>
                       <button className="btn btn-primary btn-sm" onClick={() => applyRecommendation(card.rec_id)}>
@@ -469,6 +503,33 @@ export default function TaxReport({ sessionId, projection }: Props) {
         );
       })()}
 
+      {/* ── Sprint 7 X2: the fired CA rules — why these suggestions ── */}
+      {(() => {
+        const notes = (data as any)?.ca_notes as
+          | Array<{ rule_id: string; strength: number; sentence: string }> | undefined;
+        if (!notes?.length) return null;
+        return (
+          <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
+            <div className="card-header" style={{ padding: 0, borderBottom: '1px solid var(--border)', marginBottom: '1rem' }}>
+              <div>
+                <div className="card-title">How the CA Layer Thinks — Fired Rules</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Every suggestion comes from a readable rule; this is the rule base reasoning about your session. No rupees here — the engine prices everything.
+                </p>
+              </div>
+            </div>
+            {notes.map((note) => (
+              <div key={note.rule_id} style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border)', display: 'flex', gap: '0.6rem', alignItems: 'baseline' }}>
+                <span style={{ fontSize: '0.66rem', fontWeight: 700, color: 'var(--primary-light)', whiteSpace: 'nowrap' }}>
+                  {note.rule_id} · {Math.round(note.strength * 100)}%
+                </span>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-sub)' }}>{note.sentence}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* ── Sprint 7 X3: CA-style savings plans (explainable layer +
           engine-priced) ── */}
       {(() => {
@@ -504,6 +565,18 @@ export default function TaxReport({ sessionId, projection }: Props) {
                     </li>
                   ))}
                 </ul>
+                {appliedPlans[plan.name] ? (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: 'var(--accent-green)', fontWeight: 600 }}>
+                    ✓ Plan applied — headroom booked, report re-priced.
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <button className="btn btn-primary btn-sm"
+                            onClick={() => applyPlan(plan.name, plan.steps.map((st) => ({ head: st.head, delta: st.delta })))}>
+                      ✓ Apply plan
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

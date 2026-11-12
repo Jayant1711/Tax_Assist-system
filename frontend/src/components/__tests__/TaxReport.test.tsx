@@ -374,6 +374,113 @@ describe('TaxReport', () => {
     expect(screen.getByText(/Top up Section 80C/)).toBeInTheDocument();
   });
 
+  it('shows an error state and no success when Apply fails (S7 QA fix)', async () => {
+    apiFetchMock.mockImplementation((url: string) => {
+      if (String(url).includes('/apply')) {
+        return Promise.resolve({ ok: false, status: 409 });
+      }
+      return Promise.resolve(okResponse(CARDS_RESPONSE));
+    });
+
+    render(<TaxReport sessionId="sess_cards" projection={{ phase: 'FINAL' }} />);
+
+    fireEvent.click(await screen.findByText('✓ Apply this'));
+
+    await waitFor(() => {
+      expect(apiFetchMock.mock.calls.some(
+        ([url]) => String(url).includes('/apply'))).toBe(true);
+    });
+    // the optimistic green confirmation must NOT appear
+    expect(screen.queryByText(
+      /Applied — headroom booked, report re-priced below/)).not.toBeInTheDocument();
+    expect(screen.getByText(
+      /Apply failed — nothing was booked/)).toBeInTheDocument();
+  });
+
+  it('Apply plan posts the lever payload and shows the applied state', async () => {
+    apiFetchMock.mockImplementation((url: string) => {
+      if (String(url).includes('/apply_plan')) {
+        return Promise.resolve(okResponse({ applied: [{ head: '80c' }] }));
+      }
+      return Promise.resolve(okResponse({
+        ...CARDS_RESPONSE,
+        ca_plans: [{
+          name: 'Plan A',
+          levers: ['80c'],
+          savings_engine: 46875,
+          steps: [{ head: '80c', delta: 150000,
+                    sentence: 'Top up Section 80C by Rs 1,50,000.' }],
+        }],
+      }));
+    });
+
+    render(<TaxReport sessionId="sess_plan" projection={{ phase: 'FINAL' }} />);
+
+    fireEvent.click(await screen.findByText('✓ Apply plan'));
+
+    await waitFor(() => {
+      const calls = apiFetchMock.mock.calls.filter(
+        ([url]) => String(url).includes('/apply_plan'));
+      expect(calls.length).toBe(1);
+      const [url, init] = calls[0] as [string, RequestInit];
+      expect(url).toBe('/sessions/sess_plan/apply_plan');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(String(init.body))).toEqual({
+        levers: [{ head: '80c', delta: 150000 }],
+      });
+    });
+    expect(screen.getByText(
+      /Plan applied — headroom booked, report re-priced/)).toBeInTheDocument();
+  });
+
+  it('renders the fired-rules card from ca_notes (S7 X2)', async () => {
+    apiFetchMock.mockResolvedValue(okResponse({
+      ...CARDS_RESPONSE,
+      ca_notes: [{ rule_id: 'R03', strength: 1.0,
+                   sentence: 'Section 80C is wide open; PPF or ELSS up to the Rs 1.5 lakh cap.' }],
+    }));
+
+    render(<TaxReport sessionId="sess_notes" projection={{ phase: 'FINAL' }} />);
+
+    expect(await screen.findByText(
+      'How the CA Layer Thinks — Fired Rules')).toBeInTheDocument();
+    expect(screen.getByText(/R03 · 100%/)).toBeInTheDocument();
+    expect(screen.getByText(/Section 80C is wide open/)).toBeInTheDocument();
+  });
+
+  it('does not re-fire viewed after the post-apply reload', async () => {
+    apiFetchMock.mockImplementation((url: string) => {
+      if (String(url).includes('/apply')) {
+        return Promise.resolve(okResponse({ applied: true, head: '80c' }));
+      }
+      return Promise.resolve(okResponse(CARDS_RESPONSE));
+    });
+
+    render(<TaxReport sessionId="sess_cards" projection={{ phase: 'FINAL' }} />);
+
+    fireEvent.click(await screen.findByText('✓ Apply this'));
+
+    await waitFor(() => {
+      expect(apiFetchMock.mock.calls.filter(
+        ([url]) => String(url).includes('/apply')).length).toBe(1);
+    });
+    await waitFor(() => {
+      // calculate re-ran at least twice after the apply
+      expect(apiFetchMock.mock.calls.filter(
+        ([url]) => String(url).endsWith('/calculate')).length
+      ).toBeGreaterThanOrEqual(2);
+    });
+    // viewed fired exactly once per card across the whole reload cycle
+    const viewedByRec: Record<string, number> = {};
+    apiFetchMock.mock.calls.forEach(([url, init]) => {
+      const m = String(url).match(/recommendations\/([a-z0-9_]+)\/action/);
+      if (m && JSON.parse(String((init as RequestInit).body)).action === 'viewed') {
+        viewedByRec[m[1]] = (viewedByRec[m[1]] || 0) + 1;
+      }
+    });
+    expect(Object.values(viewedByRec).every((c) => c === 1)).toBe(true);
+  });
+
   it('omits the plans card when the payload has none', async () => {
     render(<TaxReport sessionId="sess_noplans" projection={{ phase: 'FINAL' }} />);
 

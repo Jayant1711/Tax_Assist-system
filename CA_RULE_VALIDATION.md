@@ -1,0 +1,104 @@
+# CA_RULE_VALIDATION.md — Practitioner-Proxy Validation of the Explainable CA Layer
+
+**Validated:** 2026-11-13 · **Validator:** tax-expert model proxy (a practicing CA's judgment stand-in; real-CA validation pending) · **Scope:** the decoded rule base (R01-R10), membership bands, plan composition
+
+---
+
+## 1. Method (and its honest limitation)
+
+**What was done.** The full rule base was decoded via `fuzzy_ca.render_rulebook()` (R01-R10, verified verbatim), the membership tables (`INCOME`, `UTIL`, `HEADROOM`, `BOOKED`), `FALLBACK_LIMITS`, `SECTION_LABEL`, `ca_plans.CAP_TEXT` and the full `propose_plans` composition logic were read line by line. Every statutory claim in every sentence was checked against FY 2025-26 (AY 2026-27, Finance Act 2025) law. The layer was then **live-probed** with the real deterministic engine (`tax_engine.TaxEngine`) over five synthetic client profiles (renter with nothing booked at 10L/13L/15L; education-loan client with no home loan; home-loan client with no education loan), inspecting both `fuzzy_ca.explain()` firing and `ca_plans.propose_plans()` output.
+
+**The honest limitation (read this first).** This validation was performed by a tax-domain model standing in for a practicing CA. It is **not** a licensed practitioner's sign-off. Statutory readings below are from the validator's model knowledge of the Finance Act 2025 position — they are *not* citations to the Act, and a real CA must re-verify each against the statute, the CBDT notifications, and the ITR utility behavior before this layer is exposed to clients. No real client file, no peer review, no professional liability attaches to this report. Everything below is a proxy's judgment, clearly labeled.
+
+**Evidence base for the plan findings** (profiles all ran against the real engine):
+
+| Profile | Facts | Outcome |
+|---|---|---|
+| A | 15L salary, rent Rs 3L/yr, nothing booked | old Rs 2,57,400 / new Rs 97,500 → 0 plans (gap unclosable) |
+| B | 10L salary, rent Rs 2.4L/yr | new tax = 0 (87A rebate) → 0 plans via the `paid_before <= 0` gate |
+| C | 13L salary, rent Rs 2.4L/yr | new Rs 25,000 (marginal relief correctly applied) → 0 plans |
+| D | 15L salary, 80E maxed, **no home loan** | Plan A = "Add Section 24(b) home-loan interest by Rs 2,00,000", savings Rs 63,700 |
+| E | 15L salary, 24(b) maxed, **no education loan** | Plan A = "Top up Section 80E education-loan interest by Rs 5,00,000", savings Rs 32,500 |
+
+Profiles D and E are the load-bearing findings; see Section 4.
+
+---
+
+## 2. Per-rule validation table (R01-R10)
+
+Verdicts are for the **sentence content** (statutory accuracy + practice realism + overpromise check). Band problems are flagged here and detailed in Section 3.
+
+| Rule | Verdict | Notes (CA-practice reading, FY 2025-26) |
+|---|---|---|
+| **R01** (87A rebate band) | **PASS-WITH-NOTES** | Statutory content is correct: new regime Rs 60,000 rebate zeroes tax up to Rs 12 lakh total income; Rs 12.75 lakh effective for salaried (Rs 75,000 standard deduction); marginal relief just above; old-regime band Rs 5 lakh / Rs 12,500. The "Price the levers before assuming they help" close is exactly the right discipline. Notes: (a) the LTCG 112A carve-out is a **new-regime** proviso — placed after both regimes it can be misread as applying to the old-regime rebate too; add "(new regime)" to that sentence. (b) The 87A rebate is for **resident** individuals — not stated; a non-resident at 9L gets a wrong expectation. (c) The band tail lets R01 fire weakly up to ~15L income (mu 0.25 vs the unenforced 0.35 floor — see §3); the hedge "may sit" keeps it honest, but the floor should be enforced. |
+| **R02** (80C maxed → NPS 80CCD(1B)) | **PASS** | This is exactly the sequencing a CA teaches: exhaust the flexible Rs 1.5L slot first, then the separate Rs 50,000 80CCD(1B) slot "over and above the 80C ceiling". Regime tags correct and load-bearing: 80CCD(1B) is old-regime only; under the new regime only the employer's 80CCD(2) counts. Condition composition (mid income + 80C maxed + NPS headroom) is the right trigger. Improvement: add the liquidity caveat — NPS Tier-I locks the money to age 60; a CA would put that trade-off on the table before saying "classic next lever". |
+| **R03** (80C fresh → PPF/ELSS) | **PASS-WITH-NOTES** | Correct, realistic, correctly tagged old-regime deduction. Note: 80C is much wider than PPF/ELSS — EPF, life/term premium, home-loan principal, children's tuition, SSY, NSC, 5-year tax-saver FD. A CA names the client-specific mix (e.g., "your EPF already books ~Rs 60k; top up the rest"). Suggest the sentence say "PPF or ELSS, or whatever mix fits — EPF and home-loan principal count too". Also all 80C items are on **payment during the year** (by 31 March) — worth one word ("invest by 31 March"). |
+| **R04** (80D fresh → health insurance) | **PASS** | The "tax lever and a protection gap at the same time — easiest yes" framing is genuinely how CAs pitch 80D. Correctly tagged old-regime. Improvement: the 80D fine print is where claims die — premium must be non-cash (except preventive check-up), preventive check-up sub-limit Rs 5,000 within the cap, Rs 50,000 band if self/parents are seniors, single-parent-son families can split. One clause noting non-cash payment would make it practice-real. |
+| **R05** (24(b) headroom) | **PASS-WITH-NOTES** | The new-regime statement is exactly right and is the most valuable sentence in the book: let-out interest survives the new regime **only against the rent**, excess house-property loss is neither set off against other heads nor carried forward, and the Rs 2 lakh self-occupied benefit is old-regime only. Notes: (a) the rule keys on `headroom_24b`, which exists even if the client has **no home loan** — a CA would never discuss 24(b) without an actual loan; the band happens to self-gate (fires only while headroom is 0.05-1.2L, i.e., when substantial interest is already booked), but that gate is an accident of geometry, not intent — gate explicitly on booked 24(b) / a loan flag. (b) 24(b) interest is an **actual paid**, not a contribution — the plan layer treats it as a top-up lever; see Section 4, finding P1 (critical). |
+| **R06** (rent paid → HRA) | **FAIL (band)** — sentence content itself is fine | The sentence is correct and well-hedged: Rule 2A least-of-three, old regime, and the 80GG fallback when salary has no HRA component. **But the band kills the rule for exactly the clients who need it.** `rent_paid_l` is read against the HEADROOM "some" band (0.05, 0.2, 0.6, 1.2), so membership is zero once annual rent exceeds ~Rs 1.2 lakh — i.e., **anyone paying more than ~Rs 10,000/month never gets the HRA note**. Empirically confirmed: Profile A (Rs 3L annual rent, metro-realistic) fired R03/R04/R10/R01 and *not* R06. Metro renters are the single largest HRA population (and rent > Rs 1L/yr is where landlord-PAN reporting bites). The condition needs its own scale (e.g., full membership for rent Rs 1.5L-6L/yr) or a dedicated RENT table. |
+| **R07** (80E booked) | **PASS** | Correct on all three statutory points: no monetary cap, deductible up to eight assessment years from the year of first interest payment, old-regime only (not allowed under 115BAC). Gating on `booked_80e is some` (interest actually being paid) is exactly the right design — this is the model the 24(b) rule should copy. Improvement: add payment-basis ("interest actually paid during the year") and that the loan must be for higher education from a prescribed lender. |
+| **R08** (high income, levers exhausted → regime pivot) | **PASS-WITH-NOTES** | The pivot to regime choice at high income with 80C/NPS/80D maxed is precisely the right CA conversation, and the let-out/80E statements are correct. Notes: (a) a CA at this income would also raise the one Chapter VI-A lever that survives the new regime — employer NPS 80CCD(2) at 14% of salary — plus capital-gains rate management and surcharge-threshold planning near Rs 50L/1cr/2cr/5cr; the sentence needn't cover all of it, but 80CCD(2) is a conspicuous omission in the "what survives" list. (b) The band again fires earlier than the stated floor (mu_high 0.33 at 30L vs 0.35 floor, unenforced) — harmless here, symptomatic generally (§3). |
+| **R09** (80TTB headroom, senior) | **PASS-WITH-NOTES** | Rs 50,000 for resident senior citizens on bank/post-office deposit interest is correct. **Missing regime tag — the only such gap in the book:** 80TTB is an old-regime deduction (115BAC retains only 80CCD(2) and 80JJAA from Chapter VI-A), yet the sentence carries no "(old regime only)" tag that every other deduction rule has. A new-regime senior reading this is misled. Add the tag. Also: binary `senior` flag routed through the UTIL "maxed" trapezoid works numerically (1.0 sits in the core) but is a semantic stretch — a dedicated boolean set would read cleaner in the rulebook. |
+| **R10** (80G untouched) | **PASS-WITH-NOTES** | The sentence is the most CA-like in the book — "worth using only if giving is already planned — never donate purely for the deduction" is exactly the honesty a practitioner brings to 80G, and "rate per donee" correctly signals the 100%/50% × qualifying-limit structure. But the band is internally inconsistent: `headroom_80g` can never exceed Rs 1.0 lakh (the 80G pseudo-cap), while HEADROOM "large" only reaches 1.0 at Rs 1.5L — so mu never exceeds **0.2857**, permanently below the rule's own stated 0.5 min-strength floor. Because floors are not enforced (§3), R10 still fires at ≤ 0.29 strength — so it is not dead code, but the rulebook as data misrepresents its own behavior: if floors were enforced as documented, R10 could never fire. Recalibrate the band to the pseudo-cap (e.g., "large" from 0.5L) or lift the 80G pseudo-cap. |
+
+**Summary:** 4 PASS, 5 PASS-WITH-NOTES, 1 FAIL (R06 — band misfire; sentence fine). No sentence contains a statutory error material to FY 2025-26 as far as this proxy can verify; the failures are in banding and composition, not in the law being quoted.
+
+---
+
+## 3. Membership-band assessment
+
+**INCOME** — `low (0,0,12,16)`, `mid (8,12,25,40)`, `high (25,40,∞,∞)`. Sensible: "low" core ends exactly at the Rs 12L rebate line; "mid" core (12-25L) is where Chapter VI-A planning actually lives; "high" ramps through 25-40L. One artifact: R01's condition at income 15L still gets mu 0.25 and fires at the 0.08 global threshold — the "may sit in a rebate band" hedge absorbs it, but see floors below.
+
+**UTIL** — `fresh (0,0,0.05,0.25)`, `partial (0.05,0.3,0.6,0.85)`, `maxed (0.8,0.95,1.01,1.01)`. Good design: the closed right shoulder at 1.01 absorbs booked > cap without saturating early; "maxed" reading full membership from 95% utilization is right for a 31-March planning context. The R09 binary-through-UTIL usage works but is a semantic stretch.
+
+**HEADROOM** — `none (0,0,0.02,0.1)`, `some (0.05,0.2,0.6,1.2)`, `large (0.8,1.5,∞,∞)`. Calibrated for Rs 1.5L-scale contribution caps and correct there (e.g., NPS headroom 0.5L at fresh → mu_some = 1.0). Three misfits:
+
+1. **R10 / 80G pseudo-cap Rs 1L vs "large" ≥ 1.5L** — membership caps at 0.2857, permanently below the rule's own 0.5 floor. (R10's headline inconsistency.)
+2. **R06 / rent_paid_l vs HEADROOM "some"** — rent above ~Rs 1.2L/yr gets mu 0; metro renters (the core HRA population) never fire. The only outright band FAILURE. `rent_paid` is not a headroom and should not ride a headroom table.
+3. **80d_parents** — FALLBACK 25k vs `tax_intelligence.LIMITS` 50k. This is documented and test-pinned as an intentional non-senior default, and production (main.py) passes LIMITS with 50k, so prod features are consistent. Flag only: a client with senior parents books against a 50k cap and the fallback layer understates headroom by 25k if ever called with FALLBACK_LIMITS.
+
+**BOOKED** — `none (0,0,0.02,0.1)`, `some (0.1,0.3,∞,∞)`. Correct and used exactly where it matters (R07): interest actuals gate on "is there a loan at all".
+
+**The systemic finding — min-strength floors are not enforced.** `_rule_strength` accumulates per-condition floors into a `failed` list that `explain()` discards (the variable is literally `_failed`); firing is governed only by the global 0.08 threshold on the product of memberships. The rendered rulebook therefore documents gating ("min strength") that does not happen. Consequences visible in probes: R01 fires at 15L (0.25 < 0.35), R08 fires at 30L (0.333 < 0.35), R10 fires forever at 0.2857 (< 0.5). Either enforce the floors in `explain()` (one-line change, restores the documented semantics) or remove them from the data structure so the audit artifact doesn't lie. Enforcing is recommended — it also fixes the R01 tail for free.
+
+---
+
+## 4. Plan-composition assessment (what a CA would add)
+
+**What the composition gets right (and a CA would endorse):**
+
+- **One engine recomputation per plan; savings = cheaper-regime delta.** Matches how a CA presents "after these moves your liability becomes X" — the number is a recomputation, not an extrapolation, and the ADR-001-style independence test pins it.
+- **The combination plan is priced as ONE recomputation, explicitly documented as non-additive** ("levers interact through the regime choice"). This is correct and is the difference between an estimator and a calculator. Empirically: in Profile D the 80C single saves Rs 22,100 and the 24(b) single Rs 32,500, but the combined plan saves Rs 63,700 — more than the sum, because the combo flips the optimal regime.
+- **The `paid_before <= 0` gate** declines to propose anything when tax is already zero (verified: 10L salary → new-regime tax 0 under the FY 2025-26 87A position → no plans). Honest.
+- **`regime_switch` is excluded from priced levers** — right call; a regime comparison is a presentation, not a contribution.
+- **Step sentences carry the statutory cap text and the fired rule's "why"** — the explainability lineage from note to plan step is genuinely good. CAP_TEXT itself checked out statutory-accurate for all 13 heads for FY 2025-26 (80DDB tiering with Form 10-I, 80EEA sunset window, 24(b) let-out treatment, 80U/80DD flat tiers, 80TTA/80TTB resident/senior split).
+
+**What fails CA practice — findings, in severity order:**
+
+- **P1 (critical) — Phantom actuals: the layer proposes "top-ups" of interest the client never paid.** `open_heads` treats every head in the limits dict as a contribution lever with a top-up delta. But 24(b) and 80E are **actuals** — amounts paid under an existing loan — not investments one can choose to increase. Live evidence: Profile D (education loan, **no home loan**) gets Plan A "Add Section 24(b) (home-loan interest) by Rs 2,00,000", engine-priced at Rs 63,700 savings; Profile E (home loan, **no education loan**) gets Plan A "Top up Section 80E (education-loan interest) by Rs 5,00,000", savings Rs 32,500. Both plans ask the client to claim a deduction to which they are **not entitled** — priced and ranked first. This is not a presentation nit; it is the difference between planning and abetment of a wrong claim. Fix: partition heads into **contribution heads** (80c, 80d, 80d_parents, nps — and 80g only if giving is declared) and **actuals** (24b, 80e, 80tta, 80ttb); actuals must never be proposed as top-up levers. At most, surface them as "already claimable — confirm the booked figure".
+- **P2 — 80G as a priced top-up contradicts R10's own sentence.** R10 says "never donate purely for the deduction"; the plan layer will price "Top up Section 80G by Rs 1,00,000" whenever tax survives and 80G is open. The engine defaults an absent `80g_category` to the 50%-with-qualifying-limit class, so the priced savings embeds a donation category the user never chose and a giving intent R10 just warned against. 80G should be advisory-only (no lever) unless the user declares an intended donation and its donee category.
+- **P3 — The plan flips the regime without saying so.** In Profile D the combined plan's savings exist only because the optimal regime flips new → old; the output never states which regime won before or after. A CA would headline that: "this plan only pays off if you move to the old regime — here is the comparison". The pricing layer knows this; the plan object should carry `regime_before` / `regime_after`.
+- **P4 — Zero-plan silence.** Under FY 2025-26 the new regime dominates most 12-15L profiles (rebate + marginal relief verified at 10L and 13L), so typical sessions get `ca_notes` recommending levers and `ca_plans` returning an empty list with no explanation. A CA would say why: "you belong on the new regime; these deductions only matter if the old-regime math wins (large education-loan or home-loan interest, or HRA)". Emit a one-line no-plan reason (regime-gap statement) instead of `[]`.
+- **P5 — What's missing for it to feel like real CA advice:** (a) **liquidity/lock-in and suitability annotations** per step — ELSS 3y, PPF 15y, NPS to age 60, insurance subject to underwriting; ranking purely by rupees saved means the ranking is effectively "largest cap first" with no suitability weighting; (b) **documentation checklist** — rent receipts and landlord PAN where annual rent exceeds Rs 1 lakh, 80G receipts with donee category and the Rs 2,000 cash cap, Form 10-I (already correctly in CAP_TEXT for 80DDB), lender certificate for 80E; (c) **payment-basis timing** — Chapter VI-A items generally must be paid by 31 March; (d) **the new-regime lever set** — employer 80CCD(2) and the standard deduction are the levers that survive; the plan layer never names them; (e) a **"max out everything" reference plan** — a CA would price the full-book scenario, not only singles plus one pair; (f) **marginal-rate context** in the step text ("each rupee here saves ~30p at your slab") so the client can sanity-check the engine number; (g) **advance-tax pacing** for material plans.
+
+**Net:** the architecture (proposes / prices / recomputes) is the right division of labor and the honesty gates are real, but P1 must be fixed before any client-facing exposure — as written, the pricing engine's completeness (it will book any number it is handed) is weaponized by the proposer into impossible advice for the two most common loan situations.
+
+---
+
+## 5. Overall verdict + what real-CA validation must still cover
+
+**Overall.** The authored rule base is, sentence by sentence, statutory-accurate for FY 2025-26 as far as this proxy can verify, consistently regime-tagged (one gap: R09), honest about uncertainty, and reads like practitioner reasoning rather than marketing — R01's "price the levers before assuming they help" and R10's "never donate purely for the deduction" are exactly the discipline a CA brings. The failures are structural, not textual: one band kills R06's core population, the documented floors are not enforced, and the plan layer converts interest actuals into contribution levers (P1) and contradicts the rule base's own 80G ethics (P2).
+
+**What real-CA validation must still cover (this proxy cannot close these):**
+
+1. Re-verification of every statutory statement against the Finance Act 2025 text, the updated 115BAC/87A language, and the actual ITR/portal behavior (especially the 87A-versus-112A interaction and marginal relief arithmetic at 12-13L) — with citations, which this report deliberately does not fabricate.
+2. Confirm FY 2026-27 (current-year) slab/rebate handling is out of scope of these rules and decide whether the rulebook needs a year-pinned disclaimer.
+3. Suitability and lock-in language: whether NPS/ELSS/PPF lock-in caveats, insurance underwriting, and documentation checklists belong in the rule sentences or a separate disclosure layer — a practitioner's sign-off question, not a coding one.
+4. Client-facing tone review: the sentences are dense (multi-clause, heavy regime parentheticals); a real CA should judge readability for the actual client base.
+5. The no-plan UX (P4) and regime-attribution presentation (P3): what a CA would actually say when the answer is "stay on the new regime, do nothing here".
+6. Senior/parent edge assumptions (80D senior-parent cap selection, 80DDB patient-age proxy) and 80G category defaults — each currently an embedded assumption a practitioner should confirm or annotate.
+7. A professional-advice disclaimer decision: nothing in this system should present as CA advice without one; the rulebook's voice is authoritative enough to need it.
+
+**VERDICT: CHANGES-REQUIRED** (as judged from a CA practice standpoint).
+
+The rule sentences themselves would earn APPROVE-WITH-NITS (fix R09's regime tag, sharpen R01's 112A attribution and residency, widen R03/R04 wording). The blocker is compositional: phantom-actual top-ups (P1), the 80G contradiction (P2), the R06 rent band, and the unenforced floors. Fix those four and re-run this validation before the layer faces a client.

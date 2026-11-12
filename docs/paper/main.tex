@@ -248,11 +248,22 @@ averaged over categories) of 1.000 across 21 categories on the
 and clears the $\geq 95\%$ certification gate on every income head and
 major section (Table~\ref{tab:nlp}). The research layer's intent
 classifier, a bag-of-words linear model over 8 intents, sits at
-96.41\%. A sequence-labeling network trained on only 51 templated
-samples reaches 0.143 entity accuracy, nowhere near usable, so it
-never entered the product. The training-set size is the limiting
-factor here rather than the architecture, and widening the template
-coverage is left as future work.
+96.41\%. A sequence-labeling network (BiLSTM) reached what the early
+evaluator reported as 0.143 entity accuracy --- a number that later
+turned out not to be an accuracy at all: auditing the evaluator while
+expanding the template grammar showed the label encoding collapsed every entity tag to the
+outside class, the training loss diverged to NaN because every token
+was then ignored, and the reported figure was the softmax confidence
+of the resulting dead model, with per-class metrics synthesized from
+entity counts. After fixing the label encoding, building a
+deterministic corpus vocabulary, adding gradient clipping, and
+expanding the template grammar (six multi-entity sentence families),
+the same architecture measures 91.4\% token accuracy with a macro-F1
+of 0.756 across the six entity types. The corrected model remains
+research-track only --- deterministic extraction still serves
+production --- but the episode sharpened a policy this paper keeps
+returning to: an evaluator is code, and code can be quietly wrong in
+the direction of whatever number everyone already believed.
 
 \begin{table}[t]
 \caption{Language-layer evaluation (template-disjoint splits).}

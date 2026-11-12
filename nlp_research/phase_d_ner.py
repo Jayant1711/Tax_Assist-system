@@ -38,327 +38,18 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 # 1. NER label schema (6 entity types + "O")
 # ---------------------------------------------------------------------------
 
-NER_CLASSES = ["MONEY", "TAX_SECTION", "INCOME_TYPE", "DEDUCTION_TYPE", "DATE", "PERCENTAGE"]
-# Label mapping: 0-5 for the 6 entity types, 6 for "O" (outside)
-NER_TO_IDX = {c: i for i, c in enumerate(NER_CLASSES)}
-NER_TO_IDX["O"] = len(NER_CLASSES)  # index 6 = "O"
-IDX_TO_NER = {i: c for i, c in enumerate(NER_CLASSES)}
-IDX_TO_NER[6] = "O"
-N_CLASSES = len(NER_CLASSES) + 1  # +1 for "O"
-
-
-# ---------------------------------------------------------------------------
-# 2. NER regex patterns (rule-based / gold label extraction)
-# ---------------------------------------------------------------------------
-
-MONEY_RE = re.compile(r"\b[\d,]+(?:\.\d+)?\s*(?:lakh|lac|thousand|hundred|rupees?|rs?\.?|emi)?\b",
-                      re.IGNORECASE)
-TAX_SECTION_RE = re.compile(
-    r"\b(?:80[cdegg]|24[bbl]|80u[_-]?80dd|80ddb|80eea|nps|hra|pf|tds)\b",
-    re.IGNORECASE)
-INCOME_TYPE_RE = re.compile(
-    r"\b(salary|business|capital_gains|rental|rent|agriculture|other_income|income)\b",
-    re.IGNORECASE)
-DEDUCTION_TYPE_RE = re.compile(
-    r"\b(?:80[cdegg]|24[bbl]|80u[_-]?80dd|80ddb|80eea|nps)\b",
-    re.IGNORECASE)
-DATE_RE = re.compile(
-    r"\b(?:\d{1,2}(?:st|nd|rd|th)?\s*(?:of\s*)?[a-z]+\s*\d{4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|"
-    r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]?\s\d{1,2}|\d{1,2}\s"
-    r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]?\s?\b)",
-    re.IGNORECASE)
-PERCENT_RE = re.compile(
-    r"\b\d+(?:\.\d+)?\s*%?\s*(?:percent|per\.?\s*cent)?\b",
-    re.IGNORECASE)
-
-
-def extract_entities_rule(text: str) -> dict[str, list[str]]:
-    """Rule-based NER extraction — produces the 'gold' labels for training data."""
-    result: dict[str, list[str]] = {c: [] for c in NER_CLASSES}
-
-    # MONEY — amounts with optional Indian grouping
-    for m in MONEY_RE.finditer(text):
-        result["MONEY"].append(m.group())
-
-    # TAX_SECTION — section numbers/references
-    for m in TAX_SECTION_RE.finditer(text):
-        result["TAX_SECTION"].append(m.group())
-
-    # INCOME_TYPE — income category words
-    for m in INCOME_TYPE_RE.finditer(text):
-        result["INCOME_TYPE"].append(m.group())
-
-    # DEDUCTION_TYPE — deduction section references
-    for m in DEDUCTION_TYPE_RE.finditer(text):
-        result["DEDUCTION_TYPE"].append(m.group())
-
-    # DATE — date expressions
-    for m in DATE_RE.finditer(text):
-        result["DATE"].append(m.group())
-
-    # PERCENTAGE — percent values
-    for m in PERCENT_RE.finditer(text):
-        result["PERCENTAGE"].append(m.group())
-
-    return result
-
-
-# ---------------------------------------------------------------------------
-# 3. Deterministic NER corpus generation (template-driven, seed=472)
-#    We hand-craft sentences that guarantee each entity type appears.
-# ---------------------------------------------------------------------------
-
-# Fixed word lists per entity type (drawn from seed vocabulary)
-MONEY_WORDS = ["1 lakh", "1,25,000", "50,000", "25k", "10000", "15000", "5 lakhs", "1.5 lakh"]
-TAX_SECTION_WORDS = ["80c", "80d", "80g", "80u_80dd", "24b", "80ddb", "80eea", "nps"]
-INCOME_WORDS = ["salary", "business income", "capital gains", "rental income", "agriculture income"]
-DEDUC_WORDS = ["80c", "80d", "80g", "80u_80dd", "24b"]
-DATE_WORDS = ["1 april 2024", "30 june 2024", "15 january 2024", "01-01-2024", "march 2024"]
-PERCENT_WORDS = ["30%", "5.5%", "10 percent", "7.5 percent", "20%"]
-
-
-def generate_ner_corpus(num_samples: int = 500) -> list[dict]:
-    """Generate a deterministic NER corpus with guaranteed entity coverage.
-
-    Each sample has text and entities annotated in BIO-friendly format.
-    Corpus is seed-seeded for 100% viva reproducibility.
-    """
-    rng = np.random.default_rng(SEED)
-
-    # Entity-type -> (pattern words, template family)
-    entity_families = {
-        "MONEY": {
-            "words": MONEY_WORDS,
-            "templates": [
-                "my {0} is {1} rupees",
-                "i paid {0} as {2}",
-                "the {0} amount is {1}",
-                "claiming {0} of {1}",
-            ],
-        },
-        "TAX_SECTION": {
-            "words": TAX_SECTION_WORDS,
-            "templates": [
-                "under {0} section",
-                "deduction under {0}",
-                "as per {0}",
-                "section {0} allows",
-            ],
-        },
-        "INCOME_TYPE": {
-            "words": INCOME_WORDS,
-            "templates": [
-                "my {0} income is {1}",
-                "i earn {0} of {1}",
-                "reported {0} in the form",
-            ],
-        },
-        "DEDUCTION_TYPE": {
-            "words": DEDUC_WORDS,
-            "templates": [
-                "claiming {0} under {1}",
-                "eligible for {0}",
-                "under {0} i get",
-            ],
-        },
-        "DATE": {
-            "words": DATE_WORDS,
-            "templates": [
-                "as on {0}",
-                "for the year {0}",
-                "effective from {0}",
-            ],
-        },
-        "PERCENTAGE": {
-            "words": PERCENT_WORDS,
-            "templates": [
-                "{0} percent tax",
-                "rate of {0}%",
-                "my {0} of income",
-            ],
-        },
-    }
-
-    out: list[dict] = []
-    # Ensure we get at least one sample per entity type
-    min_per_type = max(1, num_samples // (len(entity_families) * 2))
-
-    for etype, cfg in entity_families.items():
-        words = cfg["words"]
-        templates = cfg["templates"]
-
-        for _ in range(min_per_type):
-            word = rng.choice(words)
-            t = rng.choice(templates)
-
-            try:
-                # Simple formatting: replace {} with the word
-                text = t.format(word)
-            except Exception:
-                continue
-
-            # Extract the gold entities from the text using rule-based extraction
-            entities: list[dict] = []
-            lower_text = text.lower()
-
-            if etype == "MONEY":
-                # Match amounts like "1 lakh", "1,25,000", etc.
-                for w in words:
-                    if w.lower() in lower_text:
-                        entities.append({"span": w, "label": "MONEY"})
-                        break
-
-            elif etype == "TAX_SECTION":
-                for w in words:
-                    if w.lower() in lower_text:
-                        entities.append({"span": w, "label": "TAX_SECTION"})
-                        break
-
-            elif etype == "INCOME_TYPE":
-                for w in words:
-                    if w.lower() in lower_text:
-                        entities.append({"span": w, "label": "INCOME_TYPE"})
-                        break
-
-            elif etype == "DEDUCTION_TYPE":
-                for w in words:
-                    if w.lower() in lower_text:
-                        entities.append({"span": w, "label": "DEDUCTION_TYPE"})
-                        break
-
-            elif etype == "DATE":
-                for w in words:
-                    if w.lower() in lower_text:
-                        entities.append({"span": w, "label": "DATE"})
-                        break
-
-            elif etype == "PERCENTAGE":
-                for w in words:
-                    if w.lower() in lower_text:
-                        entities.append({"span": w, "label": "PERCENTAGE"})
-                        break
-
-            if not entities:
-                continue
-
-            out.append({"text": text, "entities": entities})
-
-    # Fill remaining slots with mixed templates
-    all_words = []
-    for cfg in entity_families.values():
-        all_words.extend(cfg["words"])
-
-    while len(out) < num_samples:
-        etype = rng.choice(list(entity_families.keys()))
-        cfg = entity_families[etype]
-        word = rng.choice(cfg["words"])
-        t = rng.choice(cfg["templates"])
-
-        try:
-            text = t.format(word)
-        except Exception:
-            continue
-
-        entities = extract_entities_rule(text)  # rule-based gold labels
-        if not any(entities[c] for c in NER_CLASSES):
-            continue
-
-        flat: list[dict] = []
-        for label, spans in entities.items():
-            for s in spans:
-                flat.append({"span": s, "label": label})
-
-        out.append({"text": text, "entities": flat})
-
-    # Deduplicate by text
-    seen = set()
-    uniq = []
-    for item in out:
-        key = item["text"][:80]  # first 80 chars
-        if key not in seen:
-            seen.add(key)
-            uniq.append(item)
-
-    return uniq[:num_samples]
-
-
-# ---------------------------------------------------------------------------
-# 4. NER data preprocessing: convert entity dicts to BIO tagging scheme
-# ---------------------------------------------------------------------------
-
-def entities_to_bio(text: str, entities: list[dict]) -> list[str]:
-    """Convert entity spans to BIO tagging scheme for each word in the text.
-
-    Returns a list of tags (one per word/token), e.g.
-    ['O', 'B-MONEY', 'I-MONEY', 'O', 'B-PERCENTAGE', ...]
-    """
-    # Simple word tokenization
-    tokens = re.findall(r"[a-z0-9]+(?:['-][a-z0-9]+)*", text.lower())
-    if not tokens:
-        return ["O"] * 2
-
-    tags = ["O"] * len(tokens)
-
-    for ent in entities:
-        span = ent["span"]
-        label = ent["label"]
-        lower_text = text.lower()
-        start = lower_text.find(span.lower())
-        if start < 0:
-            continue
-        end = start + len(span)
-
-        # Find token indices covering this range
-        tok_start = -1
-        tok_end = -1
-        pos = 0
-        for i, tok in enumerate(tokens):
-            tok_start_pos = pos
-            tok_end_pos = pos + len(tok)
-            if tok_start == -1 and tok_start_pos <= start < tok_end_pos:
-                tok_start = i
-            if tok_start >= 0 and tok_end_pos <= end:
-                tok_end = i
-            if tok_start >= 0 and tok_end >= 0:
-                break
-            pos = tok_end_pos
-
-        if tok_start < 0 or tok_end < 0:
-            continue
-
-        # Set BIO tags
-        if tok_start == tok_end:
-            tags[tok_start] = f"B-{label}"
-        else:
-            tags[tok_start] = f"B-{label}"
-            for i in range(tok_start + 1, tok_end + 1):
-                tags[i] = f"I-{label}"
-
-    return tags
-
-
-def prepare_ner_dataset(corpus: list[dict]) -> tuple[list, list]:
-    """Prepare features and labels for the BiLSTM NER model.
-
-    Returns X (list of token index sequences) and y (list of label index sequences).
-    """
-    X, y = [], []
-    for sample in corpus:
-        text = sample["text"]
-        entities = sample["entities"]
-        bio_tags = entities_to_bio(text, entities)
-        # Map tokens to hashes (fixed small vocab for demo)
-        tokens = re.findall(r"[a-z0-9]+", text.lower())
-        token_ids = [hash(t) % 500 for t in tokens[:20]]  # max 20 tokens per doc
-        label_ids = [NER_TO_IDX.get(t, NER_TO_IDX["O"]) for t in bio_tags[:20]]
-        X.append(token_ids)
-        y.append(label_ids)
-    return X, y
-
-
-# ---------------------------------------------------------------------------
-# 5. BiLSTM NER model (PyTorch, from scratch)
-# ---------------------------------------------------------------------------
+# Sprint 7 S7.5: the torch-free corpus half lives in phase_d_corpus.py
+# (label schema, gold extraction, template corpus, BIO encoding, dataset
+# prep) so it can be imported and regression-tested on machines where
+# torch is blocked.
+from phase_d_corpus import (  # noqa: E402
+    BIO_LABELS, BIO_TO_IDX, BOOKED, DATE_RE, DATE_WORDS, DEDUC_WORDS,
+    DEDUCTION_TYPE_RE, HEADROOM, INCOME_TYPE_RE, INCOME_WORDS, MONEY_RE,
+    MONEY_WORDS, N_CLASSES, NER_CLASSES, O_IDX, PERCENT_RE, PERCENT_WORDS,
+    TAX_SECTION_RE, TAX_SECTION_WORDS, UTIL, entities_to_bio,
+    extract_entities_rule, generate_ner_corpus, prepare_ner_dataset,
+    seeded_split,
+)
 
 import torch
 import torch.nn as nn
@@ -407,13 +98,18 @@ def train_ner_model(
     X_val: list | None = None,
     y_val: list | None = None,
     epochs: int = 8,
-    lr: float = 1e-3,
+    lr: float = 5e-4,
+    vocab_size: int = 500,
 ) -> BiLSTM_NER:
-    """Train the BiLSTM NER model."""
+    """Train the BiLSTM NER model.
 
-    model = BiLSTM_NER(vocab_size=500, embed_dim=128, hidden_dim=256, num_classes=N_CLASSES)
+    Sprint 7 S7.5 hygiene: gradient clipping (the baseline diverged to
+    NaN loss at epoch 7 — accuracy 0.143 was a dead model) and a saner
+    default lr."""
+
+    model = BiLSTM_NER(vocab_size=vocab_size, embed_dim=128, hidden_dim=256, num_classes=N_CLASSES)
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.CrossEntropyLoss(ignore_index=NER_TO_IDX["O"])
+    criterion = nn.CrossEntropyLoss(ignore_index=-100)
 
     model.train()
     for epoch in range(epochs):
@@ -431,13 +127,13 @@ def train_ner_model(
                 continue
 
             padded_X = np.zeros((len(batch_X), max_len), dtype=np.int64)
-            padded_y = np.full((len(batch_y), max_len), NER_TO_IDX["O"], dtype=np.int64)
+            padded_y = np.full((len(batch_y), max_len), -100, dtype=np.int64)
 
             for i, seq in enumerate(batch_X):
                 for j, tid in enumerate(seq):
                     if j < max_len:
-                        padded_X[i, j] = min(tid, 499)
-                        padded_y[i, j] = batch_y[i][j] if j < len(batch_y[i]) else NER_TO_IDX["O"]
+                        padded_X[i, j] = tid
+                        padded_y[i, j] = batch_y[i][j] if j < len(batch_y[i]) else -100
 
             inputs = torch.from_numpy(padded_X)
             targets = torch.from_numpy(padded_y)
@@ -455,6 +151,9 @@ def train_ner_model(
                 print(f"  WARNING: NaN/Inf loss at epoch {epoch}, batch {batch_start}")
 
             loss.backward()
+            # Sprint 7 S7.5 hygiene: clip gradients — the baseline diverged
+            # to NaN without this
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             total_loss += loss.item()
 
@@ -498,60 +197,65 @@ def train_ner_model(
 # 7. Evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate_ner(model: BiLSTM_NER, X_test: list, y_test: list) -> dict:
-    """Evaluate NER model and return results dict."""
+def evaluate_ner(model: BiLSTM_NER, X_test: list, y_test: list,
+                 vocab_size: int = 500) -> dict:
+    """Evaluate the NER model for REAL.
+
+    Sprint 7 S7.5 fix: the previous evaluator never touched the test
+    set — it reported a softmax confidence as "accuracy" and computed
+    per-class precision from entity COUNTS (a fabricated metric). This
+    evaluator computes honest token-level accuracy and per-class
+    precision/recall/F1 of model predictions against the gold BIO tags.
+    """
     model.eval()
-    # Quick forward pass to verify model works
-    try:
-        with torch.no_grad():
-            if X_test:
-                inp = torch.from_numpy(np.array(X_test[0]).reshape(1, -1)).long()
-                if inp.max() < 500:
-                    logits = model(inp)
-                    probs = torch.softmax(logits, dim=-1)
-                    avg_confidence = float(probs.mean())
-                else:
-                    avg_confidence = 0.0
-            else:
-                avg_confidence = 0.0
-    except Exception:
-        avg_confidence = 0.0
+    correct = 0
+    total = 0
+    tp: dict[str, int] = {c: 0 for c in NER_CLASSES}
+    fp: dict[str, int] = {c: 0 for c in NER_CLASSES}
+    fn: dict[str, int] = {c: 0 for c in NER_CLASSES}
 
-    # Compute per-class stats from the rule-based entities
-    # that appear in a quick scan of the corpus records
+    with torch.no_grad():
+        for x_seq, y_seq in zip(X_test, y_test):
+            if not x_seq:
+                continue
+            inp = torch.from_numpy(
+                np.array(x_seq, dtype=np.int64).reshape(1, -1)).long()
+            logits = model(inp)
+            pred = logits.argmax(dim=-1)[0].tolist()
+            gold = list(y_seq)[:len(pred)]
+            for j, g in enumerate(gold):
+                p = pred[j]
+                total += 1
+                if p == g:
+                    correct += 1
+                gold_tag = BIO_LABELS[g] if g < len(BIO_LABELS) else "O"
+                pred_tag = BIO_LABELS[p] if p < len(BIO_LABELS) else "O"
+                for cls in NER_CLASSES:
+                    g_pos = gold_tag.endswith(cls) and gold_tag != "O"
+                    p_pos = pred_tag.endswith(cls) and pred_tag != "O"
+                    if g_pos and p_pos:
+                        tp[cls] += 1
+                    elif p_pos and not g_pos:
+                        fp[cls] += 1
+                    elif g_pos and not p_pos:
+                        fn[cls] += 1
+
+    accuracy = round(correct / total, 4) if total else 0.0
     per_class = {}
-    entity_counts: dict[str, int] = {cls: 0 for cls in NER_CLASSES}
-    total_entities = 0
-
-    for sample in corpus_records()[:200]:  # quick check
-        text = (sample.get("text") or sample.get("utterance") or "")
-        if not text:
-            continue
-        for ent in sample.get("spans") or []:
-            cat = ent.get("category", "")
-            if cat in entity_counts:
-                entity_counts[cat] += 1
-                total_entities += 1
-
     for cls in NER_CLASSES:
-        cnt = entity_counts.get(cls, 0)
-        if cnt > 0:
-            # Rough approximation: more entities = better perceived performance
-            prec = round(min(0.95, 0.5 + cnt * 0.02), 3)
-            rec = round(min(0.95, 0.5 + cnt * 0.02), 3)
-            f1 = round(2 * prec * rec / max(prec + rec, 1e-6), 3)
-        else:
-            prec = rec = f1 = 0.0
-        per_class[cls] = {"precision": prec, "recall": rec, "f1": f1, "support": cnt}
-
-    macro_f1 = round(
-        sum(pc["f1"] for pc in per_class.values()) / len(NER_CLASSES), 3
-    )
-
+        prec = tp[cls] / (tp[cls] + fp[cls]) if (tp[cls] + fp[cls]) else 0.0
+        rec = tp[cls] / (tp[cls] + fn[cls]) if (tp[cls] + fn[cls]) else 0.0
+        f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) else 0.0
+        per_class[cls] = {"precision": round(prec, 3), "recall": round(rec, 3),
+                          "f1": round(f1, 3),
+                          "support": tp[cls] + fn[cls]}
+    macro_f1 = round(sum(pc["f1"] for pc in per_class.values())
+                     / len(NER_CLASSES), 3)
     return {
-        "accuracy": round(avg_confidence, 3),
+        "accuracy": accuracy,
         "macro_f1": macro_f1,
         "per_class": per_class,
+        "tokens_evaluated": total,
     }
 
 
@@ -577,11 +281,11 @@ def run_phase_d(num_samples: int = 500, epochs: int = 8) -> dict:
     print(f"  Entity types found in corpus: {', '.join(sorted(types_found))}")
 
     print("Preparing training/development dataset...")
-    X, y = prepare_ner_dataset(corpus)
-    # Split train/test (80/20)
-    split_idx = int(0.8 * len(X))
-    X_train, X_test = X[:split_idx], X[split_idx:]
-    y_train, y_test = y[:split_idx], y[split_idx:]
+    X, y, vocab = prepare_ner_dataset(corpus)
+    # Sprint 7 S7.5: seeded shuffle before the split — the corpus is
+    # family-ordered, so a sequential 80/20 split starved the test set
+    # of whole entity families (TAX_SECTION support was 0)
+    X_train, X_test, y_train, y_test = seeded_split(X, y)
 
     print(f"  Train samples: {len(X_train)}, Test samples: {len(X_test)}")
 
@@ -590,10 +294,11 @@ def run_phase_d(num_samples: int = 500, epochs: int = 8) -> dict:
         print("  Consider increasing num_samples")
 
     print("Training BiLSTM NER model...")
-    model = train_ner_model(X_train, y_train, epochs=epochs, lr=1e-3)
+    model = train_ner_model(X_train, y_train, epochs=epochs,
+                            vocab_size=len(vocab))
 
     print("Evaluating NER model...")
-    results = evaluate_ner(model, X_test, y_test)
+    results = evaluate_ner(model, X_test, y_test, vocab_size=len(vocab))
 
     # Write report
     report_path = ARTIFACTS_DIR / "NER_REPORT.md"
@@ -621,8 +326,9 @@ def run_phase_d(num_samples: int = 500, epochs: int = 8) -> dict:
     lines.append("- **BiLSTM** with embedding layer (128-dim)")
     lines.append("- **Hidden dimension:** 256 (bidirectional)")
     lines.append("- **Output:** NER tag per token (BIO scheme, 6 entity types + O)")
-    lines.append("- **Optimizer:** Adam, lr=1e-3")
-    lines.append("- **Loss:** Cross-entropy with ignore_index for 'O' tags")
+    lines.append("- **Optimizer:** Adam, lr=5e-4, gradient clipping at 1.0")
+    lines.append(f"- **Vocabulary:** {len(vocab)} corpus-built entries (deterministic; replaces the randomized hash() mapping)")
+    lines.append("- **Loss:** Cross-entropy; padding ignored (-100), real 'O' tokens supervised")
     lines.append("")
 
     lines.append("## Evaluation Results")

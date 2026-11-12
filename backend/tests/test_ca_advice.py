@@ -224,8 +224,11 @@ class TestPlanPricing:
 # ---------------------------------------------------------------------------
 
 class TestFiringSemantics:
-    def test_threshold_boundary_is_inclusive_and_floors_are_advisory(
+    def test_threshold_boundary_inclusive_and_floors_gate(
             self, monkeypatch) -> None:
+        """Sprint 7 validator fix: per-condition floors are HARD gates
+        (they were decorative, so R01 fired at 15L income and R10 at
+        any income). The threshold remains >= inclusive."""
         import math
 
         import fuzzy_ca
@@ -243,12 +246,35 @@ class TestFiringSemantics:
         assert fuzzy_ca.explain(
             s, {}, threshold=math.nextafter(1.0, math.inf)) == []
 
-        # the condition's floor (0.99) is advisory: mu = 0.75 < floor,
-        # yet the rule fires at the default threshold
+        # the condition's floor (0.99) now GATES: mu = 0.75 < floor ->
+        # the rule does not fire at all, even below the threshold
         s2 = {"id": "p", "salary": 2_875_000}  # mid mu = 0.75 (falling edge)
-        notes = fuzzy_ca.explain(s2, {}, threshold=0.5)
-        assert [n["rule_id"] for n in notes] == ["RX"]
-        assert notes[0]["strength"] == 0.75
+        assert fuzzy_ca.explain(s2, {}, threshold=0.5) == []
+
+    def test_floors_gate_r01_at_15l(self) -> None:
+        """The validator's concrete case: R01 (87A rebate band) must not
+        fire at 15L income — the band ends around 12.75L effective."""
+        import fuzzy_ca
+
+        notes = fuzzy_ca.explain({"id": "p", "salary": 1_500_000},
+                                 fuzzy_ca.FALLBACK_LIMITS)
+        assert all(n["rule_id"] != "R01" for n in notes)
+        # ...and still fires inside the band
+        notes12 = fuzzy_ca.explain({"id": "p", "salary": 1_000_000},
+                                   fuzzy_ca.FALLBACK_LIMITS)
+        assert any(n["rule_id"] == "R01" for n in notes12)
+
+    def test_r06_fires_at_metro_rent(self) -> None:
+        """The validator's R06 band bug: rent was read against the
+        HEADROOM scale, which zeroed out above Rs 1.2L — metro renters
+        never got the HRA note. It now has its own scale."""
+        import fuzzy_ca
+
+        notes = fuzzy_ca.explain({"id": "p", "salary": 1_500_000,
+                                  "rent_paid": 300_000},
+                                 fuzzy_ca.FALLBACK_LIMITS)
+        assert any(n["rule_id"] == "R06" and "hra" in n["levers"]
+                   for n in notes)
 
     def test_known_answers_r01_r06_r08_r09_r10(self) -> None:
         import fuzzy_ca
@@ -322,7 +348,9 @@ class TestFiringSemantics:
                 old, new = self.prices[key]
                 o, n = _R(), _R()
                 o.total_tax, n.total_tax = old, new
-                return {"old_regime": o, "new_regime": n}
+                return {"old_regime": o, "new_regime": n,
+                        "recommendation": ("Old Regime" if old < new
+                                           else "New Regime")}
 
         engine = _StubEngine({
             (150_000, 0, 0): (100_000.0, 120_000.0),
@@ -339,6 +367,102 @@ class TestFiringSemantics:
         assert "(combined)" not in plans[0]["name"]
         savings = [p["savings_engine"] for p in plans]
         assert savings == sorted(savings, reverse=True) and savings[0] > 0
+
+
+class TestApplyPlanEndpoint:
+    """Sprint 7: whole-plan apply — server-side clamps, one reprice."""
+
+    def test_apply_plan_books_levers_and_reprices(self) -> None:
+        import json as _json
+        import db as db_mod
+        from fastapi.testclient import TestClient
+
+        from main import app
+
+        previous_cwd = os.getcwd()
+        client = None
+        sid = None
+        try:
+            os.chdir(BACKEND_DIR)
+            db_mod.init_db()
+            client = TestClient(app)
+            email = register_and_login(client)
+            sid = make_session(client)
+            for msg in ["I am a software engineer earning 24 lakhs",
+                        "1.5 lakhs in PPF", "/end"]:
+                client.post("/chat", json={"message": msg,
+                                           "session_id": sid})
+            r = client.post("/calculate", json={"session_id": sid})
+            plans = r.json().get("ca_plans") or []
+            if not plans:
+                pytest.skip("no plans ranked for this profile")
+            plan = plans[0]
+            levers = [{"head": st["head"], "delta": st["delta"]}
+                      for st in plan["steps"]]
+            before = r.json()
+            r2 = client.post(f"/sessions/{sid}/apply_plan",
+                             json={"levers": levers})
+            assert r2.status_code == 200
+            out = r2.json()
+            applied_heads = {a["head"] for a in out["applied"]}
+            assert applied_heads == {st["head"] for st in plan["steps"]}
+            for lever in levers:
+                assert out["applied"][0] is not None
+            # state persisted at the caps
+            state = _json.loads(db_mod.get_connection().execute(
+                "SELECT state FROM app_sessions WHERE id = ?",
+                (sid,)).fetchone()[0])
+            for lever in levers:
+                assert state[lever["head"]] == min(
+                    lever["delta"] + 0,
+                    __import__("tax_intelligence").LIMITS[lever["head"]])
+        finally:
+            os.chdir(previous_cwd)
+
+    def test_apply_plan_clamps_and_409s_when_nothing_open(self) -> None:
+        import db as db_mod
+        from fastapi.testclient import TestClient
+
+        from main import app
+
+        previous_cwd = os.getcwd()
+        try:
+            os.chdir(BACKEND_DIR)
+            db_mod.init_db()
+            client = TestClient(app)
+            email = register_and_login(client)
+            sid = make_session(client)
+            # request MORE than the cap — the server clamps
+            r = client.post(f"/sessions/{sid}/apply_plan",
+                            json={"levers": [{"head": "80c",
+                                              "delta": 5_000_000}]})
+            assert r.status_code == 200
+            assert r.json()["applied"][0]["new_value"] == 150_000
+            # second call: headroom fully consumed -> 409
+            r2 = client.post(f"/sessions/{sid}/apply_plan",
+                             json={"levers": [{"head": "80c",
+                                               "delta": 5_000_000}]})
+            assert r2.status_code == 409
+            # unknown head -> 422
+            r3 = client.post(f"/sessions/{sid}/apply_plan",
+                             json={"levers": [{"head": "999x",
+                                               "delta": 100}]})
+            assert r3.status_code == 422
+            # empty levers -> 422
+            assert client.post(f"/sessions/{sid}/apply_plan",
+                               json={"levers": []}).status_code == 422
+        finally:
+            os.chdir(previous_cwd)
+
+    def test_apply_plan_requires_auth(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from main import app
+
+        bare = TestClient(app)
+        assert bare.post("/sessions/x/apply_plan",
+                         json={"levers": [{"head": "80c", "delta": 1}]}
+                         ).status_code == 401
 
 
 # ---------------------------------------------------------------------------
