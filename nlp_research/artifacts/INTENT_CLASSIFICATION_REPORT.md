@@ -7,22 +7,25 @@
 
 ## TF-IDF Baseline (Logistic Regression)
 
-- **Test accuracy:** 0.9788858939802336
+- **Test accuracy (held-out split, 446 samples):** 0.9618834080717489
+- **Train accuracy:** 0.9848314606741573
+- Vectorizer fit on the train split only (no test vocabulary/IDF leakage)
 
 ### Per-class breakdown
-- **salary:** precision=0.9938271604938271, recall=0.9938271604938271, F1=0.9938271604938271, support=162.0
-- **business:** precision=1.0, recall=0.9862068965517241, F1=0.9930555555555556, support=145.0
-- **capital_gains:** precision=1.0, recall=1.0, F1=1.0, support=137.0
-- **property:** precision=0.979498861047836, recall=0.9839816933638444, F1=0.9817351598173516, support=437.0
-- **deductions:** precision=0.9570267131242741, recall=0.9927710843373494, F1=0.9745712596096984, support=830.0
-- **agriculture:** precision=1.0, recall=1.0, F1=1.0, support=119.0
-- **investment:** precision=1.0, recall=0.9690265486725663, F1=0.9842696629213483, support=226.0
-- **other:** precision=1.0, recall=0.8588235294117647, F1=0.9240506329113924, support=170.0
+- **salary:** precision=1.0, recall=1.0, F1=1.0, support=33.0
+- **business:** precision=1.0, recall=1.0, F1=1.0, support=29.0
+- **capital_gains:** precision=1.0, recall=1.0, F1=1.0, support=27.0
+- **property:** precision=0.9333333333333333, recall=0.9545454545454546, F1=0.9438202247191011, support=88.0
+- **deductions:** precision=0.9367816091954023, recall=0.9819277108433735, F1=0.9588235294117647, support=166.0
+- **agriculture:** precision=1.0, recall=1.0, F1=1.0, support=24.0
+- **investment:** precision=1.0, recall=0.9111111111111111, F1=0.9534883720930233, support=45.0
+- **other:** precision=1.0, recall=0.8235294117647058, F1=0.9032258064516129, support=34.0
 
 ## BiLSTM (PyTorch) Experiment
-- PyTorch not available in this environment
-- TF-IDF baseline reported instead (see section above)
-- N/A
+- BiLSTM with embedding layer trained on the held-out split's raw texts
+- Hyperparameters: 1-layer bidirectional LSTM, hiddenDim=256, dropout=0.5
+- Epochs: 6, learning rate: 1e-3, batch size: 32
+- **Test accuracy (held-out split):** 0.9820627802690582
 
 ---
 *Generated automatically by Phase C intent classification pipeline.*

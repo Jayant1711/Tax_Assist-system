@@ -159,7 +159,20 @@ export default function ChatInterface({ sessionId, onUpdateSession, onShowReport
         body: JSON.stringify({ message: textToSend, session_id: sessionId }),
       });
 
-      if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+      if (!res.ok) {
+        // frontend-review P2: a 404/429 told the user the service was
+        // "unreachable" and discarded Retry-After — a rate-limited user
+        // retried straight into the same 429. Branch on the status.
+        if (res.status === 429) {
+          const retryAfter = res.headers.get('Retry-After');
+          const wait = retryAfter ? ` Wait ${retryAfter}s.` : ' Please wait a moment.';
+          throw new Error(`429: ⚠️ **Too many requests** — the service is rate-limiting this client.${wait}`);
+        }
+        if (res.status === 404) {
+          throw new Error('404: ⚠️ **Session not found** — it may have expired. Start a new session or press Reset.');
+        }
+        throw new Error(`http: ⚠️ **Request failed (HTTP ${res.status})** — please try again in a moment.`);
+      }
 
       const data = await res.json();
       const nextProjection: SessionProjection = data.session ?? {};
@@ -184,12 +197,18 @@ export default function ChatInterface({ sessionId, onUpdateSession, onShowReport
     } catch (err) {
       console.error('Chat error:', err);
       setIsTyping(false);
+      // status-specific messages thrown above keep their copy; network
+        // failures (fetch rejection) fall back to the unreachable text
+      const text = err instanceof Error && err.message.startsWith(('429:')) ? err.message.replace(/^429:/, '')
+        : err instanceof Error && err.message.startsWith('404:') ? err.message.replace(/^404:/, '')
+        : err instanceof Error && err.message.startsWith('http:') ? err.message.replace(/^http:/, '')
+        : '⚠️ **Unable to reach the calculation service** — please try again in a moment.';
       setMessages((prev) => [
         ...prev,
         {
           id: `err_${Date.now()}`,
           role: 'ai',
-          text: '⚠️ **Unable to reach the calculation service** — please try again in a moment.',
+          text,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);

@@ -260,6 +260,23 @@ def main() -> int:
     inputs = build_inputs()
     scenarios = capture_outputs(engine, inputs)
 
+    # Wave C fix (QA review): the update annotations (a2_update, s2c_update,
+    # s2d_update, wave_c_update, ...) are written after regeneration by the
+    # apply_* tools. A naive rebuild DROPPED them — regeneration destroyed
+    # provenance while the fixture note says hand edits are rejected. Any
+    # annotation key the previous fixture carried is carried forward.
+    previous_annotations = {}
+    if os.path.exists(FIXTURE_PATH):
+        try:
+            with open(FIXTURE_PATH, "r", encoding="utf-8") as fh:
+                _prev = json.load(fh)
+            previous_annotations = {
+                k: v for k, v in _prev.get("meta", {}).items()
+                if k.endswith("_update")
+            }
+        except (OSError, json.JSONDecodeError):
+            previous_annotations = {}
+
     fixture = {
         "meta": {
             "description": (
@@ -285,6 +302,7 @@ def main() -> int:
         },
         "scenarios": scenarios,
     }
+    fixture["meta"].update(previous_annotations)
 
     os.makedirs(os.path.dirname(FIXTURE_PATH), exist_ok=True)
     with open(FIXTURE_PATH, "w", encoding="utf-8", newline="\n") as fh:

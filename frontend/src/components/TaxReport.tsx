@@ -25,7 +25,7 @@ export default function TaxReport({ sessionId, projection }: Props) {
   // S7.3: a reload tick so one-click Apply re-runs the whole report.
   const [acted, setActed] = useState<Record<string, string>>({});
   const [appliedPlans, setAppliedPlans] = useState<Record<string, boolean>>({});
-  const [planError, setPlanError] = useState<string | null>(null);
+  const [planErrors, setPlanErrors] = useState<Record<string, string | null>>({});
   const [reloadTick, setReloadTick] = useState(0);
   const viewedFired = useRef<Set<string>>(new Set());
 
@@ -117,24 +117,36 @@ export default function TaxReport({ sessionId, projection }: Props) {
       );
       if (res.ok) {
         setAppliedPlans((prev) => ({ ...prev, [planName]: true }));
+        setPlanErrors((prev) => ({ ...prev, [planName]: null }));
         setReloadTick((t) => t + 1);
       } else {
         setAppliedPlans((prev) => ({ ...prev, [planName]: false }));
-        setPlanError(`Apply failed (${res.status})`);
+        setPlanErrors((prev) => ({ ...prev, [planName]: `Apply failed (${res.status})` }));
       }
     } catch {
       setAppliedPlans((prev) => ({ ...prev, [planName]: false }));
-      setPlanError('Apply failed — network error');
+      setPlanErrors((prev) => ({ ...prev, [planName]: 'Apply failed — network error' }));
     }
   };
 
-  const decideRecommendation = (recId: string, action: string) => {
-    setActed((prev) => ({ ...prev, [recId]: action }));
-    apiFetch(
-      `/sessions/${sessionId}/recommendations/${recId}/action`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }) },
-    ).catch(() => {/* best-effort capture */});
+  const decideRecommendation = async (recId: string, action: string) => {
+    // frontend-review P2: the optimistic 'acted' state used to be set
+    // BEFORE the POST — a 404/422/429 rendered "✓ Accepted — recorded"
+    // although nothing was recorded and the adoption funnel undercounted
+    try {
+      const res = await apiFetch(
+        `/sessions/${sessionId}/recommendations/${recId}/action`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }) },
+      );
+      if (res.ok) {
+        setActed((prev) => ({ ...prev, [recId]: action }));
+      } else {
+        setActed((prev) => ({ ...prev, [recId]: `error:${res.status}` }));
+      }
+    } catch {
+      setActed((prev) => ({ ...prev, [recId]: 'error:network' }));
+    }
   };
 
   if (loading) {
@@ -427,7 +439,7 @@ export default function TaxReport({ sessionId, projection }: Props) {
                   )}
                   {recommend && finalPhase && acted[card.rec_id]?.startsWith('error') && (
                     <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--accent-red, #e5484d)' }}>
-                      ✕ Apply failed — nothing was booked. Try again or recalculate.
+                      ✕ Couldn't record that — nothing was saved. Try again or recalculate.
                     </div>
                   )}
                   {recommend && finalPhase && !acted[card.rec_id] && (
@@ -575,6 +587,14 @@ export default function TaxReport({ sessionId, projection }: Props) {
                             onClick={() => applyPlan(plan.name, plan.steps.map((st) => ({ head: st.head, delta: st.delta })))}>
                       ✓ Apply plan
                     </button>
+                    {/* the apply_plan failure surface: a 409 (headroom
+                        already applied), 422 or 429 used to leave the
+                        button looking dead with no message */}
+                    {planErrors[plan.name] && (
+                      <div role="alert" style={{ marginTop: '0.4rem', fontSize: '0.72rem', color: 'var(--accent-red, #d9534f)', fontWeight: 600 }}>
+                        {planErrors[plan.name]}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

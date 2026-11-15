@@ -178,8 +178,13 @@ class BodySizeCapMiddleware(BaseHTTPMiddleware):
             "transfer-encoding", "").lower()
         if request.method.upper() in _STATE_CHANGING_METHODS \
                 and is_chunked and not raw_length:
-            return JSONResponse(status_code=411,
-                                content={"detail": "Content-Length required"})
+            response = JSONResponse(status_code=411,
+                                    content={"detail": "Content-Length required"})
+            # same contract as the 413 short-circuit: the body-cap
+            # middleware sits ABOVE the header middleware, so its early
+            # returns must carry the header set themselves
+            _apply_security_headers(response)
+            return response
         if raw_length:
             try:
                 length = int(raw_length)

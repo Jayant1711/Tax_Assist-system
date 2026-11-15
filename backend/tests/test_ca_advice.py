@@ -373,6 +373,14 @@ class TestApplyPlanEndpoint:
     """Sprint 7: whole-plan apply — server-side clamps, one reprice."""
 
     def test_apply_plan_books_levers_and_reprices(self) -> None:
+        """QA-review P2: the old profile (24L salary + maxed 80C) had NO
+        working levers — every contribution head is new-regime-neutral,
+        so propose_plans honestly returned [] and this test SKIPPED
+        every run: the apply_plan happy path never executed and a
+        ranking regression stayed green forever. The let-out profile
+        guarantees a ranked plan: the Sec 24(b) lever WORKS in the new
+        regime (100k -> 200k on a let-out flat saves 100k x 30% x 1.04
+        = 31,200). No skip — a zero-plan rank IS the failure signal."""
         import json as _json
         import db as db_mod
         from fastapi.testclient import TestClient
@@ -389,32 +397,30 @@ class TestApplyPlanEndpoint:
             email = register_and_login(client)
             sid = make_session(client)
             for msg in ["I am a software engineer earning 24 lakhs",
-                        "1.5 lakhs in PPF", "/end"]:
+                        "I receive 400000 rent annually",
+                        "home loan interest is 100000 on the let out flat",
+                        "/end"]:
                 client.post("/chat", json={"message": msg,
                                            "session_id": sid})
             r = client.post("/calculate", json={"session_id": sid})
             plans = r.json().get("ca_plans") or []
-            if not plans:
-                pytest.skip("no plans ranked for this profile")
+            assert plans, "no plans ranked for the let-out profile"
             plan = plans[0]
             levers = [{"head": st["head"], "delta": st["delta"]}
                       for st in plan["steps"]]
-            before = r.json()
             r2 = client.post(f"/sessions/{sid}/apply_plan",
                              json={"levers": levers})
             assert r2.status_code == 200
             out = r2.json()
             applied_heads = {a["head"] for a in out["applied"]}
             assert applied_heads == {st["head"] for st in plan["steps"]}
-            for lever in levers:
-                assert out["applied"][0] is not None
             # state persisted at the caps
             state = _json.loads(db_mod.get_connection().execute(
                 "SELECT state FROM app_sessions WHERE id = ?",
                 (sid,)).fetchone()[0])
             for lever in levers:
                 assert state[lever["head"]] == min(
-                    lever["delta"] + 0,
+                    lever["delta"] + 100_000,
                     __import__("tax_intelligence").LIMITS[lever["head"]])
         finally:
             os.chdir(previous_cwd)

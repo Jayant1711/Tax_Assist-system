@@ -644,7 +644,11 @@ class TaxEngine:
         if rental > 0:
             hp_income = round(net_rental - ded["24b_full"], 2)
             if hp_income < 0:
-                hp_income = -min(-hp_income, caps.sec_24b)
+                # the loss set-off against other heads is capped at
+                # Rs 2,00,000 (s.71(3A)) — the cap lives on the rules
+                # registry, not the caller's locals (the audit wave's
+                # own 'caps' NameError, caught by the QA review)
+                hp_income = -min(-hp_income, rules.deduction_caps.sec_24b)
             gross = salary + business + hp_income + other
         else:
             gross = salary + business + other

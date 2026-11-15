@@ -370,7 +370,12 @@ def run_phase_d(num_samples: int = 500, epochs: int = 8) -> dict:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    result = run_phase_d(num_samples=500, epochs=8)
+    # ML-review reproducibility fix: the pinned artifact (NER_REPORT.md,
+    # micro 0.9136 / macro 0.756) was measured at epochs=20, but this CLI
+    # ran epochs=8 — the committed entry point could not regenerate the
+    # artifact it sits next to. The default now matches the artifact's
+    # header so `python -m phase_d_ner` reproduces the pinned numbers.
+    result = run_phase_d(num_samples=500, epochs=20)
     if not result:
         print("Phase D failed — no output written. Check corpus generation.")
         exit(1)

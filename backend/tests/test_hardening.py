@@ -294,3 +294,49 @@ class TestDocsGating:
                 assert dev_client.get("/docs").status_code == 200
         finally:
             os.chdir(previous_cwd)
+
+
+class TestChunkedBody:
+    """QA-review P1: the chunked-body 411 guard had no test — reverting
+    it passed the whole suite. A chunked (transfer-encoding) body has no
+    enforceable length; it must be rejected before buffering (OOM DoS
+    against the single worker)."""
+
+    def test_chunked_body_is_411(self, client) -> None:
+        # a generator body makes httpx send Transfer-Encoding: chunked
+        # with no Content-Length
+        response = client.post(
+            "/chat",
+            content=(b'{"message": "hi", "session_id": "' + b"0" * 32 + b'"}',),
+        )
+        assert response.status_code == 411
+        assert response.json() == {"detail": "Content-Length required"}
+        assert_security_headers(response)
+
+    def test_bodyless_state_changing_post_is_not_411(self, authed) -> None:
+        # a POST with neither a body nor chunked framing passes the
+        # 411 gate (it may 422 in the route — the gate only rejects
+        # chunked framing)
+        response = authed.post("/chat")
+        assert response.status_code != 411
+
+
+class TestNonDictBody:
+    """QA-review P2 pin: a JSON-array body must be a clean 422 at the
+    guard, not an AttributeError 500 deeper in the route."""
+
+    def test_json_array_body_is_422(self, authed) -> None:
+        response = authed.post(
+            "/chat",
+            content=b"[1, 2]",
+            headers={"content-type": "application/json"},
+        )
+        assert response.status_code == 422
+
+    def test_json_string_body_is_422(self, authed) -> None:
+        response = authed.post(
+            "/chat",
+            content=b'"hello"',
+            headers={"content-type": "application/json"},
+        )
+        assert response.status_code == 422

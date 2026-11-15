@@ -86,6 +86,38 @@ class TestCorrectionSemantics:
         # a NEW head's correction must not pull the amount out of salary
         assert state.get("salary") == 600_000
 
+    def test_three_turn_correction_chain_replaces_each_time(
+            self, chat_client) -> None:
+        """QA-review P1: every correction pin was 2-turn; a 3-turn chain
+        (book, correct, correct-again) pins the REPLACE semantics for
+        real — the accumulate bug turned this into a sum."""
+        client, sid = chat_client
+        _chat(client, sid, "my salary is 600000 per year")
+        _chat(client, sid, "actually I earn 50000 per month")
+        state = _session_state(sid)
+        assert state.get("salary") == 600_000  # 50k monthly annualized
+        _chat(client, sid, "actually I earn 70000 per month")
+        state = _session_state(sid)
+        assert state.get("salary") == 840_000  # 70k monthly annualized
+
+    def test_cross_head_correction_names_its_own_head(
+            self, chat_client) -> None:
+        """QA-review P0: 'oops salary is actually 700000' after an 80C
+        booking used to book 80D — the profile classifier read the 80C
+        message as Business Owner, the cross-profile nuclear penalty
+        compressed the named 'salary' head to 28, and the asked-category
+        prior boost (+30) outbid it. A named head must always win."""
+        client, sid = chat_client
+        _chat(client, sid, "my salary is 600000 per year")
+        _chat(client, sid, "my 80c investment is 150000")
+        state = _session_state(sid)
+        assert state.get("profile") is None  # not Business Owner
+        _chat(client, sid, "oops salary is actually 700000")
+        state = _session_state(sid)
+        assert state.get("salary") == 700_000
+        assert state.get("80c") == 150_000
+        assert "80d" not in state
+
 
 class TestParsingGuards:
     def test_rent_inside_parents_is_not_matched(self) -> None:
@@ -98,6 +130,24 @@ class TestParsingGuards:
             "I pay 40000 insurance premium for my parents", 7, 12, None, None)
         assert best != "rent_paid"
 
+    def test_keyword_boundary_is_per_occurrence(self) -> None:
+        """ML-review P1: the boundary check was text-global — when 'rent'
+        appeared BOTH standalone (far) AND embedded in 'current' (next to
+        the amount), the embedded occurrence also scored by proximity and
+        flipped the winner to rent_paid. The check must validate each
+        occurrence individually: only the distant standalone scores, so
+        the nearby mediclaim head wins."""
+        from ai_models import SemanticAttention
+
+        att = SemanticAttention()
+        t = ("mediclaim premium paid this current year 50000 and my "
+             "rent receipts are filed")
+        i = t.find("50000")
+        best, is_default = att.resolve_category_detailed(
+            t, i, i + 5, None, None)
+        assert best == "80d"
+        assert not is_default
+
     def test_pm_cares_is_not_monthly(self) -> None:
         """\u201Cdonated 50000 PM Cares fund\u201D was 12x over-booked by the
         pm rest-prefix check."""
@@ -107,6 +157,51 @@ class TestParsingGuards:
         matches = parser.parse("donated 50000 PM Cares fund")
         assert matches and matches[0]["val"] == 50_000
         assert not matches[0].get("annualized")
+
+    def test_deduction_booking_does_not_reclassify_profile(self) -> None:
+        """QA-review P0 (the cross-head correction root cause): the
+        bigram fuzzy pass matched 'investment is' to 'investment firm'
+        at 0.80, so a plain 80C booking reclassified the user as
+        Business Owner."""
+        from profession_db import classify_profession
+
+        assert classify_profession("my 80c investment is 150000") is None
+        # the guard must not kill real profession phrases
+        assert classify_profession("I am a software engineer") == "Salaried"
+        assert classify_profession("I run a trading business") == "Business Owner"
+
+    def test_rent_income_period_words_book_rental(self, chat_client) -> None:
+        """'I receive 400000 rent annually' booked RENT PAID (the bare
+        'rent' keyword), starving the plan layer of the Sec 24(b) let-out
+        lever and zeroing the HRA exemption. The period words after a
+        bare 'rent' mark INCOME — rental.pos carries the phrases now."""
+        client, sid = chat_client
+        _chat(client, sid, "I receive 400000 rent annually")
+        state = _session_state(sid)
+        assert state.get("rental") == 400_000
+        assert state.get("rent_paid") is None
+
+    def test_ask_shape_gate_unit(self) -> None:
+        """QA-review P1: the ask-shape gate had no revert-sensitive pin —
+        removing the '?'-anywhere check lets a closing tip's '80C' text
+        prime the prior and book a stray bare amount into 80C."""
+        from nlp_engine import NLPEngine
+
+        nlp = NLPEngine()
+        tip = ("\u0020\U0001F4A1 **Quick Tip**: Invest \u20B91.5L in 80C "
+               "(PF, PPF, ELSS) before March 31st to max out the limit.")
+        assert nlp._get_asked_cat(tip, None, {"salary": 100}) is None
+        # the two-sentence NPS ask-back (question + explanatory clause)
+        assert nlp._get_asked_cat(
+            "\U0001F3AF **Retirement savings** \u2014 Did you put anything "
+            "into NPS Tier-1? Section 80CCD(1B) allows an **extra "
+            "\u20B950,000** deduction on top of your 80C investments.",
+            None, {"salary": 100}) == "nps"
+        # the bracketed rent/metro ask
+        assert nlp._get_asked_cat(
+            "Do you pay rent? _(monthly rent paid, HRA received, metro "
+            "city \u2014 else the 40% assumption)_",
+            None, {"salary": 100}) in ("rent_paid", "hra_received")
 
 
 class TestZeroSentinel:
@@ -161,6 +256,36 @@ class TestRegimeGatedTips:
         # tips (the removed ADR-001 violation) may appear
         assert "New Regime note" in joined
         assert "Invest ₹" not in joined and "save an instant" not in joined
+
+
+class TestHousePropertyLoss:
+    """The QA-review P0: the 24(b) loss branch raised NameError ('caps'
+    is not defined in _calc_old) — any let-out property with interest
+    above 70% of the rent crashed BOTH regimes' computation."""
+
+    SCENARIO = {"rental": 300_000, "24b": 500_000, "other_income": 1_000_000}
+
+    def test_let_out_loss_branch_does_not_crash(self) -> None:
+        from tax_engine import TaxEngine
+
+        # net rental 210,000; interest 500,000 -> loss 290,000
+        res = TaxEngine().calculate_tax_advanced(self.SCENARIO)
+        # old regime: loss set-off capped at 2,00,000 (s.71(3A))
+        #   GTI = 1,000,000 - 200,000 = 800,000
+        assert res["old_regime"].gross_total_income == 800_000
+        # new regime: 115BAC(2)(i) allows let-out interest but the head
+        # is floored at 0 (no loss set-off) -> GTI = 1,000,000
+        assert res["new_regime"].gross_total_income == 1_000_000
+
+    def test_let_out_loss_set_off_capped_at_two_lakh(self) -> None:
+        from tax_engine import TaxEngine
+
+        e = TaxEngine()
+        res = e.calculate_tax_advanced(
+            self.SCENARIO, tax_year="fy_2024_25")
+        # hand-computed FY 2024-25 old regime: TI 800,000 (2.5-5L 5%,
+        # 5-10L 20% -> 12,500 + 60,000 = 72,500) + 4% cess = 75,400
+        assert res["old_regime"].total_tax == 75_400
 
 
 class TestTaxYearPassthrough:

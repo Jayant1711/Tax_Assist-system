@@ -73,10 +73,17 @@ def prod_to_intent(prod_cat: str | None) -> str | None:
 def build_feature_matrices(
     records: list[dict],
     intent_to_idx: dict[str, int],
-) -> tuple[np.ndarray, np.ndarray]:
-    """Extract TF-IDF unigram features and intent label indices from records.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, TfidfVectorizer]:
+    """Extract TF-IDF features and intent label indices from records.
 
-    Returns X (sparse TF-IDF matrix) and y (integer label array).
+    Evaluation-integrity fix (ML-review P0): the vectorizer is fit on the
+    TRAIN split ONLY. The previous version fit_transform-ed the full
+    corpus before the split, so test vocabulary/IDF leaked into the
+    training features and the "test accuracy" measured nothing honest.
+
+    Returns X_train, X_test, y_train, y_test and the fitted vectorizer
+    (the stratified seeded split happens HERE so every model in this
+    phase trains and scores on the same held-out cells).
     """
     texts: list[str] = []
     labels: list[int] = []
@@ -98,6 +105,10 @@ def build_feature_matrices(
         labels.append(intent_to_idx[intent])
 
     print(f"  Corpus records: {len(records)}, usable: {len(texts)} (skipped {skipped})")
+    y_all = np.array(labels, dtype=np.int64)
+    idx_train, idx_test = train_test_split(
+        np.arange(len(texts)), test_size=0.2, random_state=SEED, stratify=y_all
+    )
     vectorizer = TfidfVectorizer(
         ngram_range=(1, 2),
         min_df=2,
@@ -105,32 +116,41 @@ def build_feature_matrices(
         sublinear_tf=True,
         token_pattern=r"[a-z0-9]+(?:\.[a-z0-9]+)?",
     )
-    X = vectorizer.fit_transform(texts)
-    y = np.array(labels, dtype=np.int64)
-    return X, y, vectorizer
+    X_train = vectorizer.fit_transform([texts[i] for i in idx_train])
+    X_test = vectorizer.transform([texts[i] for i in idx_test])
+    return (
+        X_train, X_test,
+        y_all[idx_train], y_all[idx_test],
+        [texts[i] for i in idx_train],
+        [texts[i] for i in idx_test],
+        vectorizer,
+    )
 
 
 # ---------------------------------------------------------------------------
 # TF-IDF baseline (Logistic Regression)
 # ---------------------------------------------------------------------------
 
-def train_tfidf_baseline(X: np.ndarray, y: np.ndarray) -> LogisticRegression:
-    """Train a TF-IDF + Logistic Regression intent classifier."""
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=SEED, stratify=y
-    )
+def train_tfidf_baseline(
+    X_train, y_train, X_test, y_test,
+) -> tuple[LogisticRegression, float, dict]:
+    """Train a TF-IDF + Logistic Regression intent classifier and score it
+    on the held-out split only (the score on the full corpus was
+    previously persisted as the artifact's headline 'Test accuracy' —
+    the same fabrication class as the NER 0.143)."""
     clf = LogisticRegression(
         max_iter=2000, solver="lbfgs", random_state=SEED
     )
     clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
+    train_acc = accuracy_score(y_train, clf.predict(X_train))
     print(f"\n--- TF-IDF Baseline (Logistic Regression) ---")
-    print(f"Test accuracy: {acc:.4f}")
+    print(f"Test accuracy (held-out split): {acc:.4f}")
     print(classification_report(
         y_test, y_pred, target_names=INTENT_CLASSES, digits=3
     ))
-    return clf
+    return clf, acc, train_acc
 
 
 # ---------------------------------------------------------------------------
@@ -152,10 +172,11 @@ if TORCH_AVAILABLE:
         ):
             super().__init__()
             self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+            num_layers = 1  # single bidirectional layer (fixed architecture)
             self.lstm = nn.LSTM(
                 embed_dim,
                 hidden_dim // 2,
-                num_layers=1,
+                num_layers=num_layers,
                 bidirectional=True,
                 batch_first=True,
                 dropout=dropout if num_layers > 1 else 0,
@@ -167,8 +188,14 @@ if TORCH_AVAILABLE:
             emb = self.embedding(x)  # (B, seq_len, embed_dim)
             lstm_out, _ = self.lstm(emb)  # (B, seq_len, hidden_dim)
             lstm_out = self.dropout(lstm_out)
-            # use the last timestep's output for classification
-            last = lstm_out[:, -1, :]  # (B, hidden_dim)
+            # read the LAST NON-PADDING timestep: sequences are left-packed
+            # (tokens at the front, zeros after), so the previous
+            # lstm_out[:, -1, :] read the padding row for EVERY sequence —
+            # constant features, and the model collapsed to the majority
+            # class (flat 0.3722 across all epochs)
+            lengths = (x != 0).sum(dim=1).clamp(min=1)
+            idx = (lengths - 1).view(-1, 1, 1).expand(-1, 1, lstm_out.size(2))
+            last = lstm_out.gather(1, idx).squeeze(1)  # (B, hidden_dim)
             logits = self.fc(last)
             return logits
 
@@ -177,14 +204,26 @@ if TORCH_AVAILABLE:
         y_train,
         X_test,
         y_test,
+        texts_train: list[str],
+        texts_test: list[str],
         vectorizer,
         epochs: int = 8,
         lr: float = 1e-3,
     ) -> IntentBiLSTM:
-        """Train the BiLSTM intent classifier."""
+        """Train the BiLSTM intent classifier on the held-out split's raw
+        texts (ML-review fix: the previous body referenced
+        X_train.index — sparse matrices have no such attribute — so the
+        experiment always died before training)."""
+        set_seed(SEED)
 
-        # Build a fixed word-to-index from the TF-IDF vocabulary
-        vocab = vectorizer.get_feature_names_out()
+        # Build a fixed word-to-index from the TF-IDF vocabulary — UNIGRAMS
+        # only: the vectorizer is (1,2)-ngram, and a bigram feature name
+        # ("salary is") can never match a single split token, so indexing
+        # bigrams too left nearly every token at the padding id and the
+        # model flatlined on the majority class (eval-integrity: a flat
+        # majority-class accuracy must not be recorded as a trained model)
+        vocab = np.array([w for w in vectorizer.get_feature_names_out()
+                          if " " not in w])
         word2idx = {w: i + 1 for i, w in enumerate(vocab)}  # 0 = padding
 
         # Convert texts to padded integer sequences
@@ -193,15 +232,8 @@ if TORCH_AVAILABLE:
         def text_to_seq(text: str) -> list[int]:
             return [word2idx.get(w, 0) for w in text.lower().split()][:max_len]
 
-        X_train_seq = np.zeros((len(X_train), max_len), dtype=np.int64)
-        for i, text in enumerate(X_train.index.toarray() if hasattr(X_train, "index") else []):
-            pass
-
-        # Simpler approach: use the TF-IDF matrix directly with embedding lookup
-        # by converting sparse to dense token indices (lightweight for P0 corpus)
-        from scipy.sparse import csr_matrix
-
-        # We'll use a bag-of-embeddings approach: average embedding over tokens
+        # Bag-of-embeddings: seeded random init, overlaid with GloVe where
+        # the artifact exists (the seed pins the numbers either way)
         embedding_matrix = np.random.randn(len(vocab) + 1, 128) / np.sqrt(128)
         # Initialize with actual embeddings if available
         try:
@@ -221,11 +253,6 @@ if TORCH_AVAILABLE:
         criterion = nn.CrossEntropyLoss()
 
         # Prepare data
-        train_texts = []
-        for rec in X_train.index[:len(X_train)] if hasattr(X_train, "index") else []:
-            pass
-
-        # Simpler: train on averaged embeddings from the sparse matrix
         print(f"\n--- BiLSTM Intent Classification ---")
         print(f"  Training samples: {X_train.shape[0]}, vocab size: {len(vocab)}")
 
@@ -236,21 +263,19 @@ if TORCH_AVAILABLE:
             seq[:len(tokens)] = tokens
             return seq
 
-        train_seqs = np.array([doc_to_sequence(t) for t in X_train.index[:X_train.shape[0]]])
-        test_seqs = np.array([doc_to_sequence(t) for t in X_test.index[:X_test.shape[0]]])
-
-        # Hmm, X_train is sparse; let me re-approach this properly.
-        # Let's just extract the raw texts from the train/test split.
+        train_seqs = np.array([doc_to_sequence(t) for t in texts_train])
+        test_seqs = np.array([doc_to_sequence(t) for t in texts_test])
 
         print("  (BiLSTM training detailed results printed after training)")
+        final_acc = 0.0
         model.train()
         for epoch in range(epochs):
             epoch_loss = 0.0
             for batch_start in range(0, len(train_seqs), 32):
                 batch_seqs = train_seqs[batch_start:batch_start + 32]
                 batch_y = y_train[batch_start:batch_start + 32]
-                inputs = torch.from_long(batch_seqs)
-                targets = torch.from_long(batch_y)
+                inputs = torch.from_numpy(batch_seqs)
+                targets = torch.from_numpy(np.asarray(batch_y, dtype=np.int64))
                 optimizer.zero_grad()
                 logits = model(inputs)
                 loss = criterion(logits, targets)
@@ -258,7 +283,8 @@ if TORCH_AVAILABLE:
                 optimizer.step()
                 epoch_loss += loss.item()
 
-            # Evaluate
+            # Evaluate on the HELD-OUT split (the previous eval loop
+            # compared predictions against the stale train-batch targets)
             model.eval()
             correct = 0
             total = 0
@@ -266,15 +292,17 @@ if TORCH_AVAILABLE:
                 for batch_start in range(0, len(test_seqs), 32):
                     batch_seqs = test_seqs[batch_start:batch_start + 32]
                     batch_y = y_test[batch_start:batch_start + 32]
-                    inputs = torch.from_long(batch_seqs)
+                    inputs = torch.from_numpy(batch_seqs)
+                    targets = torch.from_numpy(np.asarray(batch_y, dtype=np.int64))
                     logits = model(inputs)
                     preds = torch.argmax(logits, dim=1)
                     correct += (preds == targets).sum().item()
                     total += targets.size(0)
-            acc = correct / max(total, 1)
+            final_acc = correct / max(total, 1)
             print(f"  Epoch {epoch+1}/{epochs}: train_loss={epoch_loss/max(1,len(train_seqs)/32):.4f}, "
-                  f"test_acc={acc:.4f}")
+                  f"test_acc={final_acc:.4f}")
             model.train()
+        return model, final_acc
 
         return model
 
@@ -291,41 +319,46 @@ def run_intent_classification(records: list[dict] | None = None) -> dict:
     # Map production categories to academic intent classes
     intent_to_idx = {cls: i for i, cls in enumerate(INTENT_CLASSES)}
 
-    # Build feature matrices
-    X, y, vectorizer = build_feature_matrices(records, intent_to_idx)
+    # Build feature matrices (the seeded stratified split happens inside —
+    # the vectorizer is fit on the train split only, no leakage)
+    (X_train, X_test, y_train, y_test,
+     texts_train, texts_test, vectorizer) = build_feature_matrices(
+        records, intent_to_idx)
 
-    if X.shape[0] == 0:
+    if X_train.shape[0] == 0:
         print("ERROR: No usable data found. Check corpus labeling and PROD_TO_INTENT mapping.")
         return {}
 
-    # Train TF-IDF baseline
-    tfidf_clf = train_tfidf_baseline(X, y)
+    # Train TF-IDF baseline; the persisted numbers are HELD-OUT metrics
+    tfidf_clf, test_acc, train_acc = train_tfidf_baseline(
+        X_train, y_train, X_test, y_test)
 
     result = {
         "phase": "C",
         "task": "intent_classification",
         "corpus_size": len(records),
-        "usable_samples": int(X.shape[0]),
+        "usable_samples": int(X_train.shape[0] + X_test.shape[0]),
+        "test_samples": int(X_test.shape[0]),
         "intent_classes": INTENT_CLASSES,
-        "tfidf_accuracy": float(tfidf_clf.score(X, y)) if hasattr(tfidf_clf, "score") else "N/A",
+        "tfidf_test_accuracy": float(test_acc),
+        "tfidf_train_accuracy": float(train_acc),
         "tfidf_report": classification_report(
-            y, tfidf_clf.predict(X), target_names=INTENT_CLASSES, digits=3, output_dict=True
+            y_test, tfidf_clf.predict(X_test), target_names=INTENT_CLASSES,
+            digits=3, output_dict=True,
         ),
     }
 
-    # BiLSTM experiment (PyTorch required)
+    # BiLSTM experiment (PyTorch required) — same held-out split as the
+    # baseline (one split per phase; previously the neural path drew its
+    # own second split, so the two models were scored on different cells)
     if TORCH_AVAILABLE:
-        # Hold out a test set for the neural model
-        from sklearn.model_selection import train_test_split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=SEED, stratify=y
-        )
-        # Train BiLSTM (simplified: use averaged embeddings from GloVe if available)
         try:
-            bilstm_model = train_bilstm(X_train, y_train, X_test, y_test, vectorizer, epochs=6, lr=1e-3)
+            bilstm_model, bilstm_acc = train_bilstm(
+                X_train, y_train, X_test, y_test,
+                texts_train, texts_test, vectorizer,
+                epochs=6, lr=1e-3)
             result["bilstm_available"] = True
-            # Capture final test accuracy from the training loop's last epoch
-            # (the train_bilstm function prints per-epoch results; we capture the last)
+            result["bilstm_test_accuracy"] = float(bilstm_acc)
         except Exception as e:
             print(f"BiLSTM training encountered: {e}")
             result["bilstm_available"] = False
@@ -349,8 +382,11 @@ def run_intent_classification(records: list[dict] | None = None) -> dict:
     lines.append("")
     lines.append("## TF-IDF Baseline (Logistic Regression)")
     lines.append("")
-    acc = result.get("tfidf_accuracy", "N/A")
-    lines.append(f"- **Test accuracy:** {acc}")
+    acc = result.get("tfidf_test_accuracy", "N/A")
+    train_acc = result.get("tfidf_train_accuracy", "N/A")
+    lines.append(f"- **Test accuracy (held-out split, {result.get('test_samples', '?')} samples):** {acc}")
+    lines.append(f"- **Train accuracy:** {train_acc}")
+    lines.append("- Vectorizer fit on the train split only (no test vocabulary/IDF leakage)")
     lines.append("")
     lines.append("### Per-class breakdown")
     report_dict = result.get("tfidf_report", {})
@@ -364,15 +400,20 @@ def run_intent_classification(records: list[dict] | None = None) -> dict:
 
     if result.get("bilstm_available"):
         lines.append("## BiLSTM (PyTorch) Experiment")
-        lines.append("- BiLSTM with embedding layer trained on TF-IDF-verified vocabulary")
+        lines.append("- BiLSTM with embedding layer trained on the held-out split's raw texts")
         lines.append("- Hyperparameters: 1-layer bidirectional LSTM, hiddenDim=256, dropout=0.5")
         lines.append("- Epochs: 6, learning rate: 1e-3, batch size: 32")
-        lines.append("- Results would be captured from the training loop above")
+        bacc = result.get("bilstm_test_accuracy", "N/A")
+        lines.append(f"- **Test accuracy (held-out split):** {bacc}")
     else:
         lines.append("## BiLSTM (PyTorch) Experiment")
-        lines.append("- PyTorch not available in this environment")
+        if "bilstm_error" in result:
+            lines.append(f"- Training failed: {result['bilstm_error']}")
+        else:
+            lines.append("- PyTorch not available in this environment")
         lines.append("- TF-IDF baseline reported instead (see section above)")
-        lines.append(f"- {result.get('pytorch_note', 'N/A')}")
+        if "pytorch_note" in result:
+            lines.append(f"- {result['pytorch_note']}")
 
     lines.append("")
     lines.append("---")

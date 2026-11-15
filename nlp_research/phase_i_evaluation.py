@@ -49,7 +49,9 @@ def collect_phase_results() -> Dict[str, Any]:
 
     # Phase D: NER
     print("Running Phase D: NER...")
-    phase_d = run_phase_d(num_samples=75)
+    # the consolidated run uses the pinned artifact config (500/20 —
+    # NER_REPORT.md header); 75-sample runs cannot match it
+    phase_d = run_phase_d(num_samples=500, epochs=20)
 
     # Phase E: Seq2Seq with attention
     print("Running Phase E: Seq2Seq with Attention...")
@@ -67,7 +69,12 @@ def collect_phase_results() -> Dict[str, Any]:
             "phase": "F",
             "task": "bert_intent_classification",
             "method": "TF-IDF fallback (environment limited)",
-            "accuracy": 0.9641,  # Known TF-IDF accuracy from Phase C/F
+            # NOTE (ML-review): this is a PLACEHOLDER, not a measured
+            # number — the report below must not present it as one
+            "accuracy": None,
+            "accuracy_note": "not measured in this run (BERT unavailable; "
+                             "see INTENT_CLASSIFICATION_REPORT.md for the "
+                             "measured TF-IDF held-out accuracy)",
             "samples": 30,
             "bert_available": False,
             "error": str(e),
@@ -205,7 +212,9 @@ def generate_evaluation_report(results: Dict[str, Any]) -> Path:
         lines.append(f"- **Accuracy:** {phase_d['accuracy']:.2f}%")
     if phase_d.get("entities_covered"):
         lines.append(f"- **Entity types covered:** {phase_d['entities_covered']}/{phase_d['total_entity_types']}")
-    lines.append("- **Finding:** NaN issues in low-data regime acknowledged as valid viva finding")
+    lines.append("- **Finding:** the historical NaN divergence was traced to label "
+                 "collapse + a broken evaluator (Sprint 7.5 honesty audit); the "
+                 "corrected measurement lives in NER_REPORT.md")
     lines.append("")
 
     # Phase E: Seq2Seq with Attention

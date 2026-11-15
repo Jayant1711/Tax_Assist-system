@@ -29,7 +29,7 @@ export default function SavingsGraph({ data }: Props) {
 
       <div className="card-header">
         <div>
-          <div className="card-title">Regime Tax Comparison (FY 2024-25)</div>
+          <div className="card-title">Regime Tax Comparison ({data?.fy_label ?? 'FY 2025-26 (AY 2026-27)'})</div>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
             Direct side-by-side computation based on declared deductions & income
           </p>

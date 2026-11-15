@@ -235,6 +235,15 @@ QUESTION_NO_BOOKING_NOTE = (
 _NO_HRA_CONTEXT_RE = re.compile(
     r"\bhra\s+nahi(?:n)?\b|\bno hra\b|\bwithout hra\b", re.IGNORECASE)
 
+# audit wave: a receive/earn cue before the rent mention marks rental
+# INCOME ("I receive 400000 rent annually") — the flat keyword model
+# cannot express cue-amount-rent, so the remap lives here, scoped to the
+# value's own clause (a payment sentence — "pay 4l rent yearly" — has no
+# receive cue and stays rent_paid)
+_RECEIVE_RENT_RE = re.compile(
+    r"\b(?:receive|received|receives|earning|earn|gets?|getting)\b"
+    r"[^,.;]{0,40}\brent\b", re.IGNORECASE)
+
 
 class NLPEngine:
     def __init__(self):
@@ -924,10 +933,16 @@ class NLPEngine:
                     # 4b. Probabilistic category resolution — CLAUSE-scoped (C4b):
                     # proximity scores and the negative-keyword environment come
                     # from the value's own clause, not the whole sentence.
+                    # QA-review P0 fix: corrections resolve with a 10.0
+                    # prior gate — an explicitly-named head must always
+                    # outrank the asked-category prior (the default 150.0
+                    # gate let the boost outbid a nuclear-penalized named
+                    # head: "oops salary is actually 700000" booked 80D).
                     full_last_q = session.get("_last_question", "").lower()
                     asked_cat   = self._get_asked_cat(full_last_q, session.get("profile"))
                     best_cat, is_default = self.attention.resolve_category_detailed(
-                        clause, m["start"], m["end"], session.get("profile"), asked_cat
+                        clause, m["start"], m["end"], session.get("profile"), asked_cat,
+                        prior_gate=10.0 if is_correction else 150.0,
                     )
 
                     # Sprint 4 P1 item 6 (measured rent-leg cells): the rent
@@ -948,6 +963,15 @@ class NLPEngine:
                     elif best_cat == "rent_paid" and \
                             _NO_HRA_CONTEXT_RE.search(text_lower):
                         best_cat, is_default = "80gg", False
+                    elif best_cat == "rent_paid" and \
+                            _RECEIVE_RENT_RE.search(clause):
+                        # audit wave: "I receive 400000 rent annually" — a
+                        # receive/earn cue before the bare "rent" hit marks
+                        # INCOME, not a payment (the rental.pos phrases
+                        # cannot express receive-cue + amount + rent, and
+                        # period-word rental phrases over-triggered on
+                        # payment sentences like "pay 4l rent yearly")
+                        best_cat, is_default = "rental", False
 
                     # Sprint 4 P1 item 3 (deduction semantics): 80E covers
                     # only the INTEREST on a qualifying education loan —

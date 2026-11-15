@@ -443,13 +443,22 @@ class SemanticAttention:
 
     def resolve_category_detailed(self, sentence: str, val_start: int, val_end: int,
                                    profile: Optional[str] = None,
-                                   asked_cat: Optional[str] = None) -> Tuple[str, bool]:
+                                   asked_cat: Optional[str] = None,
+                                   prior_gate: float = 150.0) -> Tuple[str, bool]:
         """Resolve the category for a parsed value span.
 
         Returns (category, is_default): is_default is True ONLY when the
         profile-default fall-through fired (no category scored >= the
         threshold of 10). Callers use it to guard income overwrites (C4a):
         an unrecognized amount must never silently replace a real value.
+
+        prior_gate: the content-score ceiling under which the asked-
+        category prior may add +30. Corrections pass 10.0 — an
+        explicitly-named head ("oops salary is actually 700000") must
+        always outrank the prior, even when the cross-profile nuclear
+        penalty compressed the named head's score below the default gate
+        (QA-review P0: the compressed 28 lost to the boosted prior and a
+        salary correction booked 80D).
         """
         t = sentence.lower()
         profile_default = {"Business Owner": "business", "Salaried": "salary"}.get(profile, "other_income")
@@ -463,15 +472,28 @@ class SemanticAttention:
                     break
 
             for kw in kw_map["pos"]:
-                kw_re = re.compile(r"(?<![0-9a-z])" + re.escape(kw) + r"(?![0-9a-z])", re.IGNORECASE)
+                # the optional plural suffix: the singular keyword form
+                # ("freelance project") must still match the plural text
+                # ("freelance projects") — the bare lookahead rejected the
+                # plural and the head scored ZERO, letting a distant
+                # nuclear-penalized "earn" win the category (the 7
+                # freelance eval cells). Embedded-word cases stay blocked
+                # by the LOOKBEHIND: in "parents"/"current" the char before
+                # the embedded "rent" is a letter, so no suffix applies.
+                kw_re = re.compile(r"(?<![0-9a-z])" + re.escape(kw) + r"(?:s|es)?(?![0-9a-z])", re.IGNORECASE)
                 idx = t.find(kw)
                 while idx != -1:
                     # Sprint 7 audit fix: word-boundary check for ALL
                     # keywords (the old len<4 guard let "rent" match
                     # inside "parents" and "currently").
-                    is_partial = kw_re.search(t) is None
-
-                    if not is_partial:
+                    # ML-review fix: the boundary check is PER OCCURRENCE
+                    # — the previous kw_re.search(t) asked whether the
+                    # keyword is bounded ANYWHERE in the text, so when
+                    # "rent" appeared both standalone AND inside
+                    # "parents", the embedded occurrence also scored (by
+                    # proximity to the amount) and could win the
+                    # category. match(t, idx) validates THIS occurrence.
+                    if kw_re.match(t, idx) is not None:
                         dist = min(abs(idx - val_start), abs(idx - val_end))
                         # Gaussian decay using pure math: exp(-dist^2 / (2 * 40^2))
                         prox_score = 100.0 * math.exp(- (dist ** 2) / (2.0 * 1600.0))
@@ -512,7 +534,7 @@ class SemanticAttention:
         # Boost the category asked about (Contextual Prior)
         content_max = max(cat_scores.values()) if cat_scores else 0.0
         if asked_cat and asked_cat in self.categories:
-            if content_max < 150.0:
+            if content_max < prior_gate:
                 cat_scores[asked_cat] = cat_scores.get(asked_cat, 0.0) + 30.0
 
         if not cat_scores or max(cat_scores.values()) < 10.0:

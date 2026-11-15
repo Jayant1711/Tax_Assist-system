@@ -353,7 +353,24 @@ def classify_profession(text: str) -> Optional[str]:
             return "Business Owner"
 
     # 3. Multi-word phrase fuzzy match
-    bigrams = [f"{words[i]} {words[i+1]}" for i in range(len(words)-1)]
+    # Audit-wave fix: a bigram whose second word is a function word
+    # ("investment IS") is a phrase FRAGMENT, not a profession phrase —
+    # it fuzzy-matched "investment firm" at 0.80 and a plain 80C booking
+    # reclassified the user as Business Owner, which then nuclear-
+    # penalized the salary head on every later turn. Both words of a
+    # profession phrase carry content; require >= 4 chars each.
+    _function_words = {
+        "is", "are", "was", "were", "the", "a", "an", "my", "our", "of",
+        "for", "in", "at", "on", "and", "or", "to", "per", "with", "from",
+        "by", "as", "be", "been", "being", "it", "its", "this", "that",
+        "i", "we", "you", "he", "she", "they", "do", "did", "have", "has",
+    }
+    bigrams = [
+        f"{words[i]} {words[i+1]}" for i in range(len(words) - 1)
+        if len(words[i]) >= 4 and len(words[i + 1]) >= 4
+        and words[i].lower() not in _function_words
+        and words[i + 1].lower() not in _function_words
+    ]
     for phrase in bigrams:
         sal_matches = get_close_matches(phrase, _SAL_SET, n=1, cutoff=0.80)
         if sal_matches:
