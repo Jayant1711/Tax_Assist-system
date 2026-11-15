@@ -1,0 +1,402 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath}
+\usepackage{newtxtext,newtxmath}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{colortbl}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{ink}{HTML}{182230}
+\definecolor{navy}{HTML}{1A4A73}
+\definecolor{accent}{HTML}{E8590C}
+\definecolor{muted}{HTML}{5D6C7B}
+\definecolor{rulegray}{HTML}{B9C2CC}
+\definecolor{tintbg}{HTML}{EFF4F8}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{ink}}
+  {\textcolor{accent}{\thesection.}}{0.55em}{}
+\titlespacing*{\section}{0pt}{14pt plus 3pt minus 2pt}{6pt plus 1pt}
+\titleformat{\subsection}
+  {\normalfont\normalsize\bfseries\color{navy}}
+  {\thesubsection.}{0.45em}{}
+\titlespacing*{\subsection}{0pt}{10pt plus 2pt minus 1pt}{4pt}
+
+\setlist[itemize]{leftmargin=1.2em, itemsep=2.5pt, topsep=3pt}
+
+\linespread{1.04}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3.2pt plus 0.8pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0.3pt}
+\renewcommand{\footrule}{\hbox to\headwidth{\color{rulegray}\leaders\hrule height \footrulewidth\hfill}}
+\fancyfoot[L]{\footnotesize\color{muted}Tax Assist — NLP \& ML Technique Reference}
+\fancyfoot[R]{\footnotesize\color{ink}\thepage}
+
+% every code location renders as a clickable GitHub link pinned to the release tag
+\newcommand{\code}[2]{\href{https://github.com/Jayant1711/Tax_Assist-system/blob/v0.7-sprint7/#1}{\texttt{\textcolor{navy}{#2}}}}
+
+\newtcolorbox{examplebox}[1][]{colback=tintbg, colframe=tintbg, boxrule=0pt,
+  arc=2mm, left=8pt, right=8pt, top=6pt, bottom=6pt, #1}
+
+\newcommand{\facts}[1]{{\small\textcolor{muted}{#1}\par}}
+
+\title{\textcolor{ink}{\bigger NLP \& ML Techniques in Tax Assist\\[2mm]
+\large A line-wise reference: code links, data, parameters, training, evaluation --- and where each one is really used}}
+\author{\normalsize Jayant (12406581) · Roll No. RK4P24MZA06\\
+\normalsize CSE472 · Deep Learning for Natural Language Processing · November 2026}
+\date{}
+
+\makeatletter
+\renewcommand{\maketitle}{
+  \begin{center}
+    {\fontsize{22}{26}\selectfont\bfseries\color{ink} NLP \& ML Techniques in Tax Assist\\[3mm]
+     \fontsize{14}{18}\selectfont\bfseries\color{navy} A line-wise reference with code links, data, parameters, training and evaluation}
+  \end{center}
+  \vspace{2mm}
+  \begin{center}
+    {\normalsize Jayant \;·\; Roll No. RK4P24MZA06 \;·\; CSE472 : Deep Learning for Natural Language Processing\\[1mm]
+     \small\color{muted} \href{https://github.com/Jayant1711/Tax_Assist-system/blob/v0.7-sprint7/README.md}{github.com/Jayant1711/Tax\_Assist-system} \;·\; November 2026 \;·\; links pinned to release \href{https://github.com/Jayant1711/Tax_Assist-system/releases/tag/v0.7-sprint7}{v0.7-sprint7}}
+  \end{center}
+  \vspace{1mm}
+}
+\makeatother
+
+\newcommand{\bigger}{\fontsize{20}{24}\selectfont}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{tcolorbox}[colback=tintbg, colframe=tintbg, boxrule=0pt, arc=2mm,
+  left=8pt, right=8pt, top=6pt, bottom=6pt]
+\small
+Every blue \texttt{file:line} entry below is a \textbf{clickable link} into the
+repository at the released v0.7-sprint7 tag. Each topic lists the data it used,
+its parameter count, how long it trained (measured wall-clock where a run was
+re-executed), and its measured evaluation --- followed by a real example of the
+technique at work inside the product.
+\end{tcolorbox}
+
+\section{The rule engine first: what everything else is measured against}
+\facts{\code{backend/tax_engine.py}{tax\_engine.py:238} (two-regime calculation) ·
+\code{backend/tax_engine.py}{tax\_engine.py:520} (leave-one-out impact) ·
+\code{backend/tax\_rules/fy\_2025\_26.py}{fy\_2025\_26.py} (versioned statute) ·
+\facts{} \textbf{Data:} none — hand-transcribed statute tables (slabs, surcharge
+ladder with marginal relief, Section 87A rebate, HRA Rule-2A, per-section caps).
+\textbf{Parameters:} zero learned; the constants ARE the law. \textbf{Training:}
+none. \textbf{Evaluation:} differential tests against hand-computed statutory
+cases inside the 1,209-test suite.}
+
+\begin{examplebox}
+\textbf{Real use:} a salaried profile of Rs 15 lakh with Rs 5 lakh education-loan
+interest (80E) and Rs 2 lakh let-out home-loan interest (24(b)) prices to
+Rs 57,500 old regime vs Rs 1,03,375 new regime --- the engine picks the old
+regime, and the statement shows every slab step.
+\end{examplebox}
+
+\section{Rule-based slot filling (information extraction)}
+\facts{\code{backend/ai\_models.py}{ai\_models.py:25} (UniversalParser) ·
+\code{backend/nlp\_engine.py}{nlp\_engine.py:112,119} (guard and grouping-safe
+splitters) · \code{backend/nlp\_engine.py}{nlp\_engine.py:676}
+(\texttt{process\_message}). \textbf{Data:} corpus-v1, 2,226 labeled records
+(1,537/434/255 template-disjoint splits, 197 families). \textbf{Parameters:} zero
+learned. \textbf{Training:} none --- deterministic rules. \textbf{Evaluation:}
+macro precision/recall/F1 = 1.000/1.000/1.000 over 21 categories, abstention
+17/17, on the 434-record eval split.}
+
+\begin{examplebox}
+\textbf{Real use:} the utterance \emph{``I earn 18 LPA, invest 1.5 lakhs in PPF,
+and pay 12,000 rent monthly''} books salary Rs 18,00,000, Section 80C
+Rs 1,50,000, and rent Rs 12,000 monthly (annualized Rs 1,44,000) --- each amount
+recovered by a different sub-technique of the same chain.
+\end{examplebox}
+
+\section{Tokenization guard: commas are grouping, not grammar}
+\facts{\code{backend/nlp\_engine.py}{nlp\_engine.py:119} (grouping-safe split) ·
+\code{backend/nlp\_engine.py}{nlp\_engine.py:112} (clause splitter).}
+
+\begin{examplebox}
+\textbf{Real use:} \emph{``claimed 1,25,000 under 80c''} must not split into three
+clauses. The production regex splits only when neither neighbour of the comma is
+a digit: \texttt{(?<!\textbackslash d)[,;](?!\textbackslash d)}. A naive split
+destroys the amount into \texttt{1}, \texttt{25}, \texttt{000}.
+\end{examplebox}
+
+\section{Semantic attention (custom): distance-decayed category binding}
+\facts{\code{backend/ai\_models.py}{ai\_models.py:142}
+(\texttt{SemanticAttention}). \textbf{Mechanism:}
+$s(k) = 100 \cdot e^{-d_k^2/2\sigma^2}$ with $\sigma = 40$ characters.
+\textbf{Parameters:} zero learned; the decay scale is a fixed design constant.
+\textbf{Evaluation:} covered by the extraction gate (F1 1.000) plus adversarial
+unit tests for cross-category sentences.}
+
+\begin{examplebox}
+\textbf{Real use:} \emph{``invested 1.5 lakhs in PPF \ldots pay 2L rent''} ---
+Section 80C scores at distance $d{=}6$ and wins the Rs 1.5 lakh; the rent
+keyword scores at $d{=}34$ and wins the Rs 2 lakh. When nothing clears the
+threshold, the amount falls to a flagged provisional default that can never
+overwrite a booked value.
+\end{examplebox}
+
+\section{Intent classification: TF-IDF + logistic regression}
+\facts{\code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:73}
+(feature build) · \code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:117}
+(training) · \code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:283}
+(runner). \textbf{Data:} 2,226 records $\rightarrow$ 2,226 usable utterances,
+8 intents, TF-IDF unigrams+bigrams (min\_df 2, sublinear). \textbf{Parameters:}
+1,464 features $\times$ 8 classes $=$ \textbf{11,720 weights} (incl. intercepts).
+\textbf{Training:} L-BFGS logistic regression, \textbf{measured 4.5\,s wall}
+(clean container rerun). \textbf{Evaluation:} \textbf{96.41\% certified};
+a fresh container rerun measures 97.9\%.}
+
+\begin{examplebox}
+\textbf{Real use:} \emph{``I am a software engineer earning 24 lakhs''} classifies
+as the \texttt{salary} intent at very high margin, which routes the conversation
+into the income branch. The classifier is research-layer: production routing
+uses the same vocabulary through the deterministic path.
+\end{examplebox}
+
+\section{Sequence labeling with BIO tags (corpus encoding)}
+\facts{\code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:368}
+(\texttt{entities\_to\_bio}) · \code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:116}
+(corpus generation) · \code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:396}
+(dataset preparation). \textbf{Data:} expanded template grammar with six
+multi-entity sentence families; 471 unique annotated samples. \textbf{Labels:} 13
+BIO tags ($O$ plus B-/I- for each of the 6 entity types).}
+
+\begin{examplebox}
+\textbf{Real use:} \emph{``i paid 25k as rent on 1 april 2024 as of 30 june 2024''}
+encodes as \texttt{O O B-MONEY O O O B-DATE I-DATE I-DATE O O B-DATE I-DATE
+I-DATE} --- three entities, two of them multi-token, aligned by character
+offsets from \texttt{re.finditer} (the pre-fix window arithmetic produced
+all-O and zero I- tags).
+\end{examplebox}
+
+\section{BiLSTM sequence labeling (NER model)}
+\facts{\code{nlp\_research/phase\_d\_ner.py}{phase\_d\_ner.py:55} (model) ·
+\code{nlp\_research/phase\_d\_ner.py}{phase\_d\_ner.py:91} (training loop) ·
+\code{nlp\_research/phase\_d\_ner.py}{phase\_d\_ner.py:196} (evaluator).
+\textbf{Data:} the 471-sample expanded corpus above. \textbf{Parameters:}
+\textbf{282,637} = embedding $118 \times 128$ (15,104) + BiLSTM $2 \times
+132{,}096$ (264,192) + linear $256 \times 13$ (3,341). \textbf{Training:}
+Adam, lr $5{\times}10^{-4}$, gradient clipping at 1.0, 20 epochs ---
+\textbf{measured 7.9\,s wall} in the CPU container. \textbf{Evaluation:}
+\textbf{91.36\% token accuracy, 0.756 macro F1} with the corrected evaluator
+(the previously reported 0.143 was a softmax confidence of a NaN-diverged model,
+with per-class numbers synthesized from entity counts).}
+
+\begin{examplebox}
+\textbf{Real use:} research-track only --- production extraction stays
+deterministic. The model exists so the low-data NER regime is measured
+honestly, and the corrected pipeline is pinned by a torch-free test suite.
+\end{examplebox}
+
+\section{Training hygiene: gradient clipping}
+\facts{\code{nlp\_research/phase\_d\_ner.py}{phase\_d\_ner.py:152}
+(\texttt{clip\_grad\_norm\_} at 1.0). \textbf{Why:} the original NER training
+diverged --- loss NaN at epoch 7, because the label encoding ignored every token
+(all-O) so the cross-entropy reduced to 0/0. Clipping plus the corrected labels
+removed the divergence entirely.}
+
+\section{Word embeddings, built from scratch: SGNS}
+\facts{\code{nlp\_research/embedding\_analysis.py}{embedding\_analysis.py:138}
+(\texttt{SGNS} class). \textbf{Data:} corpus vocabulary, window 5, 5 negatives.
+\textbf{Parameters:} 50-dimensional in+out embedding matrices (pure NumPy, Adam).
+\textbf{Training:} CPU, seeded. \textbf{Evaluation:} PCA over the SGNS space ---
+78\% of variance captured by the top 10 dimensions.}
+
+\section{Word embeddings, built from scratch: GloVe}
+\facts{\code{nlp\_research/embedding\_analysis.py}{embedding\_analysis.py:222}
+(\texttt{train\_glove}). \textbf{Mechanism:} global co-occurrence factorization
+with $f(x) = \min(1, (x/x_{max})^{\alpha})$ weighting, weighted least squares,
+Adagrad. \textbf{Parameters:} 100-dimensional two-sided embeddings. \textbf{Why
+from scratch:} no gensim wheel for the Python build --- the algorithms were
+implemented in NumPy.}
+
+\section{Dimensionality reduction: PCA and t-SNE}
+\facts{\code{nlp\_research/embedding\_analysis.py}{embedding\_analysis.py}
+(projection + artifact plots). \textbf{Evaluation:} top-10 PCA dimensions
+capture 78\% of SGNS variance; t-SNE exposes fine clusters (80c / 80d / 24b).
+\textbf{Documented finding:} template coverage anchors rare Hinglish tokens into
+the right neighborhood.}
+
+\section{Seq2seq with attention: Bahdanau and Luong}
+\facts{\code{nlp\_research/phase\_e\_seq2seq.py}{phase\_e:157} (Bahdanau additive)
+· \code{nlp\_research/phase\_e\_seq2seq.py}{phase\_e:183} (Luong dot-product) ·
+\code{nlp\_research/phase\_e\_seq2seq.py}{phase\_e:198} (the model). \textbf{Data:}
+150 input/target pairs from the Indian tax domain, character-level. \textbf{Study
+conclusion:} documented mechanically in ATTENTION\_STUDY; both attention forms
+implemented and compared.}
+
+\section{Transformer studies: BERT, GPT-2, T5}
+\facts{\code{nlp\_research/phase\_f\_bert\_classification.py}{phase\_f} (BERT:
+110M params, full fine-tune blocked --- no GPU in the environment) ·
+\code{nlp\_research/phase\_g\_generative.py}{phase\_g} (GPT-2 1.5B prompted
+generations; T5-small 220M summarization runs). \textbf{Findings:} fluent output,
+statutory numbers unverifiable --- the exact conclusion the architecture
+responds to.}
+
+\section{Neuro-fuzzy inference (ANFIS / TSK): the production efficiency scorer}
+\facts{\code{backend/ai\_models.py}{ai\_models.py:637} (\texttt{ANFIS}) ·
+\code{backend/anfis\_weights.json}{anfis\_weights.json} (the shipped artifact) ·
+\code{backend/anfis\_trainer.py}{anfis\_trainer.py}. \textbf{Data (RUN-001):}
+legacy slab scenarios, 200k-1M rows. \textbf{Parameters:} \textbf{3,904} =
+2,560 membership (20 inputs $\times$ 64 rules $\times$ center+$\sigma$) + 1,344
+consequents ($64 \times 21$). \textbf{Training:} EE-BAT evolutionary search, 500
+iterations, seeded. \textbf{Evaluation:} architect-verified $r^2$ 0.4976 against
+engine truth --- retained as the UI grade, never a rupee.}
+
+\begin{examplebox}
+\textbf{Real use:} a 24-lakh salaried profile with minimal deductions shows
+\emph{ANFIS Efficiency Score 64.7/100} on the results screen --- a UI signal of
+deduction utilization, fully decoupled from the tax computation itself.
+\end{examplebox}
+
+\section{Ridge least-squares consequents (the v5 redesign)}
+\facts{\code{backend/tools/train\_anfis\_v5.py}{tools/train\_anfis\_v5.py} ·
+\code{backend/tools/generate\_anfis\_dataset.py}{tools/generate\_anfis\_dataset.py}
+(dataset generator, continuous stratum). \textbf{Data (RUN-003b):} anfis-v1
+expansion, 76,960 rows / 1,623 positives. \textbf{Parameters:} \textbf{1,104}
+LSE coefficients ($48$ rules $\times$ 23 features, closed form). \textbf{Training:}
+\textbf{measured 65.5\,s wall} (vs $>$20 minutes for the bounded EE-BAT).
+\textbf{Evaluation:} served composite MAE 0.136 --- improving to 0.0023 on the
+3,138-scenario continuous slice.}
+
+\section{Controlled falsification experiment design (three data scales)}
+\facts{\code{backend/tools/forensics/}{tools/forensics} (the measurement
+harness) · registry entries RUN-002 / RUN-003 / RUN-003b / RUN-004.
+\textbf{Design:} identical architecture, monotonically more data (46,816
+$\rightarrow$ 76,960 $\rightarrow$ 377,753 rows). \textbf{Measured outcomes:}
+learned savings MAPE 92--108\% $\rightarrow$ 795\% $\rightarrow$
+\textbf{1,523,679\%}; opportunity precision/recall 0 at every scale. \textbf{The
+mechanism:} the label is a closed-form function containing a discontinuous
+regime-flip $min()$ that additive rule bases smooth across. \textbf{Policy:}
+learned regression on closed-form targets is permanently inadmissible.}
+
+\section{Exact rule heads over the two-pass (the deployed decision layer)}
+\facts{\code{backend/tax\_intelligence.py}{tax\_intelligence.py:418}
+(\texttt{recommend}, the two-pass) ·
+\code{backend/tax\_intelligence.py}{tax\_intelligence.py:681--692} (the three
+rule heads). \textbf{Parameters:} zero learned. \textbf{Training:} none ---
+the heads evaluate the same closed-form expressions the engine uses.
+\textbf{Evaluation:} precision/recall 1.0/1.0, savings MAE Rs 0.00 on a
+10,995-row validation set.}
+
+\begin{examplebox}
+\textbf{Real use:} the final report for the 15-lakh profile renders three ranked
+opportunities --- \emph{Section 24B est.\ saves Rs 32,500, Section 80C est.\ saves
+Rs 22,100, Section 80G est.\ saves Rs 1,300} (all confidence 0.85) --- with the
+fired-rule reasoning (\emph{``How the CA Layer Thinks''}) shown beside them.
+\end{examplebox}
+
+\section{Leave-one-out counterfactual evaluation}
+\facts{\code{backend/tax\_engine.py}{tax\_engine.py:520}
+(\texttt{deduction\_impact}). \textbf{Mechanism:} re-price the full session with
+one head zeroed, in both regimes;
+$\Delta_i = T_r(x_{-i}) - T_r(x)$. \textbf{Parameters:} zero. \textbf{Evaluation:}
+differential tests pin the sign and the new-regime semantics; a control profile
+prices every 115BAC-ignored head at exactly Rs 0.}
+
+\begin{examplebox}
+\textbf{Real use:} the impact table for the 15-lakh profile shows
+\emph{80E entered Rs 5,00,000 $\rightarrow$ tax reduced Rs 1,30,000} and
+\emph{24(b) entered Rs 2,00,000 $\rightarrow$ tax reduced Rs 41,600}, both
+matching a hand-worked slab bridge; a 46-lakh control shows Rs 0 for 80C with
+the statutory reason printed.
+\end{examplebox}
+
+\section{Calibration: Expected Calibration Error and the known-answer canary}
+\facts{\code{backend/calibration.py}{calibration.py:24} (ECE) ·
+\code{backend/calibration.py}{calibration.py:62} (canary) ·
+\code{backend/main.py}{main.py:1177} (\texttt{/analytics/overview}).
+\textbf{Data:} the live acceptance-event store. \textbf{Parameters:} zero ---
+this is measurement, not modeling. \textbf{Evaluation:} the canary's 200
+constructed pairs must measure exactly 0.0 (they do) and the flipped set must
+flag at 0.85 (it does); the live store holds one resolved event, so the honest
+measurement is \u201Cunmeasured.\u201D}
+
+\section{Dataset engineering: seeded generation and manifest pinning}
+\facts{\code{backend/tools/generate\_anfis\_dataset.py}{tools/generate\_anfis\_dataset.py:187}
+(continuous stratum) · \code{backend/tools/build\_labeled\_corpus.py}{tools/build\_labeled\_corpus.py}
+(corpus-v1) · \code{backend/data/manifest.json}{data/manifest.json} (sha256
+manifest). \textbf{Discipline:} seed 472 everywhere, LF-normalized writes,
+content-addressed records --- a dataset rebuilds byte-for-byte. \textbf{Data
+produced:} anfis-v3 = 21,964 scenarios / 377,753 rows / 51,873 positives
+(13.73\%), generated from the engine itself.}
+
+\section{Evaluation harness and release gates}
+\facts{\code{backend/tools/run\_eval.py}{tools/run\_eval.py:46} (the certified
+extraction gate) · registry \code{TRAINING\_REGISTRY.md}{TRAINING\_REGISTRY.md}
+(RUN-001\ldots005) · \code{EXPERIMENT\_REGISTRY.md}{EXPERIMENT\_REGISTRY.md}
+(EXP-001\ldots020). \textbf{Gates:} extraction $\geq$ 95\% F1 (measured 1.000);
+ANFIS G1--G3 composite gates (PASS); G4--G5 learned-head gates (FAIL three
+times); calibration canary (0.0 exact).}
+
+\section{The adoption store: online-learning substrate}
+\facts{\code{backend/db.py}{db.py:436} (action finality) ·
+\code{backend/db.py}{db.py:509} (cross-session overview) ·
+\code{backend/main.py}{main.py:1177--1237} (overview / apply / plan-apply
+endpoints). \textbf{Data:} live shown-event and action rows. \textbf{Measured
+live:} 24 shown, 1 accepted, rate 4.2\%, Accepted-Rupee Rs 32,500, calibration
+gate 1/30.}
+
+\begin{examplebox}
+\textbf{Real use:} clicking \emph{``\,✓ Apply this''} on a recommendation books
+the headroom into the session (clamped to the statutory cap), records the
+acceptance, and returns the engine-repriced report --- the live run moved net
+taxable income from Rs 7,50,000 to Rs 5,50,000 on the applied plan.
+\end{examplebox}
+
+\section{Summary: every model, one line each}
+\begin{center}
+\small
+\begin{tabular}{@{}llrrl@{}}
+\toprule
+\rowcolor{tintbg}
+\textbf{Technique} & \textbf{Code} & \textbf{Params} & \textbf{Train} & \textbf{Measured} \\
+\midrule
+Slot filling (rules) & \code{backend/ai\_models.py}{ai\_models.py:25} & 0 & --- & F1 1.000 \\
+Semantic attention & \code{backend/ai\_models.py}{ai\_models.py:142} & 0 & --- & gate-covered \\
+TF-IDF + LogReg & \code{nlp\_research/phase\_c...:117}{phase\_c:117} & 11,720 & 4.5\,s & 96.41\% \\
+BIO sequence encoding & \code{nlp\_research/phase\_d\_corpus.py:368}{corpus:368} & 0 & --- & known-answer pinned \\
+BiLSTM NER & \code{nlp\_research/phase\_d\_ner.py:55}{ner:55} & 282,637 & 7.9\,s & 91.36\% / 0.756 \\
+SGNS embeddings & \code{nlp\_research/embedding\_analysis.py:138}{emb:138} & 50-d & CPU & PCA 78\% \\
+GloVe embeddings & \code{nlp\_research/embedding\_analysis.py:222}{emb:222} & 100-d & CPU & cluster analysis \\
+Seq2seq attention & \code{nlp\_research/phase\_e\_seq2seq.py:198}{seq2seq:198} & study & study & documented \\
+BERT / GPT-2 / T5 & \code{nlp\_research/phase\_f\_bert\_classification.py}{phase\_f/g} & 110M-1.5B & blocked & findings logged \\
+ANFIS v4 (TSK) & \code{backend/ai\_models.py:637}{ai\_models.py:637} & 3,904 & EE-BAT 500 & r$^2$ 0.4976 \\
+ANFIS v5 composite & \code{backend/tools/train\_anfis\_v5.py}{tools:train\_v5} & exact & 47--67\,s & MAE 0.136 \\
+TSK regression head & \code{backend/tools/train\_anfis\_v5.py}{tools:train\_v5} & 1,104 & 65.5\,s & denied (policy) \\
+Rule heads & \code{backend/tax\_intelligence.py:418}{intel:418} & 0 & --- & P/R 1.0, MAE 0 \\
+Leave-one-out impact & \code{backend/tax\_engine.py:520}{engine:520} & 0 & --- & exact, hand-checked \\
+ECE calibration & \code{backend/calibration.py:24}{calib:24} & 0 & --- & canary 0.0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{3mm}
+\begin{tcolorbox}[colback=tintbg, colframe=tintbg, boxrule=0pt, arc=2mm,
+  left=8pt, right=8pt, top=6pt, bottom=6pt]
+\small
+\textbf{How to read the links:} every \texttt{file:line} points to the released
+\href{https://github.com/Jayant1711/Tax_Assist-system/releases/tag/v0.7-sprint7}{v0.7-sprint7}
+tag on GitHub, so the code you inspect is exactly the code that shipped.
+\textbf{Honest exclusions:} the BiLSTM NER model is research-track (deterministic
+extraction serves production); the neuro-fuzzy regression heads were denied by
+measurement; and the calibration figure is unmeasured until thirty real decisions
+accumulate. Those exclusions are the point, not a gap.
+\end{tcolorbox}
+
+\end{document}
