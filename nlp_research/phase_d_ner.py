@@ -43,13 +43,9 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 # prep) so it can be imported and regression-tested on machines where
 # torch is blocked.
 from phase_d_corpus import (  # noqa: E402
-    BIO_LABELS, BIO_TO_IDX, BOOKED, DATE_RE, DATE_WORDS, DEDUC_WORDS,
-    DEDUCTION_TYPE_RE, HEADROOM, INCOME_TYPE_RE, INCOME_WORDS, MONEY_RE,
-    MONEY_WORDS, N_CLASSES, NER_CLASSES, O_IDX, PERCENT_RE, PERCENT_WORDS,
-    TAX_SECTION_RE, TAX_SECTION_WORDS, UTIL, entities_to_bio,
-    extract_entities_rule, generate_ner_corpus, prepare_ner_dataset,
-    seeded_split,
+    BIO_LABELS, NER_CLASSES, N_CLASSES, O_IDX, SEED, generate_ner_corpus, prepare_ner_dataset, seeded_split,
 )
+
 
 import torch
 import torch.nn as nn
