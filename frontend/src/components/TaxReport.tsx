@@ -98,10 +98,10 @@ export default function TaxReport({ sessionId, projection }: Props) {
         setActed((prev) => ({ ...prev, [recId]: 'applied' }));
         setReloadTick((t) => t + 1); // re-runs the whole priced report
       } else {
-        setActed((prev) => ({ ...prev, [recId]: `error:${res.status}` }));
+        setActed((prev) => ({ ...prev, [recId]: `apply-error:${res.status}` }));
       }
     } catch {
-      setActed((prev) => ({ ...prev, [recId]: 'error:network' }));
+      setActed((prev) => ({ ...prev, [recId]: 'apply-error:network' }));
     }
   };
 
@@ -435,6 +435,11 @@ export default function TaxReport({ sessionId, projection }: Props) {
                   {recommend && finalPhase && acted[card.rec_id] === 'rejected' && (
                     <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                       ✕ Rejected — recorded in your adoption history.
+                    </div>
+                  )}
+                  {recommend && finalPhase && acted[card.rec_id]?.startsWith('apply-error') && (
+                    <div style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--accent-red, #e5484d)' }}>
+                      ✕ Apply failed — nothing was booked. Try again or recalculate.
                     </div>
                   )}
                   {recommend && finalPhase && acted[card.rec_id]?.startsWith('error') && (
