@@ -51,7 +51,7 @@ class UniversalParser:
         # Negative lookahead prevents "80" in "80u" from being parsed as number 80 with unit "u"
         self.digit_pat = re.compile(
             r'(\d[\d,]*(?:\.\d+)?)(?!u\b)\s*'
-            r'(lakhs?|lacs?|l(?![a-z])|crores?|crs?|k\b|80u\b|80u_80dd\b|thousand(?:s)?|hazaars?|hajars?|lpa|mn|million|pm|per\s*month)?',
+            r'(lakhs?|lacs?|l(?![a-z])|crores?|crs?|k\b|80u\b|80u_80dd\b|thousand(?:s)?|hazaars?|hajars?|lpa|mn|million|per\s*month)?',
             re.IGNORECASE
         )
         # Regex for word-form representations (e.g., "thirty five lakhs", "two crore")
@@ -96,7 +96,12 @@ class UniversalParser:
                 # Check following text for monthly indicator (e.g. "45k pm", "80000 per month",
                 # "12k/mo" — Sprint 4 P1: the "/mo" shorthand annualizes too)
                 rest = text[m.end():m.end() + 14].lower().strip()
-                if (rest.startswith("pm") or rest.startswith("per month")
+                # Sprint 7 audit fix: "pm" must be the MONTHLY sense —
+                # "50000 PM Cares fund" / "50k PMNRF" are donations and
+                # were 12x over-booked by the rest-prefix check.
+                pm_monthly = (rest.startswith("pm")
+                              and not re.match(r"pm\s*(cares|nrf|fund|relief)", rest))
+                if (pm_monthly or rest.startswith("per month")
                         or rest.startswith("/month") or rest.startswith("/mo")
                         or rest.startswith("p.m")):
                     val = val * 12
@@ -458,13 +463,13 @@ class SemanticAttention:
                     break
 
             for kw in kw_map["pos"]:
+                kw_re = re.compile(r"(?<![0-9a-z])" + re.escape(kw) + r"(?![0-9a-z])", re.IGNORECASE)
                 idx = t.find(kw)
                 while idx != -1:
-                    is_partial = False
-                    if idx > 0 and t[idx - 1].isalnum() and len(kw) < 4:
-                        is_partial = True
-                    if idx + len(kw) < len(t) and t[idx + len(kw)].isalnum() and len(kw) < 4:
-                        is_partial = True
+                    # Sprint 7 audit fix: word-boundary check for ALL
+                    # keywords (the old len<4 guard let "rent" match
+                    # inside "parents" and "currently").
+                    is_partial = kw_re.search(t) is None
 
                     if not is_partial:
                         dist = min(abs(idx - val_start), abs(idx - val_end))
@@ -549,9 +554,14 @@ class ReasoningAgent:
         )
         profile = session.get("profile")
 
-        if total_inc == 0 and profile:
+        # Sprint 7 audit fix: a BOOKED zero (the zero-sentinel) counts
+        # as answered — the discovery must advance to the deduction
+        # steps instead of looping on the income ask forever.
+        income_answered = any(
+            session.get(k) is not None for k in income_keys)
+        if total_inc == 0 and profile and not income_answered:
             return f"plan: Acknowledge {profile} and ask for specific income amount."
-        if total_inc == 0:
+        if total_inc == 0 and not income_answered:
             return "plan: Ask for income details (Salary/Business)."
 
         for key, desc in self.DISCOVERY_STEPS[1:]:
@@ -611,8 +621,10 @@ class ReasoningAgent:
         if nps < 50000:
             gap = 50000 - nps
             if income > 1500000:
-                saving = gap * 0.312
-                tips.append(f"NPS Super-Deduction: In the 30% tax bracket, investing ₹{gap:,.0f} in NPS Tier-1 (80CCD(1B)) will save an instant ₹{saving:,.0f} in tax.")
+                # Sprint 7 audit fix (ADR-001): the rupee saving figure
+                # was computed HERE, outside the engine — reworded to the
+                # lever without a number.
+                tips.append(f"NPS Super-Deduction: In the 30% tax bracket, an NPS Tier-1 (80CCD(1B)) contribution of ₹{gap:,.0f} is deductible — the engine prices the exact saving.")
             else:
                 tips.append(f"NPS Advantage: Allocate ₹{gap:,.0f} to NPS for an exclusive deduction over and above Section 80C.")
 

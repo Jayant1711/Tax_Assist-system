@@ -185,6 +185,11 @@ class TestDeductionSemantics:
         """'NPS' must never leak into 80C: the NPS ask-back names the 80C
         limit, and the asked-category check used to match '80c' first —
         a bare follow-up amount booked 80C instead of NPS."""
+        # Sprint 7 audit: the discovery cadence is one "no" per slot —
+        # 80C -> (no) -> 80D -> (no) -> NPS — so the NPS ask-back is the
+        # open question when the bare amount arrives. (The audit wave
+        # also fixed the zero-sentinel/walk double-consumption that made
+        # one "no" skip two slots.)
         sess, _ = run_chat([
             "I am a teacher earning 30 lakhs",
             "1 lakh in PPF",

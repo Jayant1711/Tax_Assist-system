@@ -293,7 +293,12 @@ def _bootstrap_state(session_id: str) -> Dict[str, Any]:
     ``history`` is the NLP conversation log the engine appends to; it is
     internal state and never projected back to the client.
     """
-    return {"id": session_id, "phase": "PROFILING", "history": []}
+    # Sprint 7 audit fix: the greeting's question primes _last_question —
+    # the zero-sentinel ("nothing") on the FIRST turn needs an asked
+    # category to book salary = 0 (without it the discovery looped).
+    return {"id": session_id, "phase": "PROFILING", "history": [],
+            "_last_question": ("What is your profession or source of "
+                               "livelihood? Also tell me your annual income.")}
 
 
 def create_session(user_id: Optional[str]) -> sqlite3.Row:

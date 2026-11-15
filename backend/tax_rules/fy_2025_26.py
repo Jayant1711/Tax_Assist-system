@@ -109,8 +109,8 @@ FY_2025_26 = FYRules(
             income_cap=1200000,
             max_amount=60000,       # == slab tax at the 12L threshold
             marginal_relief=True,
-            band_upper_bound=None,  # endpoint 12,73,934 derived, not stored
-            band_cap_includes_cess=True,
+            band_upper_bound=None,  # endpoint 12,70,588 derived, not stored
+            band_cap_includes_cess=False,  # audit wave 1: cap is PRE-cess
         ),
     }),
 

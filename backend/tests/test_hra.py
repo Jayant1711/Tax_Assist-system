@@ -348,15 +348,18 @@ def test_hra_discovery_question_asks_all_three() -> None:
 
 def test_bare_no_walks_rent_then_hra_then_metro() -> None:
     """The combined question collects all three slots; three bare "no"s zero
-    rent, zero HRA and book is_metro=False, completing the waterfall."""
+    rent, zero HRA and book is_metro=False. One slot per "no" (the audit
+    wave fixed the zero-sentinel/walk double-consumption), so the fourth
+    "no" closes the remaining 80G slot and the waterfall reaches FINAL."""
     sess, responses = run_chat(
-        ["hello", "no", "no", "no"],
+        ["hello", "no", "no", "no", "no"],
         {"id": "pytest_hra_no", "salary": 1_800_000, "80c": 150_000,
          "80d": 25_000, "nps": 50_000},
     )
     assert sess.get("rent_paid") == 0
     assert sess.get("hra_received") == 0
     assert sess.get("is_metro") is False
+    assert sess.get("80g") == 0
     assert sess.get("phase") == "FINAL"
 
 

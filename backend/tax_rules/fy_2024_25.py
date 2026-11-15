@@ -73,12 +73,10 @@ FY_2024_25 = FYRules(
     # eligibility keyed on total income incl. special-rate CG; simple
     # rebate, no band).
     # New regime: full rebate while TOTAL income <= 700000; above it the
-    # harmonized post-cess band cap applies — the payable TOTAL is capped
-    # at (TOTAL INCOME - 700000) with cess included. band_cap_includes_cess
-    # True: harmonized in Step A2 per FA-2025 Explanation; was pre-cess.
-    # The crude 727777 stored band bound is REMOVED in Step A2; derived
-    # endpoint 7,23,214 incl-cess is a QA expectation only — the cap's
-    # reach emerges from the engine's min().
+    # relief caps INCOME-TAX + SURCHARGE BEFORE cess (audit wave 1: the
+    # department's own AY 2025-26 ITR-utility example — 7,10,000 ->
+    # 10,400 — confirms cess sits outside the cap). band_cap_includes_cess
+    # False; statutory band endpoint derives to 7,22,222.
     rebate=MappingProxyType({
         "old": RebateRule(
             income_cap=500000,
@@ -92,7 +90,7 @@ FY_2024_25 = FYRules(
             max_amount=None,        # full rebate of the computed (normal-rate) tax
             marginal_relief=True,
             band_upper_bound=None,  # removed in Step A2 (see comment above)
-            band_cap_includes_cess=True,
+            band_cap_includes_cess=False,
         ),
     }),
 

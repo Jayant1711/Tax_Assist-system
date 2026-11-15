@@ -250,9 +250,30 @@ class NLPEngine:
                        session: Optional[Dict[str, Any]] = None) -> Optional[str]:
         if not last_q:
             return None
+        # the composer wraps asks in markdown italics — the trailing "_"
+        # marker must be stripped or the ask-shape check below fails on
+        # every rent/metro ask
+        stripped = last_q.strip().rstrip("_*# ")
+        # Sprint 7 audit fix: only an actual ASK primes the prior. The
+        # trailing line of a closing response (tips/notes) has no question
+        # shape — priming from it poisoned the asked category (stray
+        # amounts booked into whatever the tip mentioned). The ask shape
+        # is "a question mark anywhere in the line" (the NPS ask-back is
+        # "Did you put anything into NPS Tier-1? Section 80CCD(1B) allows
+        # ..." — the question followed by an explanatory clause) or a
+        # closing paren (the rent/metro and 80G asks end with the
+        # bracketed hint). A closing tip line contains neither.
+        if "?" not in stripped and not stripped.endswith(")"):
+            return None
         lq = last_q.lower()
         if any(k in lq for k in ["salary", "income", "earn", "kitna kamate", "annual income", "annual"]):
-            return "business" if profile == "Business Owner" else "salary"
+            # Sprint 7 audit fix: an already-answered income slot is
+            # never re-primed (the rent-leg pattern below) - a bare
+            # follow-up amount falls through to the open asks.
+            if session is not None and session.get("salary") is not None:
+                pass
+            else:
+                return "business" if profile == "Business Owner" else "salary"
         # Sprint 4 P1 item 3 (deduction semantics): NPS is checked BEFORE
         # 80C — the NPS ask-back itself names the 80C limit ("completely
         # separate from your 80C limit!"), so the 80C substring check used
@@ -295,7 +316,8 @@ class NLPEngine:
         t = text.lower().strip()
         # Patterns: standalone negation words OR negative phrases
         zero_exact = {"no", "nope", "nahi", "na", "nothing", "none", "never",
-                      "nil", "zero", "skip", "n/a", "not applicable"}
+                      "nil", "zero", "skip", "n/a", "not applicable",
+                      "no income", "zero income", "i have no income"}
         if t in zero_exact:
             return True
         negative_phrases = [
@@ -683,6 +705,15 @@ class NLPEngine:
             if "history" not in session:
                 session["history"] = []
             session["history"].append({"user": text, "ai": response})
+            # Sprint 7 audit fix: the report is NOT an ask — the stale
+            # discovery question from before the override used to survive
+            # here and prime the asked-category prior, so a stray bare
+            # amount after the report booked into that head and bypassed
+            # the C4a UNRECOGNIZED guard. The natural closing turn is safe
+            # (its last line is a tip, which the ask-shape gate rejects),
+            # but the override response ends in engine-priced text, so the
+            # prior is cleared outright.
+            session.pop("_last_question", None)
             return {"response": response, "session": session, "extracted": [], "plan": "Final audit ready."}
 
         text_lower = text.lower().strip()
@@ -807,8 +838,30 @@ class NLPEngine:
             ):
                 session["is_metro"] = True
 
+            clause_pairs = []
+            running = 0
+            for raw in re.split(r"\s+(?:and|&)\s+", s, flags=re.IGNORECASE):
+                piece = raw.strip()
+                if not piece:
+                    continue  # empty clause piece (e.g. a trailing "&")
+                idx = s.find(piece, running)
+                c_off = idx if idx != -1 else running
+                running = c_off + len(piece)
+                clause_pairs.append((piece, c_off))
+
+            clause_match_pairs = []
+            any_clause_matches = False
+            for clause, _c_off in clause_pairs:
+                matches = self.parser.parse(clause)
+                if matches:
+                    any_clause_matches = True
+                clause_match_pairs.append((clause, matches))
+
             # 4a. Zero-Sentinel per sentence
-            if self._is_zero_intent(s):
+            # Sprint 7 audit fix: the zero-sentinel applies per sentence
+            # ONLY when no clause parsed a value - "I don't have 80C but my"
+            # "salary is 1200000" must book the salary, not zero it.
+            if self._is_zero_intent(s) and not any_clause_matches:
                 asked_cat = self._get_asked_cat(
                     session.get("_last_question", ""), session.get("profile"), session
                 )
@@ -833,41 +886,29 @@ class NLPEngine:
             # ("also"/"plus" must not: C02 "I also have rental income").
             # Offsets locate each stripped clause inside s so segment-
             # relative spans can be mapped if ever needed.
-            clause_pairs = []
-            running = 0
-            for raw in re.split(r"\s+(?:and|&)\s+", s, flags=re.IGNORECASE):
-                piece = raw.strip()
-                if not piece:
-                    continue  # empty clause piece (e.g. a trailing "&")
-                idx = s.find(piece, running)
-                c_off = idx if idx != -1 else running
-                running = c_off + len(piece)
-                clause_pairs.append((piece, c_off))
-
-            clause_match_pairs = []
-            any_clause_matches = False
-            for clause, _c_off in clause_pairs:
-                matches = self.parser.parse(clause)
-                if matches:
-                    any_clause_matches = True
-                clause_match_pairs.append((clause, matches))
-
             # Handle numberless correction (e.g. "no that was 80C") —
-            # unchanged: fires once, only when the sentence contains no
-            # parsed values in ANY clause.
+            # fires once, only when the sentence contains no parsed
+            # values in ANY clause. Sprint 7 audit fix: last_val is
+            # initialized (a correction-flavored message with no digits
+            # and no resolvable category raised UnboundLocalError -> 500)
+            # and the restore is gated on corr_cat.
             if is_correction and not any_clause_matches:
                 corr_cat = None
                 for cat, kw_map in self.attention.categories.items():
                     if cat in s.lower() or any(kw in s.lower() for kw in kw_map["pos"][:6]):
                         corr_cat = cat
                         break
+                last_val = None
                 if corr_cat:
                     last_val = session.get("_last_val")
                     if session.get("_prev_salary"):
                         last_val = last_val or session.get("salary")
                         session["salary"] = session.pop("_prev_salary")
-                if last_val:
-                    new_val = round(session.get(corr_cat, 0) + last_val, 2) if isinstance(session.get(corr_cat), (int, float)) else last_val
+                if corr_cat and last_val:
+                    # Sprint 7 audit fix: REPLACE (the old accumulate
+                    # double-counted the re-attributed amount once the
+                    # asked-category prior was fixed)
+                    new_val = last_val
                     # V-1: correction re-bookings clamp at the write too.
                     new_val, clamped = self._clamp_amount(new_val)
                     if clamped:
@@ -919,42 +960,23 @@ class NLPEngine:
                         logger.info("80E principal guard: amount not booked")
                         continue
 
-                    # 4c. Correction: subtract from a previously mapped category
-                    if is_correction:
-                        if session.get("_prev_salary"):
-                            session["salary"] = session.pop("_prev_salary")
-                        # Step B: the legacy "hra" suspect becomes the two
-                        # split categories (mechanical rename).
-                        for suspect in ["salary", "business", "nps", "80c", "80g",
-                                        "rent_paid", "hra_received", "other_income"]:
-                            if suspect == best_cat:
-                                continue
-                            prev_val = session.get(suspect, 0)
-                            if isinstance(prev_val, (int, float)) and prev_val >= val:
-                                subtracted = max(0, prev_val - val)
-                                # V-1: even correction writes stay bounded.
-                                subtracted, clamped = self._clamp_amount(subtracted)
-                                if clamped:
-                                    newly_extracted.append(NLP_CLAMP_ADVISORY)
-                                session[suspect] = subtracted
-                                break
-
-                    # 4d. Monthly → annual conversion (C3: exactly one ×12).
-                    # The parser flags the matches it already annualized
-                    # ("pm"/"per month" forms); the engine converts only what
-                    # the parser left monthly, and only when a monthly keyword
-                    # sits in THIS match's own trailing segment (up to the next
-                    # match within the clause) — the old sentence-global scan
-                    # also annualized unrelated amounts in mixed sentences
-                    # (e.g. the "10k in ppf" next to "50000 pm"). The
-                    # (ANNUALIZED) badge is rendered exactly once, in whichever
-                    # layer performed the conversion.
                     label = best_cat.replace("_", " ").upper()
                     monthly_kws = ["monthly", "per month", "p.m", "/month", "every month",
                                    "har mahine", "mahine ka", " pm "]
                     seg_end = matches[i + 1]["start"] if i + 1 < len(matches) else len(clause)
                     trailing = clause[m["end"]:seg_end].lower()
                     if m.get("annualized"):
+                        label += " (ANNUALIZED)"
+                    elif (best_cat in ("rent_paid", "hra_received")
+                          and not m.get("annualized")
+                          and ("month" in clause.lower()
+                               or (asked_cat == best_cat
+                                   and "month" in session.get("_last_question", "").lower()))):
+                        # Sprint 7 audit fix: the discovery question asks
+                        # for MONTHLY rent/HRA - a bare answer is monthly
+                        # by contract, even without a trailing keyword. The
+                        # clause itself naming "monthly" counts too.
+                        val *= 12
                         label += " (ANNUALIZED)"
                     elif (any(kw in trailing for kw in monthly_kws if kw != " pm ")
                           or trailing.lstrip().startswith("pm")):
@@ -966,6 +988,35 @@ class NLPEngine:
                         val  *= 12
                         label += " (ANNUALIZED)"
 
+                    # 4c. Correction semantics (Sprint 7 audit rewrite -
+                    # the old first-fit subtract loop pulled the amount
+                    # out of the WRONG head and the accumulate path
+                    # turned corrections into sums):
+                    #   - re-attribution (the same amount previously
+                    #     booked in another head) undoes THAT booking,
+                    #   - the corrected value always REPLACES the
+                    #     booked amount in the target category
+                    #     (corrections never accumulate).
+                    if is_correction:
+                        if session.get("_prev_salary"):
+                            session["salary"] = session.pop("_prev_salary")
+                        last_cat = session.get("_last_cat")
+                        if (last_cat and last_cat != best_cat
+                                and isinstance(session.get(last_cat), (int, float))
+                                and abs(session.get(last_cat) - val) < 0.01):
+                            session.pop(last_cat, None)
+                        session[best_cat] = val
+
+                    # 4d. Monthly → annual conversion (C3: exactly one ×12).
+                    # The parser flags the matches it already annualized
+                    # ("pm"/"per month" forms); the engine converts only what
+                    # the parser left monthly, and only when a monthly keyword
+                    # sits in THIS match's own trailing segment (up to the next
+                    # match within the clause) — the old sentence-global scan
+                    # also annualized unrelated amounts in mixed sentences
+                    # (e.g. the "10k in ppf" next to "50000 pm"). The
+                    # (ANNUALIZED) badge is rendered exactly once, in whichever
+                    # layer performed the conversion.
                     # Sprint 2 Step D2/G (V-1 closure): clamp every
                     # NLP-written numeric to 0..1e11 AFTER monthly
                     # annualization. One central helper applied here at the
@@ -1014,6 +1065,10 @@ class NLPEngine:
                         session["capital_gains"].append(
                             {"type": cg_type, "amount": val, "holding": "unknown"}
                         )
+                    elif is_correction:
+                        # the undo above handled the cross-head
+                        # re-attribution; the corrected value replaces
+                        session[best_cat] = val
                     elif best_cat in OVERWRITE_CATS and not is_correction:
                         if best_cat in already_mapped_this_turn:
                             summed = round(session.get(best_cat, 0) + val, 2)
@@ -1036,6 +1091,7 @@ class NLPEngine:
                             newly_extracted.append(NLP_CLAMP_ADVISORY)
                         session[best_cat] = summed
 
+                    session["_last_cat"] = best_cat
                     newly_extracted.append(f"{label}: ₹{val:,.0f}")
                     # Sprint 4 P2: confidence-aware replies — remember the
                     # categories this turn booked via the profile-default
@@ -1071,7 +1127,16 @@ class NLPEngine:
             response += "\n" + note
         for askback in askbacks:
             response += "\n" + askback
-        session["_last_question"] = response
+        # Sprint 7 audit fix: the asked-category prior is derived from
+        # THIS line - storing the whole response let the ack/advisory
+        # text poison the prior (bare answers booked into the wrong
+        # slot). The trailing line is the open question.
+        # Sprint 7 audit fix: the asked-category prior is derived from
+        # THIS line (the last non-empty line = the open question) -
+        # storing the whole response let the ack/advisory text poison
+        # the prior (bare answers booked into the wrong slot).
+        _last_line = [ln for ln in response.strip().split("\n") if ln.strip()][-1]
+        session["_last_question"] = _last_line
 
         if "history" not in session:
             session["history"] = []
@@ -1100,10 +1165,17 @@ class NLPEngine:
         turn_idx = composer.turn_index(session)
 
         # ── bare "no" → mark current slot as 0 and advance ─────────────
+        # Sprint 7 audit fix: the per-sentence zero-sentinel now resolves
+        # the asked category correctly, so a bare "no" usually consumes
+        # its slot THERE ("X: Noted (None)" / "METRO: Noted"). When that
+        # happened this turn, the legacy walk below must not also fire —
+        # it walks past the just-booked slot and zero-books the NEXT
+        # discovery step, i.e. one "no" silently consumed two questions.
         if bare_no:
             income_keys = ["salary", "business", "rental", "other_income"]
             has_income  = any(session.get(k, 0) > 0 for k in income_keys)
-            if has_income:
+            sentinel_consumed = any("Noted (" in e for e in found)
+            if has_income and not sentinel_consumed:
                 # Step B: the legacy "hra" slot becomes the two split legs
                 # (is_metro is handled by the zero-sentinel's metro leg).
                 for key in ["80c", "80d", "nps", "rent_paid", "hra_received", "24b", "80g"]:

@@ -84,6 +84,8 @@ def test_c04_correction_round_trip() -> None:
     assert sess.get("profile") == "Salaried"
     assert sess.get("salary") == 6_000_000  # restored, not left at 200,000
     assert sess.get("80c") == 200_000       # the corrected 2L lands in 80C
+    # Sprint 7 audit fix: the corrected amount REPLACES (the old
+    # accumulate double-counted it to 400,000)
 
 
 def test_c05_multi_entity_sentence() -> None:
@@ -176,12 +178,15 @@ def test_monthly_keyword_annualized_once() -> None:
 # ── ISSUE #6 (C4a): default fall-through must not clobber income ────────
 
 def test_default_fallthrough_does_not_clobber_income() -> None:
-    """C4a: a profile-default fall-through (no category keyword scored
-    above threshold) must never OVERWRITE an existing positive income.
-    The amount is reported back with the UNRECOGNIZED badge so the user
-    keeps control (regression for salary 4,500,000 → 200,000)."""
+    """C4a: a stray amount with NO open question (post-FINAL) must never
+    OVERWRITE an existing positive income — the amount is reported back
+    with the UNRECOGNIZED badge (regression for salary 4,500,000 ->
+    200,000). With the Sprint 7 asked-cat fix, a bare amount under an
+    OPEN question books the asked category correctly (that path is
+    covered by the C04 round-trip test)."""
     sess: Dict[str, Any] = {"id": "pytest_conv_c4a"}
     nlp.process_message("I am a teacher earning 30 lakhs", sess)
+    nlp.process_message("/end", sess)
     result = nlp.process_message("2 lakhs", sess)
     assert sess.get("salary") == 3_000_000
     assert any("UNRECOGNIZED AMOUNT" in e for e in result["extracted"])

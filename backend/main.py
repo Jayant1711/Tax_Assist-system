@@ -169,6 +169,17 @@ class BodySizeCapMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> JSONResponse:
         raw_length = request.headers.get("content-length")
+        # Sprint 7 security fix: a chunked (transfer-encoding) body has
+        # no enforceable length - reject it instead of buffering it (the
+        # old header-only cap was bypassable with chunked framing, an
+        # OOM DoS against the single worker). Bodyless POSTs (revoke,
+        # 204 semantics) are legitimate and pass.
+        is_chunked = "chunked" in request.headers.get(
+            "transfer-encoding", "").lower()
+        if request.method.upper() in _STATE_CHANGING_METHODS \
+                and is_chunked and not raw_length:
+            return JSONResponse(status_code=411,
+                                content={"detail": "Content-Length required"})
         if raw_length:
             try:
                 length = int(raw_length)
@@ -276,6 +287,9 @@ _RATE_LIMIT_ACCESSORS = {
     "chat": config.rate_limit_chat_per_min,
     "calc": config.rate_limit_calc_per_min,
     "auth": config.rate_limit_auth_per_min,
+    # Sprint 7 security fix: GETs are throttled by the global bucket
+    # (they were entirely exempt; /history is an O(file-size) scan).
+    "global": config.rate_limit_global_per_min,
 }
 
 
@@ -298,9 +312,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> JSONResponse:
         path = request.url.path
-        if path == _HEALTH_EXEMPT_PATH or request.method.upper() not in (
-            _STATE_CHANGING_METHODS
-        ):
+        if path == _HEALTH_EXEMPT_PATH:
+            return await call_next(request)
+        # Sprint 7 security fix: GETs are no longer exempt from the
+        # global bucket (they were; /history is an O(file-size) scan
+        # per request on an open-registration service).
+        if request.method.upper() not in _STATE_CHANGING_METHODS:
+            g_bucket = _RATE_LIMIT_ACCESSORS["global"]
+            g_client = request.scope.get("client")
+            g_ip = g_client[0] if g_client and g_client[0] else "unknown"
+            g_allowed, g_retry = self._limiter.check(
+                f"global:{g_ip}", g_bucket(), 60.0
+            )
+            if not g_allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests"},
+                    headers={"Retry-After": str(g_retry)},
+                )
             return await call_next(request)
         bucket = _rate_limit_bucket(path)
         if bucket is None:
@@ -892,11 +921,12 @@ def create_app(app_env: str = "dev") -> FastAPI:
                 status_code=422,
                 detail="Password must be between 12 and 1024 characters",
             )
+        # Sprint 7 security fix: the KDF runs BEFORE the duplicate check
+        # - a 409 that skips the scrypt work is an account-existence and
+        # timing oracle.
+        password_hash = auth.hash_password(req.password)
         if auth.find_user_by_email(email) is not None:
             raise HTTPException(status_code=409, detail="Email already registered")
-        # scrypt runs only after the cheap checks (a duplicate registration
-        # must not cost the server a full KDF).
-        password_hash = auth.hash_password(req.password)
         try:
             user = auth.create_user(email, password_hash)
         except sqlite3.IntegrityError:
@@ -1570,4 +1600,10 @@ if __name__ == "__main__":
     # server never defaults to a routable interface. TAX_LOG_LEVEL sets
     # the root logging level for the entry point.
     logging.basicConfig(level=config.tax_log_level())
-    uvicorn.run(app, host=config.tax_host(), port=config.tax_port())
+    # Sprint 7 security fix: pin the proxy contract - uvicorn trusts
+    # X-Forwarded-For only from these networks (a proxy that passes the
+    # client-supplied XFF through would otherwise rotate the per-IP
+    # rate-limit buckets per request). Override via TAX_FORWARDED_ALLOW_IPS.
+    uvicorn.run(app, host=config.tax_host(), port=config.tax_port(),
+                forwarded_allow_ips=os.environ.get(
+                    "TAX_FORWARDED_ALLOW_IPS", "127.0.0.1"))

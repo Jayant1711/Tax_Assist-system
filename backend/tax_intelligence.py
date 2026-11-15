@@ -417,7 +417,7 @@ def utilization(session: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def recommend(session: Dict[str, Any], engine: Any,
               ti: Optional["TaxIntelligence"],
-              top_n: int = 3) -> Dict[str, Any]:
+              top_n: int = 3, tax_year: Optional[str] = None) -> Dict[str, Any]:
     """CA-style review of the CURRENT session (ADR-001 two-pass).
 
     Pass 1: TaxEngine prices the session as-booked.
@@ -428,8 +428,12 @@ def recommend(session: Dict[str, Any], engine: Any,
     """
     payload = {k: v for k, v in session.items()
                if not str(k).startswith("_") and k not in ("history",)}
+    # Sprint 7 audit fix: the pinned session year (or the explicit
+    # override) governs BOTH passes — the hardcoded fy_2025_26 priced
+    # the review under the wrong year for pinned sessions (ADR-008).
+    eff_tax_year = tax_year or session.get("tax_year") or "fy_2025_26"
     profile = session.get("profile")
-    base = engine.calculate_tax_advanced(dict(payload), tax_year="fy_2025_26")
+    base = engine.calculate_tax_advanced(dict(payload), tax_year=eff_tax_year)
     base_paid = min(float(base["old_regime"].total_tax),
                     float(base["new_regime"].total_tax))
 
@@ -445,7 +449,7 @@ def recommend(session: Dict[str, Any], engine: Any,
         delta = headroom
         hyp = dict(payload)
         hyp[head] = float(session.get(head, 0) or 0) + delta
-        res2 = engine.calculate_tax_advanced(hyp, tax_year="fy_2025_26")
+        res2 = engine.calculate_tax_advanced(hyp, tax_year=eff_tax_year)
         paid2 = min(float(res2["old_regime"].total_tax),
                     float(res2["new_regime"].total_tax))
         savings_engine = round(base_paid - paid2, 2)
@@ -620,7 +624,7 @@ def ti_mod_feature_names() -> List[str]:
 
 def advisor_review(session: Dict[str, Any], engine: Any,
                    ti: Optional[TaxIntelligence],
-                   top_n: int = 3) -> Optional[Dict[str, Any]]:
+                   top_n: int = 3, tax_year: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Phase 5 — the ranked CA-style review (engine-priced two-pass).
 
     Returns the full review dict (available/recommendation/regime_advisory/
@@ -628,7 +632,7 @@ def advisor_review(session: Dict[str, Any], engine: Any,
     Each candidate carries a rec_id for shown-event tracking (Sprint 5 P2).
     """
     try:
-        return recommend(session, engine, ti, top_n=top_n)
+        return recommend(session, engine, ti, top_n=top_n, tax_year=tax_year)
     except Exception:  # noqa: BLE001 — intelligence must never break a turn
         return None
 

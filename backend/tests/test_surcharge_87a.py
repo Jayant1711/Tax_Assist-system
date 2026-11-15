@@ -119,20 +119,21 @@ def test_t05_salary_1cr_preserved() -> None:
 @pytest.mark.parametrize(
     ("salary", "expected_total"),
     [
-        (7_80_000, 5_000.00),    # TI 7,05,000: slab 20,500; post-cess cap 5,000
-        (7_95_000, 20_000.00),   # TI 7,20,000: slab 22,000; post-cess cap 20,000
+        (7_80_000, 5_200.00),    # TI 7,05,000: slab 20,500; pre-cess cap 5,000
+        (7_95_000, 20_800.00),   # TI 7,20,000: slab 22,000; pre-cess cap 20,000
         (7_60_000, 0.00),        # TI 6,85,000 <= 7L -> full rebate
     ],
-    ids=["band-5000", "band-20000", "rebate-zero"],
+    ids=["band-5200", "band-20800", "rebate-zero"],
 )
 def test_87a_band_new_regime_salaried(salary: int, expected_total: float) -> None:
-    """Post-cess band cap: payable = min(1.04 x slab(TI), TI - 7,00,000).
+    """PRE-CESS band cap (audit wave 1 statutory correction; the
+    department's own AY 2025-26 ITR-utility example confirms cess sits
+    outside the s.87A cap): payable = min(slab(TI), TI - 7,00,000) x 1.04.
 
     salary 7,80,000: TI 7,05,000 > 7,00,000 -> NO rebate (eligibility is
     keyed on TOTAL income); slab = 20,000 (3-7L) + 10% x 5,000 = 20,500;
-    pre-cess 21,320 capped post-cess at 5,000 (the crude pre-A2 engine
-    gave 5,200). salary 7,95,000: TI 7,20,000, slab 22,000, capped at
-    20,000 (crude: 20,800).
+    capped pre-cess at 5,000 -> x1.04 = 5,200. salary 7,95,000: TI
+    7,20,000, slab 22,000, capped at 20,000 -> 20,800.
     """
     assert _new({"salary": salary}) == expected_total
 
@@ -149,22 +150,21 @@ def _slab_new_fy2425(v: float) -> float:
 
 
 @pytest.mark.parametrize("ti", [700_001 + 5_000 * k for k in range(13)])
-def test_87a_band_post_cess_invariant_grid(ti: int) -> None:
+def test_87a_band_pre_cess_invariant_grid(ti: int) -> None:
     """Band property mini-grid (TI 7,00,001 .. 7,60,001): payable ==
-    min(1.04 x slab(TI), TI - 7,00,000) — the cap applies AFTER cess to
-    the TOTAL, so inside the binding zone the total is exactly the
-    integer excess (the pre-A2 crude engine capped pre-cess and produced
-    excess x 1.04). The endpoint emerges: the cap stops binding at
-    TI - 7,00,000 > 1.04 x slab(TI), i.e. TI = 7,23,214 (incl-cess QA
-    expectation) — rows beyond it price normally."""
+    min(slab(TI), TI - 7,00,000) x 1.04 — the cap applies BEFORE cess
+    (audit wave 1 statutory correction; the department's own worked
+    example prices the band total as excess x 1.04). The endpoint
+    emerges: the cap stops binding at slab(TI) < TI - 7,00,000 — rows
+    beyond it price normally."""
     slab = _slab_new_fy2425(ti)
     cap = float(ti - 700_000)
-    expected = round(min(slab * 1.04, cap), 2)
+    expected = round(min(slab, cap) * 1.04, 2)
     total = _new({"other_income": ti})
     assert total == expected
-    if slab * 1.04 > cap:
-        # inside the binding zone the POST-CESS total is the raw excess
-        assert total == cap
+    if slab > cap:
+        # inside the binding zone the PRE-CESS total is excess x 1.04
+        assert total == round(cap * 1.04, 2)
 
 
 # ── 3. TI-keyed eligibility (ruling (c)) ─────────────────────────────────

@@ -1,0 +1,7 @@
+data/
+logs/
+__pycache__/
+*.db
+*.db-shm
+*.db-wal
+test_report.json

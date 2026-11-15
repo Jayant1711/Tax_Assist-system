@@ -9,8 +9,10 @@ docs/tax-verification.md as amended by the six tax-expert corrections
 FY 2025-26 new-regime structure (Sec 115BAC(1A), Finance Act 2025):
 slabs 0-4L nil / 5% to 8L / 10% to 12L / 15% to 16L / 20% to 20L / 25% to
 24L / 30% above; standard deduction 75,000; 87A rebate 60,000 with zero tax
-up to TOTAL income 12,00,000 and the A2 POST-CESS band cap (payable total
-capped at TI - 12,00,000; band endpoint 12,73,934 DERIVED, not stored).
+up to TOTAL income 12,00,000 and the PRE-CESS band cap (audit wave 1
+statutory correction: the relief caps income-tax + surcharge BEFORE cess
+--- the department's own TI 12,10,000 -> 10,400 example; band endpoint
+12,70,588 derived, not stored).
 
 Old regime FY 2025-26 is IDENTICAL to FY 2024-25 except the professional
 tax DEFAULT (0 instead of 2,500 — state levy; advisory emitted when
@@ -21,11 +23,12 @@ Cell derivations (salaried = salary with std deduction 75,000):
 - salary 12,00,000    -> TI 11,25,000; slab 20,000 + 10%x3,25,000 = 52,500;
                          TI <= 12L -> rebate min(52,500, 60,000) -> 0.
 - salary 13,00,000    -> TI 12,25,000 > 12L (TI-keyed: NO rebate); slab
-                         63,750; 1.04x = 66,300; post-cess cap 25,000.
-- salary 13,25,000    -> TI 12,50,000; slab 67,500; cap 50,000.
-- salary 13,48,934    -> TI 12,73,934; slab 71,090.10; 1.04x = 73,933.704
-                         vs cap 73,934 — the DERIVED band endpoint (beyond
-                         it the min() is inert).
+                         63,750; pre-cess cap 25,000; x1.04 = 26,000.
+- salary 13,25,000    -> TI 12,50,000; slab 67,500; cap 50,000; x1.04
+                         = 52,000.
+- salary 13,48,934    -> TI 12,73,934; slab 71,090.10 < cap 73,934 ->
+                         the relief is INERT beyond TI ~12,57,353 (where
+                         slab(TI) = TI - 12L); x1.04 = 73,933.704.
 - salary 24,00,000    -> TI 23,25,000; slab 2,81,250; x1.04 = 2,92,500.00.
 - salary 24,75,000    -> TI 24,00,000; slab 3,00,000 (25% band full);
                          x1.04 = 3,12,000.00; salary 24,75,001 adds the
@@ -139,7 +142,7 @@ def test_rebate_rules() -> None:
     assert new.max_amount == 60_000
     assert new.marginal_relief is True
     assert new.band_upper_bound is None          # endpoint derived, not stored
-    assert new.band_cap_includes_cess is True    # post-cess band (Step A2 algorithm)
+    assert new.band_cap_includes_cess is False   # PRE-cess cap (audit wave 1 correction)
 
 
 def test_surcharge_cg_cess_prof_tax() -> None:
@@ -177,8 +180,8 @@ def test_surcharge_cg_cess_prof_tax() -> None:
     ("salary", "expected_total"),
     [
         (12_00_000, 0.00),        # TI 11,25,000: rebate wipes 52,500
-        (13_00_000, 25_000.00),   # TI 12,25,000: slab 63,750, cap 25,000
-        (13_25_000, 50_000.00),   # TI 12,50,000: slab 67,500, cap 50,000
+        (13_00_000, 26_000.00),   # TI 12,25,000: slab 63,750, cap 25,000
+        (13_25_000, 52_000.00),   # TI 12,50,000: slab 67,500, cap 50,000
         (24_00_000, 2_92_500.00), # TI 23,25,000: slab 2,81,250 x1.04
         (24_75_000, 3_12_000.00), # TI 24,00,000: slab 3,00,000 x1.04
         (24_75_001, 3_12_000.31), # true 25% -> 30% edge: +Re 1 x0.30 x1.04
@@ -190,9 +193,10 @@ def test_87a_band_new_regime_salaried_fy2526(salary: int, expected_total: float)
 
 
 def test_87a_band_derived_endpoint_fy2526() -> None:
-    """The band endpoint EMERGES from the post-cess min(): at TI 12,73,934
-    the 1.04 x slab (73,933.704) sits just under the cap (TI - 12,00,000 =
-    73,934), so the natural computation applies. (Derived, never stored.)"""
+    """Beyond the band (relief inert when slab < TI - 12L) the payable is
+    simply 1.04 x slab: at TI 12,73,934 slab 71,090.10 x1.04 = 73,933.70.
+    (Derived, never stored; the relief zone itself ends near TI
+    12,57,353 where slab(TI) = TI - 12L.)"""
     total = _new({"salary": 13_48_934})
     assert abs(total - 73_933.70) <= 0.5
 
@@ -210,18 +214,19 @@ def _slab_new_fy2526(v: float) -> float:
 
 
 @pytest.mark.parametrize("ti", [1_200_001 + 5_000 * k for k in range(15)])
-def test_87a_band_post_cess_invariant_grid_fy2526(ti: int) -> None:
+def test_87a_band_pre_cess_invariant_grid_fy2526(ti: int) -> None:
     """Band property mini-grid (TI 12,00,001 .. 12,70,001): payable ==
-    min(1.04 x slab(TI), TI - 12,00,000) — the POST-CESS cap from the A2
-    algorithm, now at the FY 2025-26 threshold. The cap stops binding at
-    the derived endpoint 12,73,934; rows beyond it price normally."""
+    min(slab(TI), TI - 12,00,000) x 1.04 — the PRE-CESS cap (audit wave 1
+    statutory correction; the department's own TI 12,10,000 -> 10,400
+    example). The relief is inert beyond TI ~12,57,353 (where slab(TI) =
+    TI - 12,00,000); rows beyond it price normally."""
     slab = _slab_new_fy2526(ti)
     cap = float(ti - 1_200_000)
-    expected = round(min(slab * 1.04, cap), 2)
+    expected = round(min(slab, cap) * 1.04, 2)
     total = _new({"other_income": ti})
     assert total == expected
-    if slab * 1.04 > cap:
-        assert total == cap
+    if slab > cap:
+        assert total == round(cap * 1.04, 2)
 
 
 # ── 3. Old regime — rebate cliff (unchanged year) ────────────────────────

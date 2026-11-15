@@ -334,7 +334,12 @@ class TaxEngine:
             # it lives on only through the mapping above).
             "hra_received": hra_leg,
             "rent_paid":    rent_leg,
-            "24b":   min(float(data.get("24b", 0) or 0), caps.sec_24b), # Max 2L for self-occupied
+            # 24(b): "24b" is the legacy capped entry (self-occupied view);
+            # "24b_full" carries the FULL declared interest so the head
+            # computation can apply the occupancy-aware treatment
+            # (audit wave 1 statutory correction).
+            "24b":       min(float(data.get("24b", 0) or 0), caps.sec_24b),
+            "24b_full":  float(data.get("24b", 0) or 0),
             # Step D: 80EEA removed (discontinued) — the key is 422'd at
             # the API boundary and ignored here.
             "nps":   min(float(data.get("nps", 0) or 0), caps.sec_80ccd_1b), # 80CCD(1B) extra 50k
@@ -355,7 +360,7 @@ class TaxEngine:
         prof_tax = float(data.get("professional_tax", rules.professional_tax_default if salary > 0 else 0) or 0)
 
         old_res = self._calc_old(salary, business, agri, rental_gross, other_income, cg_data, ded, prof_tax, is_senior, is_vsr, rules, is_metro)
-        new_res = self._calc_new(salary, business, agri, rental_gross, other_income, cg_data, is_senior, rules)
+        new_res = self._calc_new(salary, business, agri, rental_gross, other_income, cg_data, is_senior, rules, b24_full=ded["24b_full"])
 
         # Optimizer Logic
         rec     = "New Regime" if new_res.total_tax <= old_res.total_tax else "Old Regime"
@@ -500,7 +505,13 @@ class TaxEngine:
 
         try:
             from ai_models import ReasoningAgent
-            tips = ReasoningAgent().get_savings_tips(data)
+            # Sprint 7 audit fix: the tips are regime-gated with the
+            # COMPUTED recommendation (the un-gated call shipped
+            # old-regime tips under a New-Regime recommendation).
+            rec = ("New Regime" if new_res.total_tax <= old_res.total_tax
+                   else "Old Regime")
+            tips = ReasoningAgent().get_savings_tips(
+                data, recommended_regime=rec)
             old_res.savings_tips = tips
             new_res.savings_tips = tips
         except Exception:
@@ -622,11 +633,26 @@ class TaxEngine:
         # Net rental income after 30% statutory deduction under Section 24(a)
         net_rental = round(rental * 0.7, 2) if rental > 0 else 0
 
+        # House property under the head — occupancy-aware (audit wave 1
+        # statutory correction):
+        # - LET-OUT (rental income present): home-loan interest deducts
+        #   against the net rental IN FULL (s.24(b)); only a resulting
+        #   LOSS may be set off against other heads, capped at Rs 2,00,000
+        #   (s.71(3A)). The interest never enters total_ded for this case.
+        # - SELF-OCCUPIED (no rental): the interest is capped at Rs 2,00,000
+        #   and deducts from other income (the pre-audit behavior).
+        if rental > 0:
+            hp_income = round(net_rental - ded["24b_full"], 2)
+            if hp_income < 0:
+                hp_income = -min(-hp_income, caps.sec_24b)
+            gross = salary + business + hp_income + other
+        else:
+            gross = salary + business + other
+
         # C2: agricultural income is exempt under Section 10(1) and is
         # EXCLUDED from gross total income (the itemised "Exempt" entry in
         # income_details below must stay truthful). Partial integration is
         # flagged as an audit observation in calculate_tax_advanced.
-        gross = salary + business + net_rental + other
         res.gross_total_income = round(gross, 2)
 
         # Calculate 80GG if applicable (rent paid without HRA). Step B: the
@@ -641,11 +667,13 @@ class TaxEngine:
         g80_deduction, g80_reason = self._calc_80g(
             ded["80g"], ded.get("80g_category"), gross, cg_data
         )
+        b24_deduction = 0.0 if rental > 0 else min(
+            ded["24b_full"], rules.deduction_caps.sec_24b)
         total_ded = (
             std_ded +
             hra_ex +
             prof_tax +
-            ded["24b"] +
+            b24_deduction +
             ded["80c"] +
             ded["80d"] +
             ded["80d_p"] +
@@ -714,7 +742,15 @@ class TaxEngine:
             res.explanations.append(Explanation("Professional Tax", "State statutory tax on employment.", "16(iii)", prof_tax))
         if hra_ex > 0:
             res.explanations.append(Explanation("HRA Exemption", "House Rent Allowance exemption.", "10(13A)", hra_ex))
-        if ded["24b"] > 0:
+        if ded["24b_full"] > 0 and rental > 0:
+            effective = min(ded["24b_full"], net_rental + rules.deduction_caps.sec_24b)
+            res.explanations.append(Explanation(
+                "Home Loan Interest (let-out property)",
+                "Interest deducted against net rental in full; a loss "
+                "beyond it is set off against other heads capped at "
+                "Rs 2,00,000 (s.71(3A)).",
+                "24(b)", round(effective, 2)))
+        elif ded["24b_full"] > 0:
             res.explanations.append(Explanation("Home Loan Interest", "Interest paid on housing loan for self-occupied property.", "24(b)", ded["24b"]))
         if ded["80c"] > 0:
             res.explanations.append(Explanation("Section 80C", "PF, PPF, ELSS, Life Insurance, School Fees.", "80C", ded["80c"]))
@@ -767,14 +803,22 @@ class TaxEngine:
 
         return res
 
-    def _calc_new(self, salary, business, agri, rental, other, cg_data, is_senior, rules) -> TaxResult:
+    def _calc_new(self, salary, business, agri, rental, other, cg_data, is_senior, rules, b24_full: float = 0.0) -> TaxResult:
         res = TaxResult()
         # Budget 2024: Standard deduction increased to ₹75,000 for New Tax Regime
         std_ded = rules.standard_deduction["new"] if salary > 0 else 0
         cg_tax, cg_inc = self._calc_cg(cg_data, "new", rules)
 
+        # House property: 115BAC(2)(i) bars only the s.23(2) SELF-OCCUPIED
+        # interest — let-out property interest still deducts against the
+        # net rental (audit wave 1 statutory correction), with NO loss
+        # set-off (115BAC(2)(ii)(b)), so the head floors at zero.
         net_rental = round(rental * 0.7, 2) if rental > 0 else 0
-        gross = salary + business + net_rental + other
+        if rental > 0:
+            hp_income = max(0.0, round(net_rental - b24_full, 2))
+        else:
+            hp_income = 0.0
+        gross = salary + business + hp_income + other
         res.gross_total_income = round(gross, 2)
 
         taxable = max(0.0, gross - std_ded)
@@ -783,18 +827,20 @@ class TaxEngine:
         tax, slabs = self._slab_new(taxable, rules)
         res.slabs_breakdown = slabs
 
-        # Section 87A in the New Regime — harmonized in Step A2/E per the
-        # tax-expert rulings (FA-2025 Explanation):
+        # Section 87A in the New Regime — Step A2/E rulings with the
+        # audit-wave-1 statutory correction on the marginal-relief cap:
         #   1. Eligibility is keyed on TOTAL income (slab taxable +
         #      special-rate CG), NOT the slab taxable alone. When eligible,
         #      the rebate wipes the normal-rate tax only (max_amount None =
         #      full rebate) — 111A/112A tax is never rebated.
-        #   2. When TOTAL income exceeds the threshold, the PAYABLE total
-        #      (income-tax after rebate + special-rate tax + surcharge +
-        #      cess) is capped at (TOTAL INCOME - threshold) AFTER cess —
-        #      the band endpoint EMERGES from that min() (derived:
-        #      7,23,214 incl-cess for FY 2024-25; the stored 727777
-        #      pre-cess band constant is retired in this step).
+        #   2. When TOTAL income exceeds the threshold, the relief caps
+        #      INCOME-TAX + SURCHARGE BEFORE cess at (TOTAL INCOME -
+        #      threshold): payable = min(it+sc, TI - 12L), then x 1.04
+        #      cess. The department's own worked example (TI 12,10,000 ->
+        #      tax 10,000 + cess 400 = 10,400) confirms cess sits OUTSIDE
+        #      the cap; the statutory band endpoint is TI 12,70,588 (the
+        #      old post-cess 12,73,934 undercharged 4% of the excess
+        #      throughout the band).
         rebate_rule = rules.rebate["new"]
         total_income = taxable + cg_inc
         if total_income <= rebate_rule.income_cap:
@@ -812,15 +858,10 @@ class TaxEngine:
             rules,
             lambda v: self._slab_new(v, rules)[0],
         )
-        total_tax = (tax + cg_tax + surcharge) * (1 + rules.cess_rate)
+        payable = tax + cg_tax + surcharge
         if rebate_rule.marginal_relief and total_income > rebate_rule.income_cap:
-            # Post-cess 87A band cap (Step A2): the payable TOTAL, including
-            # surcharge and cess, cannot exceed the income excess over the
-            # rebate threshold. Beyond the emergent band endpoint the
-            # excess exceeds the payable and the min() is inert — no stored
-            # band bound is needed.
-            total_tax = min(total_tax, float(total_income - rebate_rule.income_cap))
-        res.total_tax = round(total_tax, 2)
+            payable = min(payable, float(total_income - rebate_rule.income_cap))
+        res.total_tax = round(payable * (1 + rules.cess_rate), 2)
         res.taxable_income = round(taxable + cg_inc, 2)
 
         # New Regime Breakdown

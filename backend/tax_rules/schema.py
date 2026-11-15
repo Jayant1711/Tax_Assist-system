@@ -43,14 +43,17 @@ class RebateRule:
     CG), and a rebate, when eligible, applies to the normal-rate tax only
     — never to 111A/112A.
 
-    When marginal_relief is True (new regime), the PAYABLE total (income-
-    tax after rebate + special-rate tax + surcharge + cess) is capped at
-    (TOTAL INCOME - income_cap) AFTER cess: band_cap_includes_cess is
-    True from Step A2 ("harmonized per the FA-2025 Explanation; was
-    pre-cess"). The band's upper endpoint EMERGES from that min() — for
-    FY 2024-25 it derives to 7,23,214 incl-cess — so no bound is stored:
-    band_upper_bound remains only as an optional informational field and
-    is None from Step A2 on.
+    When marginal_relief is True (new regime), the relief caps INCOME-TAX
+    + SURCHARGE BEFORE cess at (TOTAL INCOME - income_cap), and the cess
+    applies afterward on the capped amount: band_cap_includes_cess is
+    False (audit wave 1 statutory correction — the department's own
+    worked example, TI 12,10,000 -> tax 10,000 + cess 400 = 10,400,
+    confirms cess sits outside the s.87A cap; the earlier post-cess
+    reading undercharged 4% of the excess across the whole band).
+    The band's upper endpoint EMERGES from that pre-cess min() — for
+    FY 2025-26 it derives to TI 12,70,588 — so no bound is stored:
+    band_upper_bound remains only as an optional informational field
+    and is None.
     """
 
     income_cap: float
