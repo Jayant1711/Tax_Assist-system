@@ -277,6 +277,15 @@ def main() -> int:
         except (OSError, json.JSONDecodeError):
             previous_annotations = {}
 
+    def _previous_scenarios():
+        if not previous_annotations or not os.path.exists(FIXTURE_PATH):
+            return []
+        try:
+            with open(FIXTURE_PATH, "r", encoding="utf-8") as fh:
+                return json.load(fh).get("scenarios", [])
+        except (OSError, json.JSONDecodeError):
+            return []
+
     fixture = {
         "meta": {
             "description": (
@@ -303,6 +312,31 @@ def main() -> int:
         "scenarios": scenarios,
     }
     fixture["meta"].update(previous_annotations)
+
+    # Architect-review P2: provenance drift guard. When regenerated
+    # VALUES differ from the previous fixture but the meta carries no
+    # NEW annotation for this change, a future statutory fix can land
+    # with only stale provenance notes riding along. Warn loudly so the
+    # operator writes the citation (the apply_*-tool convention).
+    if previous_annotations:
+        stamp_latest = max(
+            (v.get("commit", "") for v in previous_annotations.values()),
+            default="")
+        prev_by_id = {
+            s["id"]: s["expected"]
+            for s in _previous_scenarios()
+        }
+        drifted = 0
+        for sc in scenarios:
+            prev = prev_by_id.get(sc["id"])
+            if prev is not None and prev != sc["expected"]:
+                drifted += 1
+        if drifted:
+            logger.warning(
+                "%d scenario values changed vs the previous fixture while "
+                "meta carries NO new annotation beyond commit %s — write "
+                "the statutory citation into meta (an <name>_update key) "
+                "before committing", drifted, stamp_latest or "unknown")
 
     os.makedirs(os.path.dirname(FIXTURE_PATH), exist_ok=True)
     with open(FIXTURE_PATH, "w", encoding="utf-8", newline="\n") as fh:

@@ -718,10 +718,8 @@ class NLPEngine:
             # discovery question from before the override used to survive
             # here and prime the asked-category prior, so a stray bare
             # amount after the report booked into that head and bypassed
-            # the C4a UNRECOGNIZED guard. The natural closing turn is safe
-            # (its last line is a tip, which the ask-shape gate rejects),
-            # but the override response ends in engine-priced text, so the
-            # prior is cleared outright.
+            # the C4a UNRECOGNIZED guard. The natural closing turn clears
+            # the prior too (the FINAL-branch write below).
             session.pop("_last_question", None)
             return {"response": response, "session": session, "extracted": [], "plan": "Final audit ready."}
 
@@ -939,7 +937,7 @@ class NLPEngine:
                     # gate let the boost outbid a nuclear-penalized named
                     # head: "oops salary is actually 700000" booked 80D).
                     full_last_q = session.get("_last_question", "").lower()
-                    asked_cat   = self._get_asked_cat(full_last_q, session.get("profile"))
+                    asked_cat   = self._get_asked_cat(full_last_q, session.get("profile"), session)
                     best_cat, is_default = self.attention.resolve_category_detailed(
                         clause, m["start"], m["end"], session.get("profile"), asked_cat,
                         prior_gate=10.0 if is_correction else 150.0,
@@ -957,6 +955,14 @@ class NLPEngine:
                     #      profile default). Rent paid with no HRA received
                     #      IS the 80GG claim (hra_received > 0 disqualifies
                     #      it at the tax engine).
+                    # ADR note (architect-review P2): the post-resolver
+                    # remap stack below is CAPPED at these three
+                    # clause-scoped overrides (explicit 80gg, no-HRA →
+                    # 80gg, receive-cue → rental). Conversational context
+                    # is NLP-owned, so the remaps live here — but a FOURTH
+                    # contextual override belongs in the resolver as a
+                    # scored feature (the prior_gate/keyword-table path),
+                    # not another elif in this stack.
                     if best_cat in ("rent_paid", "hra_received") and \
                             re.search(r"\b80gg\b", clause, re.IGNORECASE):
                         best_cat, is_default = "80gg", False
@@ -1160,7 +1166,17 @@ class NLPEngine:
         # storing the whole response let the ack/advisory text poison
         # the prior (bare answers booked into the wrong slot).
         _last_line = [ln for ln in response.strip().split("\n") if ln.strip()][-1]
-        session["_last_question"] = _last_line
+        if plan.startswith("Final audit ready"):
+            # Architect-review P2: the /end fix cleared the prior because
+            # "a report is not an ask" — but the NATURAL closing turn kept
+            # writing _last_question, and when get_savings_tips returns
+            # empty (a fully-maxed user) the closing line is the advisor
+            # text ending in " (tax year 2025-26)", whose ")" passes the
+            # ask-shape gate and primes the advisor's own recommended
+            # head. Same rule as /end: the closing report is not an ask.
+            session.pop("_last_question", None)
+        else:
+            session["_last_question"] = _last_line
 
         if "history" not in session:
             session["history"] = []

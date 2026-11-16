@@ -1,10 +1,10 @@
-"""Parity fixture for FY 2024-25, generated at ddf98f8+; regenerate only
+"""Parity fixture for FY 2024-25, generated at 1d00523+; regenerate only
 via tools/generate_parity_snapshot.py; hand edits rejected.
 
 Every scenario replays a frozen pre-refactor input through TaxEngine and
 asserts EXACT equality (== on floats, list/set equality on shapes) against
 backend/tests/fixtures/parity_fy2425.json. The fixture was generated at
-commit ddf98f8+ — before the Sprint 2 tax-rules registry refactor — so a
+commit 1d00523+ — before the Sprint 2 tax-rules registry refactor — so a
 green run proves the registry path is byte-identical for FY 2024-25.
 
 The frozen outputs include the current crude 87A/surcharge relief-zone

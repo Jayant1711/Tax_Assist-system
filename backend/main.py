@@ -613,10 +613,12 @@ def session_projection(state: Dict[str, Any]) -> Dict[str, Any]:
     """Read-only response projection of the server-side state (ADR-013).
 
     Reuses the audit logger's scrub semantics (audit_logger.scrub_state):
-    the internal keys — ``history``, ``_last_question``, ``_last_val``,
-    ``_prev_salary``, ``memory`` — are dropped recursively, while every
-    key the frontend reads survives: id, phase, profile, the income and
-    deduction numbers, and the collected flags/categories.
+    the dropped keys are audit_logger.DROPPED_STATE_KEYS — the single
+    source of truth (architect-review P2: this docstring's hand list
+    omitted _last_cat/_recommendations_shown and went stale) — removed
+    recursively, while every key the frontend reads survives: id, phase,
+    profile, the income and deduction numbers, and the collected
+    flags/categories.
     """
     scrubbed = scrub_state(state)
     return scrubbed if isinstance(scrubbed, dict) else {}

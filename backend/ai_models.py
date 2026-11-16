@@ -630,9 +630,17 @@ class ReasoningAgent:
             return tips
 
         # 1. Section 80C
+        # Architect-review P2: the cap constants were hardcoded here (a
+        # third copy beside tax_rules and tax_intelligence.LIMITS) and
+        # would drift when a year flips — read the live limits.
+        try:
+            from tax_intelligence import LIMITS as _TIP_LIMITS
+        except ImportError:  # standalone resolver use — keep the FY24-25 values
+            _TIP_LIMITS = {"80c": 150000.0, "nps": 50000.0}
         c80 = float(session.get("80c", 0) or 0)
-        if c80 < 150000:
-            gap = 150000 - c80
+        c80_cap = float(_TIP_LIMITS.get("80c", 150000))
+        if c80 < c80_cap:
+            gap = c80_cap - c80
             if profile == "Salaried":
                 tips.append(f"Section 80C Optimization: You have an unused 80C headroom of ₹{gap:,.0f}. Increasing Voluntary PF (VPF) or ELSS mutual funds locks in EEE tax benefits.")
             else:
@@ -640,8 +648,9 @@ class ReasoningAgent:
 
         # 2. NPS 80CCD(1B)
         nps = float(session.get("nps", 0) or 0)
-        if nps < 50000:
-            gap = 50000 - nps
+        nps_cap = float(_TIP_LIMITS.get("nps", 50000))
+        if nps < nps_cap:
+            gap = nps_cap - nps
             if income > 1500000:
                 # Sprint 7 audit fix (ADR-001): the rupee saving figure
                 # was computed HERE, outside the engine — reworded to the

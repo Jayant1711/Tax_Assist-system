@@ -10,9 +10,9 @@ Sections:
 2. Perfect-predictor (1.0) and label-shuffled (chance) canaries.
 3. A real-pipeline canary: the CURRENT pipeline misbooks the P1-gap
    utterance "shares sold for 5 lakhs" — the harness must see the miss.
-4. The >=95% income-head + major-section gate, marked ADVISORY
-   (pytest.mark.eval — excluded from the default run until P1's verdict;
-   run explicitly with `pytest -m eval`).
+4. The >=95% income-head + major-section gate (pytest.mark.eval) —
+   BINDS in the default run since commit 42d4df4 (the documented flip
+   plan fired); red = merge blocker per Sprint4_AI_Modernization.md §3.
 5. Meta-tests on the COMMITTED dataset: no-leakage, coverage floors,
    rebuild reproducibility, baseline file integrity.
 
@@ -263,19 +263,16 @@ class TestRealPipelineIntegration:
 
 
 # ---------------------------------------------------------------------------
-# 4. The >=95% gate — ADVISORY this wave (pytest.mark.eval)
+# 4. The >=95% gate — BINDING in the default run since 42d4df4
 # ---------------------------------------------------------------------------
 
 @pytest.mark.eval
-class TestExtractionGateAdvisory:
-    """Run with: pytest -m eval
-
-    ADVISORY until P1's verdict (docs/sprint4-execution.md P0 item 3):
-    excluded from the default run via pytest.ini addopts. Flip plan: at
-    the P1/P3 verdict the `-m "not eval"` exclusion is removed from
-    pytest.ini so this gate BINDS in CI (red = merge blocker), per
-    Sprint4_AI_Modernization.md §3 ("a red eval is a merge blocker").
-    """
+class TestExtractionGate:
+    """BINDS in the default run (architect-review P2: the stale
+    ADVISORY text invited a future maintainer to 'restore' the -m
+    exclusion and silently unbind the gate). Red = merge blocker per
+    Sprint4_AI_Modernization.md §3; the marker stays so the gate can be
+    run standalone with `pytest -m eval`."""
 
     def test_income_heads_and_major_sections_at_95_percent(self) -> None:
         records = corpus.load_split(corpus.EVAL_SPLIT)

@@ -5,7 +5,7 @@
       "description": "Step A2/E (documented statutory bug fixes per tax-expert rulings, 2026-10-31): only the annotated cells were re-pinned \u2014 surcharge band-based marginal relief at all four thresholds, the s.115BAC(6) 15% special-rate surcharge cap (new regime), and the harmonized 87A (TI-keyed eligibility, post-cess band cap). Every other cell is byte-identical to the A1 snapshot; verify with git diff."
     },
     "description": "FY 2024-25 parity fixture: frozen pre-registry-refactor TaxEngine outputs (ADR-008, Sprint 2 Step A1). Regenerate only via tests/tools/generate_parity_snapshot.py.",
-    "generated_at_commit": "ddf98f8+",
+    "generated_at_commit": "1d00523+",
     "matrix": {
       "ages": [
         30,

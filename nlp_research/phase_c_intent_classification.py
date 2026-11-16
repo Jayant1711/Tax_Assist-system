@@ -81,9 +81,10 @@ def build_feature_matrices(
     corpus before the split, so test vocabulary/IDF leaked into the
     training features and the "test accuracy" measured nothing honest.
 
-    Returns X_train, X_test, y_train, y_test and the fitted vectorizer
-    (the stratified seeded split happens HERE so every model in this
-    phase trains and scores on the same held-out cells).
+    Returns X_train, X_test, y_train, y_test, texts_train, texts_test
+    and the fitted vectorizer (the stratified seeded split happens HERE
+    so every model in this phase trains and scores on the same
+    held-out cells).
     """
     texts: list[str] = []
     labels: list[int] = []
@@ -229,22 +230,12 @@ if TORCH_AVAILABLE:
         # Convert texts to padded integer sequences
         max_len = 50
 
-        def text_to_seq(text: str) -> list[int]:
-            return [word2idx.get(w, 0) for w in text.lower().split()][:max_len]
-
-        # Bag-of-embeddings: seeded random init, overlaid with GloVe where
-        # the artifact exists (the seed pins the numbers either way)
-        embedding_matrix = np.random.randn(len(vocab) + 1, 128) / np.sqrt(128)
-        # Initialize with actual embeddings if available
-        try:
-            from nlp_research.embedding_analysis import GloVeSpace
-            glove = GloVeSpace(*np.load("nlp_research/artifacts/embeddings_glove.npy", allow_pickle=True))
-            for i, w in enumerate(vocab):
-                if w in glove.w2i:
-                    embedding_matrix[i] = glove.vectors[glove.w2i[w]]
-        except Exception:
-            pass
-
+        # Seeded random embeddings ONLY: the previous body claimed a GloVe
+        # overlay that never ran (the artifact is a plain (444,64) matrix,
+        # GloVeSpace(*np.load(...)) raised TypeError into a bare except,
+        # the matrix was never copied into model.embedding, and the row
+        # indexing was off-by-one vs word2idx) — an artifact could claim
+        # an initialization that does not exist (architect-review P2).
         model = IntentBiLSTM(vocab_size=len(vocab) + 1, embed_dim=128, hidden_dim=256,
                              num_classes=len(INTENT_CLASSES))
 
@@ -303,8 +294,6 @@ if TORCH_AVAILABLE:
                   f"test_acc={final_acc:.4f}")
             model.train()
         return model, final_acc
-
-        return model
 
 
 # TF-IDF + BiLSTM hybrid (if torch not available, fall back to Logistic Regression only)

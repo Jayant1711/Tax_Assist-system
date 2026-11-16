@@ -338,6 +338,12 @@ class TaxEngine:
             # "24b_full" carries the FULL declared interest so the head
             # computation can apply the occupancy-aware treatment
             # (audit wave 1 statutory correction).
+            # Simplification (architect-review P2, documented): occupancy
+            # is binary on `rental > 0` — a MIXED portfolio (self-occupied
+            # loan + an unrelated rental) is treated wholly as let-out,
+            # which overstates the deduction versus the statute's
+            # property-by-property split. Fixing that needs per-property
+            # inputs (a data-model change), not a math patch here.
             "24b":       min(float(data.get("24b", 0) or 0), caps.sec_24b),
             "24b_full":  float(data.get("24b", 0) or 0),
             # Step D: 80EEA removed (discontinued) — the key is 422'd at
