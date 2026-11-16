@@ -55,7 +55,10 @@ class TestHealthOkShape:
         assert body["status"] == "ok"
         assert body["checks"] == {"db": "ok", "audit": "ok"}
         assert body["app_env"] == "dev"
-        assert body["version"] == "0.3.0"
+        # the contract is that /health REPORTS the app version — assert
+        # against the constant so a release bump can't red-light this
+        import main as main_module
+        assert body["version"] == main_module.APP_VERSION
 
     def test_no_auth_required(self, client, monkeypatch, tmp_path) -> None:
         _set_healthy_db(monkeypatch, tmp_path)
