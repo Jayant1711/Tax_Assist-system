@@ -1,0 +1,11 @@
+# nlp_research/training container pins — the versions the pinned artifacts
+# (NER_REPORT.md micro 0.9136 / macro 0.756 at epochs=20;
+# INTENT_CLASSIFICATION_REPORT.md held-out TF-IDF 0.9619 / BiLSTM 0.9821)
+# were measured with. LSTM numerics are NOT guaranteed identical across
+# torch versions, so regeneration claims only hold in this exact
+# environment (ml-eval review: no torch pin anywhere = unenforceable
+# "CPU-reproducible" claims).
+torch==2.15.0
+scikit-learn==1.9.1
+numpy>=1.26
+scipy>=1.11
