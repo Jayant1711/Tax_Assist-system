@@ -222,27 +222,28 @@ function factsTable(s, x, y, w, rows, rowH = 0.4) {
   const s = p.addSlide();
   s.background = { color: BG };
   header(s, "Intent classifier — TF-IDF + logistic regression");
-  codeChip(s, M, 1.5, 7.2, "nlp_research/phase_c_intent_classification.py:73,117,283");
+  codeChip(s, M, 1.5, 7.2, "nlp_research/phase_c_intent_classification.py:73,135,300");
   bullets(s, M, 2.05, W - 2 * M, 1.3, [
-    { t: "21 production categories map to 8 research intents; TF-IDF unigrams+bigrams (min_df 2, sublinear), L2 logistic regression, stratified 80/20 split (seed 472)" },
-    { t: "Template-disjoint discipline: test utterances never share a template with training" },
+    { t: "21 production categories map to 8 research intents; TF-IDF unigrams+bigrams (min_df 2, sublinear), L2 logistic regression, stratified seeded split 1,780/446 (seed 472)" },
+    { t: "Evaluation integrity: the TF-IDF vectorizer is fit on the TRAIN split only — the pre-audit 97.9% \u201ctest accuracy\u201d was the full-corpus score with test vocabulary leaking into training features, and it is retracted" },
   ], { size: 13, gap: 7 });
   factsTable(s, M, 3.4, W - 2 * M, [
-    ["2,226 records \u2192 2,226 usable", "1,464 TF-IDF features \u00D7 8 classes = 11,720 weights", "measured 4.5 s wall (CPU, container)", "96.41% certified · 97.9% fresh rerun"],
+    ["2,226 records \u2192 1,780 train / 446 held-out", "1,333 TF-IDF features \u00D7 8 classes = 10,672 weights (measured)", "measured 9.7 s wall (CPU, container, feature build included)", "held-out 96.19% · train 98.48% · BiLSTM same split 98.21%"],
   ]);
-  s.addText("How the 11,720 decompose", {
+  s.addText("How the 10,672 decompose", {
     x: M, y: 4.7, w: 6, h: 0.3, margin: 0, fontFace: F, fontSize: 13.5, bold: true, color: PRIMARY,
   });
   s.addText(
-    "One sparse weight vector per class: 1,464 features × 8 classes = 11,712 " +
+    "One sparse weight vector per class: 1,333 features × 8 classes = 10,664 " +
     "coefficients + 8 intercepts. Every feature is a unigram or bigram of the " +
-    "training vocabulary — inspectable, and the top weights per class read like " +
+    "TRAIN vocabulary — inspectable, and the top weights per class read like " +
     "a keyword list a CA would recognize.",
     { x: M, y: 5.05, w: W - 2 * M, h: 0.9, margin: 0, fontFace: F, fontSize: 12.5, color: TEXT, lineSpacingMultiple: 1.15 }
   );
   s.addText(
-    "Runs anywhere: the measured rerun inside a clean container reproduced the " +
-    "result to within a point — the difference is library versions, not instability.",
+    "Runs anywhere: the numbers above are from a clean CPU-container rerun; " +
+    "the research deps are pinned in nlp_research/requirements-research.txt, " +
+    "so the split, the vocabulary and the metrics regenerate identically.",
     { x: M, y: 6.1, w: W - 2 * M, h: 0.5, margin: 0, fontFace: F, fontSize: 12, italic: true, color: MUTED }
   );
   pageNo(s);
@@ -255,9 +256,9 @@ function factsTable(s, x, y, w, rows, rowH = 0.4) {
   const s = p.addSlide();
   s.background = { color: BG };
   header(s, "BiLSTM NER — a fabricated metric, corrected");
-  codeChip(s, M, 1.5, 7.2, "nlp_research/phase_d_ner.py:404,586 · phase_d_corpus.py:116,368,396");
+  codeChip(s, M, 1.5, 7.2, "nlp_research/phase_d_ner.py:55,91,196 · phase_d_corpus.py:116,368,396");
   bullets(s, M, 2.05, W - 2 * M, 1.55, [
-    { t: "Architecture: embedding (128-d, corpus vocab 118) → BiLSTM (256 hidden, bidirectional) → linear over 13 BIO tags" },
+    { t: "Architecture: embedding (128-d, corpus vocab 116) → BiLSTM (256 hidden, bidirectional) → linear over 13 BIO tags" },
     { t: "Data: expanded template grammar + six multi-entity sentence families (471 unique samples from a 1,200-sample request — the template space caps it)" },
     { t: "The audit finding: the reported 0.143 was a softmax confidence of a NaN-diverged model; per-class metrics were synthesized from entity counts; labels had no B-/I- entries so all entities collapsed to O" },
   ], { size: 12.5, gap: 7 });
@@ -481,7 +482,7 @@ function factsTable(s, x, y, w, rows, rowH = 0.4) {
      { text: "Measured result", options: { bold: true, color: WHITE, fill: { color: PRIMARY } } },
      { text: "Status", options: { bold: true, color: WHITE, fill: { color: PRIMARY } } }],
     ["Extraction", "rules", "0", "—", "F1 1.000", "PRODUCTION"],
-    ["Intent", "TF-IDF + LogReg", "11,720", "4.5 s", "96.41% (rerun 97.9%)", "RESEARCH"],
+    ["Intent", "TF-IDF + LogReg", "10,672", "9.7 s", "96.19% held-out (BiLSTM 98.21%)", "RESEARCH"],
     ["SGNS / GloVe", "NumPy, from scratch", "50-d / 100-d", "CPU, seeded", "PCA 78% top-10", "RESEARCH"],
     ["BiLSTM NER", "BiLSTM 256", "282,637", "7.9 s / 20 ep", "91.36% / F1 0.756", "RESEARCH"],
     ["ANFIS v4", "TSK 20\u00D764", "3,904", "EE-BAT 500 iters", "r\u00B2 0.4976 (UI grade)", "PRODUCTION (UI)"],

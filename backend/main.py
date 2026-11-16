@@ -127,7 +127,7 @@ logger = logging.getLogger(__name__)
 
 # /health contract version (Sprint 3 design §3) and the process-start
 # monotonic reading the dev-only uptime figure is derived from.
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.7.1"
 _STARTED_AT = time.monotonic()
 
 nlp = NLPEngine()

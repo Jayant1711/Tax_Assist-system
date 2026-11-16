@@ -152,14 +152,19 @@ overwrite a booked value.
 
 \section{Intent classification: TF-IDF + logistic regression}
 \facts{\code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:73}
-(feature build) · \code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:117}
-(training) · \code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:283}
-(runner). \textbf{Data:} 2,226 records $\rightarrow$ 2,226 usable utterances,
-8 intents, TF-IDF unigrams+bigrams (min\_df 2, sublinear). \textbf{Parameters:}
-1,464 features $\times$ 8 classes $=$ \textbf{11,720 weights} (incl. intercepts).
-\textbf{Training:} L-BFGS logistic regression, \textbf{measured 4.5\,s wall}
-(clean container rerun). \textbf{Evaluation:} \textbf{96.41\% certified};
-a fresh container rerun measures 97.9\%.}
+(feature build + the seeded split) · \code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:135}
+(training) · \code{nlp\_research/phase\_c\_intent\_classification.py}{phase\_c:300}
+(runner). \textbf{Data:} 2,226 records $\rightarrow$ 1,780 train / 446 held-out
+(stratified, seed 472; the TF-IDF vectorizer is fit on the TRAIN split only
+--- the audit wave closed a full-corpus fit that leaked test vocabulary into
+training features). 8 intents, TF-IDF unigrams+bigrams (min\_df 2, sublinear).
+\textbf{Parameters:} 1,333 features $\times$ 8 classes $=$ \textbf{10,672
+weights} (incl. intercepts; measured). \textbf{Training:} L-BFGS logistic
+regression, \textbf{measured 9.7\,s wall} in the container, feature build
+included. \textbf{Evaluation:} held-out \textbf{96.19\%} (train 98.48\%;
+per-class report persisted in the artifact); the BiLSTM on the same split
+measures \textbf{98.21\%}. The pre-audit ``97.9\% test accuracy'' was the
+FULL-corpus score and is retracted (evaluation-integrity audit).}
 
 \begin{examplebox}
 \textbf{Real use:} \emph{``I am a software engineer earning 24 lakhs''} classifies
@@ -369,7 +374,7 @@ taxable income from Rs 7,50,000 to Rs 5,50,000 on the applied plan.
 \midrule
 Slot filling (rules) & \code{backend/ai\_models.py}{ai\_models.py:25} & 0 & --- & F1 1.000 \\
 Semantic attention & \code{backend/ai\_models.py}{ai\_models.py:142} & 0 & --- & gate-covered \\
-TF-IDF + LogReg & \code{nlp\_research/phase\_c...:117}{phase\_c:117} & 11,720 & 4.5\,s & 96.41\% \\
+TF-IDF + LogReg & \code{nlp\_research/phase\_c...:135}{phase\_c:135} & 10,672 & 9.7\,s & 96.19\% held-out \\
 BIO sequence encoding & \code{nlp\_research/phase\_d\_corpus.py:368}{corpus:368} & 0 & --- & known-answer pinned \\
 BiLSTM NER & \code{nlp\_research/phase\_d\_ner.py:55}{ner:55} & 282,637 & 7.9\,s & 91.36\% / 0.756 \\
 SGNS embeddings & \code{nlp\_research/embedding\_analysis.py:138}{emb:138} & 50-d & CPU & PCA 78\% \\

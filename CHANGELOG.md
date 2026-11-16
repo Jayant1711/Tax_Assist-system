@@ -2,6 +2,27 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
+## [0.7.1-audit] — 2026-11-16
+
+Fresh-eyes audit program: six specialist review waves over the whole tree, every P0/P1 fixed, re-audited (architect verdict APPROVE). Full record in `docs/reports/AUDIT_WAVE_SUMMARY_2026-11-16.md`.
+
+### Fixed
+- **87A rebate band cap applied PRE-cess** (tax-expert ruling, hand-verified): the cap now follows the department's own method (TI 12,10,000 → 10,400); `band_cap_includes_cess=False` both FYs; marginal-relief parity cells re-pinned via the generator with citations.
+- **Sec 24(b) occupancy-aware treatment**: let-out interest deducts against NET RENTAL in full in HP (loss set-off capped ₹2L, s.71(3A)); self-occupied capped ₹2L; the new regime (115BAC(2)(i)) bars only self-occupied — let-out allowed with no loss set-off. The 24(b) LOSS branch also crashed both regimes (`caps` NameError) for any let-out with interest above 70% of rent — fixed with hand-computed pins.
+- **Cross-head correction misroute (P0)**: "oops salary is actually 700000" after an 80C booking booked 80D — two root causes fixed (the profile classifier's bigram fuzzy pass matched "investment is" → "investment firm"; the asked-cat prior boost outbid the nuclear-penalized named head; corrections now resolve with a 10.0 prior gate).
+- **Conversation semantics**: correction REPLACE semantics (`_last_cat`-targeted undo); one bare "no" no longer consumes TWO discovery slots; the ask-shape gate no longer primes from closing tips; `/end` and the natural closing turn clear the asked-category prior (a report is not an ask); monthly rent/HRA bare answers annualize.
+- **Intent metric fabrication retracted**: the "97.9% test accuracy" artifact was the FULL-corpus score with the vectorizer fit on all records (leakage). Re-measured honestly: held-out **96.19%** (train 98.48%, 446 samples); the revived BiLSTM reaches **98.21%** on the same split. Paper, decks and registries synced to the honest numbers.
+- **"I receive 400000 rent annually" booked RENT PAID** → receive-cue remap to rental; the CA-plan layer was starved of the 24(b) let-out lever as a result (and the apply_plan test had been skipping EVERY run — now a let-out profile, no skip).
+- **Keyword matching is per-occurrence** with a plural-suffix allowance — fixed 7 pre-existing failing eval cells (singular keyword vs plural text scored zero).
+
+### Changed
+- **The extraction gate now BINDS in the default run** (pytest.ini flip plan fired): red = merge blocker. Backend suite **1,235 passed / 0 failed / 1 skipped**; frontend vitest 44/44; CI green.
+- Frontend: the apply-plan failure surface is rendered (409/422/429 no longer leave the button dead); the acted-state writes only on `res.ok`; chat 429/404 status-specific copy; the regime-graph FY label follows the session-pinned year.
+- Research deps pinned (`nlp_research/requirements-research.txt`: torch 2.15.0+cpu / sklearn 1.9.1); the NER CLI runs epochs=20 to match the pinned artifact; the anfis-v3 dataset counts (21,964 scenarios / 377,753 rows / 51,873 positives) now have a committed integrity pin that verifies against the local dataset.
+
+### Security
+- GET requests throttled by the global bucket; chunked (transfer-encoding) bodies rejected 411 with the security-header set; non-dict JSON bodies 422; registration KDF ordering; `.dockerignore` keeps the credentials DB out of image layers; CI permissions pinned.
+
 ## [0.7.0-sprint7] — 2026-11-13
 
 ### Added

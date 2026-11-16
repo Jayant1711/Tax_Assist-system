@@ -429,8 +429,8 @@ const NAVY_L = "1A4A73";
   // native bar chart
   s.addChart(p.charts.BAR, [{
     name: "Score",
-    labels: ["Extraction (macro F1)", "Intent accuracy", "NER token accuracy (fixed)", "NER before the fix"],
-    values: [100.0, 96.41, 91.36, 14.3],
+    labels: ["Extraction (macro F1)", "Intent accuracy (held-out)", "NER token accuracy (fixed)", "NER before the fix"],
+    values: [100.0, 96.19, 91.36, 14.3],
   }], {
     x: M, y: 2.15, w: 7.6, h: 3.9, barDir: "bar",
     chartColors: ["1A4A73", "1A4A73", "2E7D4F", "B23B3B"],

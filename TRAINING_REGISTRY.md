@@ -66,10 +66,19 @@
 | Method | TF-IDF + LogisticRegression, SEED 472 |
 | Result | 96.41% accuracy (95.7% → 96.41% after P0 corpus); per-class F1: capital_gains/agriculture/business 1.00, salary 0.994 |
 | Conclusion | deployment-gate analog: baseline ≥ 95% — recorded in ADR-015 as the reason no extractor model is warranted |
+| 2026-11-16 audit | the 96.41% was a FULL-corpus score with the vectorizer fit on all records (test vocabulary leaked into training features — evaluation-integrity audit, ml-review P0). Re-measured honestly: vectorizer fit on the train split only, stratified 1,780/446 split (seed 472) → held-out 96.19% (train 98.48%); the BiLSTM on the same cells reaches 98.21%. Pinned in `nlp_research/artifacts/INTENT_CLASSIFICATION_REPORT.md` |
 
 ## RUN-005 — bilstm-ner-v1 (research, 2026-11-01)
 | Field | Value |
 |---|---|
 | Data | 51 template samples (seed 472) |
-| Result | 0.143 accuracy — honest low-data finding; production stays template-driven |
+| Result | 0.143 "accuracy" — RETRACTED 2026-11-16: not an accuracy at all (label collapse + NaN divergence + a broken evaluator); the corrected measurement is RUN-007 below |
 | Conclusion | NER corpus expansion is the pre-req for any meaningful NER metric |
+
+## RUN-007 — bilstm-ner-v2 corrected (research, 2026-11-13/16)
+| Field | Value |
+|---|---|
+| Data | 471 unique template samples (seed 472; expanded grammar + six multi-entity families), deterministic corpus vocab 116 |
+| Method | BiLSTM 256-dim hidden, gradient clipping, BIO encoding fixed (B-/I- tags present), epochs 20 — the CLI now matches this config |
+| Result | 91.36% token accuracy / 0.756 macro-F1 across the six entity types (`nlp_research/artifacts/NER_REPORT.md`) |
+| Conclusion | the corrected model stays research-track; deterministic extraction still serves production. Reproducibility: deps pinned in `nlp_research/requirements-research.txt` (torch 2.15.0+cpu / sklearn 1.9.1); torch numerics are not guaranteed across versions |
