@@ -2,6 +2,11 @@
 
 All notable changes to Tax Assist AI are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is sprint-tagged (`vX.Y-sprintN`).
 
+## [Unreleased]
+
+### Added
+- **NER grammar widened** (the deferred Sprint-7 item): 14 multi-entity sentence families with explicit slot→pool sequences, widened word pools, dedup-on-append corpus (500 unique), train-only vocabulary. Gold-label integrity fixed alongside: the MONEY/PERCENT regexes require their markers (stray year-token spans), and the label schema shrank 6 → 5 (DEDUCTION_TYPE merged into TAX_SECTION — the old scheme double-labeled every section token, collapsing TAX_SECTION gold to 2 test tokens). Measured honestly in the CPU container: **99.14% token accuracy / 0.994 macro-F1** (was 91.36% / 0.756), 287,627 params. Paper, decks, registries and both reference editions synced.
+
 ## [0.7.1-audit] — 2026-11-16
 
 Fresh-eyes audit program: six specialist review waves over the whole tree, every P0/P1 fixed, re-audited (architect verdict APPROVE). Full record in `docs/reports/AUDIT_WAVE_SUMMARY_2026-11-16.md`.
