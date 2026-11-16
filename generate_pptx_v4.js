@@ -429,8 +429,8 @@ const NAVY_L = "1A4A73";
   // native bar chart
   s.addChart(p.charts.BAR, [{
     name: "Score",
-    labels: ["Extraction (macro F1)", "Intent accuracy (held-out)", "NER token accuracy (fixed)", "NER before the fix"],
-    values: [100.0, 96.19, 91.36, 14.3],
+    labels: ["Extraction (macro F1)", "Intent accuracy (held-out)", "NER token accuracy (widened)", "NER before the fix"],
+    values: [100.0, 96.19, 99.14, 14.3],
   }], {
     x: M, y: 2.15, w: 7.6, h: 3.9, barDir: "bar",
     chartColors: ["1A4A73", "1A4A73", "2E7D4F", "B23B3B"],
@@ -455,10 +455,11 @@ const NAVY_L = "1A4A73";
     { x: 8.5, y: 2.55, w: 4.3, h: 1.4, margin: 0, fontFace: F, fontSize: 12, color: TEXT, lineSpacingMultiple: 1.12 }
   );
   s.addText(
-    "After correcting the label encoding, vocabulary and evaluator — and " +
-    "expanding the templates — the same architecture measures 91.36% token " +
-    "accuracy / 0.756 macro F1. Still research-track: production extraction " +
-    "stays rule-based, where it measures a perfect 1.000.",
+    "After correcting the label encoding, vocabulary and evaluator — then " +
+    "widening the grammar and merging the double-labeled section class — the " +
+    "same architecture measures 99.14% token accuracy / 0.994 macro F1. Still " +
+    "research-track: production extraction stays rule-based, where it measures " +
+    "a perfect 1.000.",
     { x: 8.5, y: 4.0, w: 4.3, h: 1.9, margin: 0, fontFace: F, fontSize: 12, color: TEXT, lineSpacingMultiple: 1.12 }
   );
   s.addText(

@@ -174,17 +174,21 @@ uses the same vocabulary through the deterministic path.
 \end{examplebox}
 
 \section{Sequence labeling with BIO tags (corpus encoding)}
-\facts{\code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:368}
-(\texttt{entities\_to\_bio}) · \code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:116}
-(corpus generation) · \code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:396}
-(dataset preparation). \textbf{Data:} expanded template grammar with six
-multi-entity sentence families; 471 unique annotated samples. \textbf{Labels:} 13
-BIO tags ($O$ plus B-/I- for each of the 6 entity types).}
+\facts{\code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:394}
+(\texttt{entities\_to\_bio}) · \code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:132}
+(corpus generation) · \code{nlp\_research/phase\_d\_corpus.py}{phase\_d\_corpus.py:422}
+(dataset preparation). \textbf{Data:} widened template grammar with fourteen
+multi-entity sentence families; 500 unique annotated samples, deduplicated on
+append. \textbf{Labels:} 11
+BIO tags ($O$ plus B-/I- for each of the 5 entity types --- the former
+DEDUCTION\_TYPE class merged into TAX\_SECTION; the old scheme double-labeled
+every section token).}
 
 \begin{examplebox}
 \textbf{Real use:} \emph{``i paid 25k as rent on 1 april 2024 as of 30 june 2024''}
-encodes as \texttt{O O B-MONEY O O O B-DATE I-DATE I-DATE O O B-DATE I-DATE
-I-DATE} --- three entities, two of them multi-token, aligned by character
+encodes as \texttt{O O B-MONEY O B-INCOME\_TYPE O B-DATE I-DATE I-DATE O O
+B-DATE I-DATE I-DATE} --- four entities (``rent'' is an income word the shared
+extractor labels too), three of them multi-token, aligned by character
 offsets from \texttt{re.finditer} (the pre-fix window arithmetic produced
 all-O and zero I- tags).
 \end{examplebox}
@@ -193,14 +197,21 @@ all-O and zero I- tags).
 \facts{\code{nlp\_research/phase\_d\_ner.py}{phase\_d\_ner.py:55} (model) ·
 \code{nlp\_research/phase\_d\_ner.py}{phase\_d\_ner.py:91} (training loop) ·
 \code{nlp\_research/phase\_d\_ner.py}{phase\_d\_ner.py:196} (evaluator).
-\textbf{Data:} the 471-sample expanded corpus above. \textbf{Parameters:}
-\textbf{282,637} = embedding $118 \times 128$ (15,104) + BiLSTM $2 \times
-132{,}096$ (264,192) + linear $256 \times 13$ (3,341). \textbf{Training:}
+\textbf{Data:} the 500-sample widened corpus above (14 multi-entity families
+with explicit slot$\rightarrow$pool sequences; dedup-on-append; 64\% of the
+sentences carry 2+ entities). \textbf{Parameters:}
+\textbf{287,627} = embedding $161 \times 128$ (20,608, built from the TRAIN
+rows only) + BiLSTM $2 \times
+132{,}096$ (264,192) + linear $256 \times 11$ (2,827). \textbf{Training:}
 Adam, lr $5{\times}10^{-4}$, gradient clipping at 1.0, 20 epochs ---
-\textbf{measured 7.9\,s wall} in the CPU container. \textbf{Evaluation:}
-\textbf{91.36\% token accuracy, 0.756 macro F1} with the corrected evaluator
+measured in the CPU container. \textbf{Evaluation:}
+\textbf{99.14\% token accuracy, 0.994 macro F1} with the corrected evaluator
 (the previously reported 0.143 was a softmax confidence of a NaN-diverged model,
-with per-class numbers synthesized from entity counts).}
+with per-class numbers synthesized from entity counts). The label schema
+shrank from six classes to five: the old scheme matched the same section
+tokens as both TAX\_SECTION and DEDUCTION\_TYPE, so one span carried two gold
+labels and the encoder silently kept the later one --- TAX\_SECTION gold had
+collapsed to two tokens in the whole test split.}
 
 \begin{examplebox}
 \textbf{Real use:} research-track only --- production extraction stays
@@ -376,7 +387,7 @@ Slot filling (rules) & \code{backend/ai\_models.py}{ai\_models.py:25} & 0 & --- 
 Semantic attention & \code{backend/ai\_models.py}{ai\_models.py:142} & 0 & --- & gate-covered \\
 TF-IDF + LogReg & \code{nlp\_research/phase\_c...:135}{phase\_c:135} & 10,672 & 9.7\,s & 96.19\% held-out \\
 BIO sequence encoding & \code{nlp\_research/phase\_d\_corpus.py:368}{corpus:368} & 0 & --- & known-answer pinned \\
-BiLSTM NER & \code{nlp\_research/phase\_d\_ner.py:55}{ner:55} & 282,637 & 7.9\,s & 91.36\% / 0.756 \\
+BiLSTM NER (5-class) & \code{nlp\_research/phase\_d\_ner.py:55}{ner:55} & 287,627 & 20 ep & 99.14\% / 0.994 \\
 SGNS embeddings & \code{nlp\_research/embedding\_analysis.py:138}{emb:138} & 50-d & CPU & PCA 78\% \\
 GloVe embeddings & \code{nlp\_research/embedding\_analysis.py:222}{emb:222} & 100-d & CPU & cluster analysis \\
 Seq2seq attention & \code{nlp\_research/phase\_e\_seq2seq.py:198}{seq2seq:198} & study & study & documented \\

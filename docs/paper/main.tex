@@ -261,7 +261,16 @@ entity counts. After fixing the label encoding, building a
 deterministic corpus vocabulary, adding gradient clipping, and
 expanding the template grammar (six multi-entity sentence families),
 the same architecture measures 91.4\% token accuracy with a macro-F1
-of 0.756 across the six entity types. The corrected model remains
+of 0.756 across the then-six entity types. A second audit pass went
+further: the grammar widened to fourteen multi-entity sentence
+families over balanced slot pools, the corpus deduplicates on append
+(500 unique samples), the vocabulary builds from the train rows only,
+and the label schema was corrected --- the old six-class scheme
+matched the same section tokens as both TAX\_SECTION and
+DEDUCTION\_TYPE, so one span carried two gold labels and the encoder's
+later label silently overwrote the earlier one. With five entity
+types and clean gold, the same architecture measures 99.14\% token
+accuracy with a macro-F1 of 0.994. The corrected model remains
 research-track only --- deterministic extraction still serves
 production --- but the episode sharpened a policy this paper keeps
 returning to: an evaluator is code, and code can be quietly wrong in
@@ -280,7 +289,7 @@ the direction of whatever number everyone already believed.
 Extraction (21 cat.) & deterministic & \textbf{F1 1.000} (gate PASS) \\
 Abstention & threshold & 17/17 correct \\
 Intent (8 classes) & linear classifier & 96.19\% acc.\ (held-out) \\
-Entities (6 types) & BiLSTM (research) & 91.4\% acc., 0.756 macro-F1 \\
+Entities (5 types) & BiLSTM (research) & 99.14\% acc., 0.994 macro-F1 \\
 \bottomrule
 \end{tabular}
 \end{table}

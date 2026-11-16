@@ -43,7 +43,8 @@ ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 # prep) so it can be imported and regression-tested on machines where
 # torch is blocked.
 from phase_d_corpus import (  # noqa: E402
-    BIO_LABELS, NER_CLASSES, N_CLASSES, O_IDX, SEED, generate_ner_corpus, prepare_ner_dataset, seeded_split,
+    BIO_LABELS, NER_CLASSES, N_CLASSES, O_IDX, SEED, generate_ner_corpus,
+    prepare_ner_dataset, seeded_corpus_split,
 )
 
 
@@ -277,11 +278,13 @@ def run_phase_d(num_samples: int = 500, epochs: int = 8) -> dict:
     print(f"  Entity types found in corpus: {', '.join(sorted(types_found))}")
 
     print("Preparing training/development dataset...")
-    X, y, vocab = prepare_ner_dataset(corpus)
-    # Sprint 7 S7.5: seeded shuffle before the split — the corpus is
-    # family-ordered, so a sequential 80/20 split starved the test set
-    # of whole entity families (TAX_SECTION support was 0)
-    X_train, X_test, y_train, y_test = seeded_split(X, y)
+    # Grammar-widening pass (ml-review P2): the corpus splits FIRST (the
+    # same seeded permutation seeded_split used), the vocabulary builds
+    # from the TRAIN rows only, and test tokens map through it — unseen
+    # test tokens hit <unk> instead of being guaranteed in-vocab.
+    train_corpus, test_corpus = seeded_corpus_split(corpus)
+    X_train, y_train, vocab = prepare_ner_dataset(train_corpus)
+    X_test, y_test, _vocab_test = prepare_ner_dataset(test_corpus, vocab=vocab)
 
     print(f"  Train samples: {len(X_train)}, Test samples: {len(X_test)}")
 

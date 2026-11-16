@@ -255,15 +255,15 @@ function factsTable(s, x, y, w, rows, rowH = 0.4) {
 {
   const s = p.addSlide();
   s.background = { color: BG };
-  header(s, "BiLSTM NER — a fabricated metric, corrected");
-  codeChip(s, M, 1.5, 7.2, "nlp_research/phase_d_ner.py:55,91,196 · phase_d_corpus.py:116,368,396");
+  header(s, "BiLSTM NER — a fabricated metric, corrected, then widened");
+  codeChip(s, M, 1.5, 7.2, "nlp_research/phase_d_ner.py:55,91,196 · phase_d_corpus.py:132,394,422");
   bullets(s, M, 2.05, W - 2 * M, 1.55, [
-    { t: "Architecture: embedding (128-d, corpus vocab 116) → BiLSTM (256 hidden, bidirectional) → linear over 13 BIO tags" },
-    { t: "Data: expanded template grammar + six multi-entity sentence families (471 unique samples from a 1,200-sample request — the template space caps it)" },
-    { t: "The audit finding: the reported 0.143 was a softmax confidence of a NaN-diverged model; per-class metrics were synthesized from entity counts; labels had no B-/I- entries so all entities collapsed to O" },
+    { t: "Architecture: embedding (128-d, train-only vocab 161) → BiLSTM (256 hidden, bidirectional) → linear over 11 BIO tags" },
+    { t: "Data: widened template grammar — 14 multi-entity sentence families with explicit slot\u2192pool sequences (500 unique samples, dedup-on-append; 64% carry 2+ entities)" },
+    { t: "Two audit fixes: the reported 0.143 was a softmax confidence of a NaN-diverged model (fabricated per-class metrics), and the old 6-class schema double-labeled every section token as both TAX_SECTION and DEDUCTION_TYPE — merged to 5 classes with clean gold" },
   ], { size: 12.5, gap: 7 });
   factsTable(s, M, 3.75, W - 2 * M, [
-    ["471 samples (expanded)", "282,637 (embedding 15,104 + BiLSTM 264,192 + linear 3,341)", "measured 7.9 s / 20 epochs (CPU container)", "real evaluator: 91.36% acc · 0.756 macro F1"],
+    ["500 samples (widened)", "287,627 (embedding 20,608 + BiLSTM 264,192 + linear 2,827)", "measured 20 epochs (CPU container)", "real evaluator: 99.14% acc · 0.994 macro F1"],
     ["(original) 51 samples", "same architecture", "diverged: loss NaN at epoch 7", "reported \u201C0.143\u201D — never an accuracy"],
   ]);
   s.addText(
@@ -484,7 +484,7 @@ function factsTable(s, x, y, w, rows, rowH = 0.4) {
     ["Extraction", "rules", "0", "—", "F1 1.000", "PRODUCTION"],
     ["Intent", "TF-IDF + LogReg", "10,672", "9.7 s", "96.19% held-out (BiLSTM 98.21%)", "RESEARCH"],
     ["SGNS / GloVe", "NumPy, from scratch", "50-d / 100-d", "CPU, seeded", "PCA 78% top-10", "RESEARCH"],
-    ["BiLSTM NER", "BiLSTM 256", "282,637", "7.9 s / 20 ep", "91.36% / F1 0.756", "RESEARCH"],
+    ["BiLSTM NER (5-class)", "BiLSTM 256", "287,627", "20 ep (CPU)", "99.14% / F1 0.994", "RESEARCH"],
     ["ANFIS v4", "TSK 20\u00D764", "3,904", "EE-BAT 500 iters", "r\u00B2 0.4976 (UI grade)", "PRODUCTION (UI)"],
     ["ANFIS v5 composite", "LSE composite", "exact", "47-67 s", "MAE 0.136 \u2192 0.0023", "PRODUCTION"],
     ["ANFIS v5 TSK heads", "LSE regression", "1,104", "65.5 s", "MAPE 1.5M% \u00B7 P/R 0", "DENIED (policy)"],

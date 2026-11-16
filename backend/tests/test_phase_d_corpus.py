@@ -23,7 +23,7 @@ from phase_d_corpus import (  # noqa: E402
 
 class TestLabelSpace:
     def test_bio_label_space_complete(self) -> None:
-        """13 tags: O first, then B-/I- for each of the 6 entity types —
+        """11 tags: O first, then B-/I- for each of the 5 entity types —
         bijective mapping. The original code had NO B-/I- entries, so
         every entity token collapsed to O and the model could never
         learn the task."""

@@ -1,9 +1,9 @@
 # Phase D: BiLSTM NER Report
 
-**Entity types:** MONEY, TAX_SECTION, INCOME_TYPE, DEDUCTION_TYPE, DATE, PERCENTAGE
-**Corpus size:** 471 annotated samples (seed=472)
-**Training samples:** 376
-**Test samples:** 95
+**Entity types:** MONEY, TAX_SECTION, INCOME_TYPE, DATE, PERCENTAGE
+**Corpus size:** 500 annotated samples (seed=472)
+**Training samples:** 400
+**Test samples:** 100
 **Epochs:** 20
 
 ## Entity Type Definitions
@@ -19,20 +19,19 @@
 - **Hidden dimension:** 256 (bidirectional)
 - **Output:** NER tag per token (BIO scheme, 6 entity types + O)
 - **Optimizer:** Adam, lr=5e-4, gradient clipping at 1.0
-- **Vocabulary:** 116 corpus-built entries (deterministic; replaces the randomized hash() mapping)
+- **Vocabulary:** 161 corpus-built entries (deterministic; replaces the randomized hash() mapping)
 - **Loss:** Cross-entropy; padding ignored (-100), real 'O' tokens supervised
 
 ## Evaluation Results
-- **Overall accuracy:** 0.9136
-- **Macro F1:** 0.756
+- **Overall accuracy:** 0.9914
+- **Macro F1:** 0.994
 
 ### Per-class breakdown
-- **MONEY:** precision=0.867, recall=0.591, F1=0.703, support=22
-- **TAX_SECTION:** precision=1.0, recall=0.385, F1=0.556, support=13
-- **INCOME_TYPE:** precision=0.98, recall=0.98, F1=0.98, support=49
-- **DEDUCTION_TYPE:** precision=0.421, recall=0.667, F1=0.516, support=12
-- **DATE:** precision=1.0, recall=1.0, F1=1.0, support=7
-- **PERCENTAGE:** precision=0.782, recall=0.782, F1=0.782, support=101
+- **MONEY:** precision=0.965, recall=1.0, F1=0.982, support=111
+- **TAX_SECTION:** precision=1.0, recall=1.0, F1=1.0, support=42
+- **INCOME_TYPE:** precision=0.977, recall=1.0, F1=0.989, support=43
+- **DATE:** precision=1.0, recall=1.0, F1=1.0, support=71
+- **PERCENTAGE:** precision=1.0, recall=1.0, F1=1.0, support=26
 
 ---
 *Generated automatically by Phase D BiLSTM NER pipeline.*

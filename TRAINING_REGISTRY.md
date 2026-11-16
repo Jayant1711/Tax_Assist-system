@@ -75,10 +75,14 @@
 | Result | 0.143 "accuracy" — RETRACTED 2026-11-16: not an accuracy at all (label collapse + NaN divergence + a broken evaluator); the corrected measurement is RUN-007 below |
 | Conclusion | NER corpus expansion is the pre-req for any meaningful NER metric |
 
-## RUN-007 — bilstm-ner-v2 corrected (research, 2026-11-13/16)
+## RUN-007 — bilstm-ner-v2 corrected, then widened (research, 2026-11-13/16)
 | Field | Value |
 |---|---|
-| Data | 471 unique template samples (seed 472; expanded grammar + six multi-entity families), deterministic corpus vocab 116 |
-| Method | BiLSTM 256-dim hidden, gradient clipping, BIO encoding fixed (B-/I- tags present), epochs 20 — the CLI now matches this config |
-| Result | 91.36% token accuracy / 0.756 macro-F1 across the six entity types (`nlp_research/artifacts/NER_REPORT.md`) |
+| Data (corrected run) | 471 unique template samples (seed 472; expanded grammar + six multi-entity families), deterministic corpus vocab 116 |
+| Data (widened run, 2026-11-16) | 500 unique samples (dedup-on-append), 14 multi-entity families with explicit slot→pool sequences, balanced pools, train-only vocab 161 |
+| Method | BiLSTM 256-dim hidden, gradient clipping, BIO encoding fixed (B-/I- tags present), epochs 20 — the CLI matches this config |
+| Result (corrected run) | 91.36% token accuracy / 0.756 macro-F1 over six entity types |
+| Result (widened run) | **99.14% token accuracy / 0.994 macro-F1 over FIVE entity types** (287,627 params; TAX_SECTION test support 42 — the old schema gave it 2) |
+| Schema change | DEDUCTION_TYPE merged into TAX_SECTION: the two regex classes matched the same token set, so one span carried two gold labels and the encoder kept the later one — TAX_SECTION gold collapsed to 2 tokens in the whole test split |
+| Gold-noise fix | MONEY/PERCENT regexes now REQUIRE their markers (the old optional-suffix forms matched every bare digit — stray year-token spans) |
 | Conclusion | the corrected model stays research-track; deterministic extraction still serves production. Reproducibility: deps pinned in `nlp_research/requirements-research.txt` (torch 2.15.0+cpu / sklearn 1.9.1); torch numerics are not guaranteed across versions |
