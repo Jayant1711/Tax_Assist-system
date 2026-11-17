@@ -16,6 +16,8 @@
 \definecolor{rulegray}{HTML}{B9C2CC} % hairlines
 
 \usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
 \usepackage{textcomp}
 \usepackage{url}
 \usepackage{booktabs}                % professional table rules
@@ -100,9 +102,15 @@ what users actually do with each recommendation and computes Expected
 Calibration Error over those outcomes; a known-answer canary pins the
 instrument to zero, and a standing gate refuses any learned confidence
 until it measures ECE $\leq 0.05$ on at least thirty resolved events.
-The shipped system passes 1{,}166 backend and 31 frontend tests, with
-extraction certified at macro-F1 1.000. The falsified experiment also
-reshaped the roadmap: the neuro-fuzzy layer is being repositioned not
+The shipped system passes 1{,}235 backend and 44 frontend tests, with
+extraction certified at macro-F1 1.000 and the certification gate
+binding in continuous integration. A fresh-eyes review program
+subsequently found two fabricated metrics in my own research layer ---
+both retracted in writing and re-measured honestly --- which became the
+paper's most repeated policy: an evaluator is code, and code can be
+quietly wrong in the direction of whatever number everyone already
+believed. The falsified experiment also reshaped the roadmap: the
+neuro-fuzzy layer is being repositioned not
 as a regression model but as an \emph{explainable} rule base meant to
 capture how a human chartered accountant reasons about savings, which
 the exact calculator would then price.
@@ -156,9 +164,13 @@ precisely. Section~VI describes the acceptance loop and the
 calibration gate. Section~VII covers verification, where I want to
 flag one habit that paid for itself repeatedly, which is treating a
 five-minute manual session in the running product as a first-class
-test. And Section~VIII states where I intend to take the neuro-fuzzy
-layer next: away from regression, toward an explainable encoding of
-CA-style savings reasoning.
+test --- and a structured fresh-eyes review program, whose six
+specialist waves found five defects the 1{,}166-test suite had passed
+over, including two fabricated metrics in my own research artifacts
+and a statutory money-math error that crashed both regimes on a
+commonly-held profile. And Section~VIII states where I intend to take
+the neuro-fuzzy layer next: away from regression, toward an
+explainable encoding of CA-style savings reasoning.
 
 \section{Background and System Overview}
 \subsection{The tax domain, briefly}
@@ -181,11 +193,12 @@ fails.
 \subsection{The system}
 Tax Assist is a three-tier web application. The client is Next.js and
 React and presents a chat workspace plus the final advisory report.
-The backend is FastAPI with seventeen endpoints covering
+The backend is FastAPI with twenty endpoints covering
 authentication, conversation, calculation, session management,
 recommendation events, and funnel analytics. Requests pass through
-wire-level validation, per-route rate limits, and an origin allow-list
-before anything touches application logic. A database holds users,
+wire-level validation (a body-size cap, chunked-framing rejection,
+and content-type guards), per-route rate limits, and an origin
+allow-list before anything touches application logic. A database holds users,
 server-side sessions, and the recommendation events; an append-only
 audit log records every interaction.
 
@@ -198,6 +211,42 @@ from free text stays rule-based rather than learned, a decision the
 evaluation numbers support. And every recommendation shown to a user
 is persisted as an event the user can later resolve with an action,
 which is what makes the feedback half of this paper possible.
+Fig.~\ref{fig:arch} shows the resulting pipeline; the calculator sits
+deliberately in the middle of it, and every arrow into or out of the
+language or intelligence layers carries meaning or intent --- never a
+rupee.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  box/.style={draw=navy!45, fill=navy!6, rounded corners=2pt,
+              text width=0.86\columnwidth, align=left,
+              inner sep=5pt, minimum height=20pt},
+  engine/.style={box, fill=navy, draw=navy, text=white},
+  lbl/.style={font=\footnotesize\bfseries, text=navy},
+  arr/.style={-{Latex[length=2.2mm]}, thick, draw=muted},
+]
+\node[box, anchor=north] (u) at (0,0)
+  {\textbf{Utterance}\\ \emph{``I earn 24L and put 1.5L in PPF''}};
+\node[box, below=4.5pt of u] (nlp)
+  {\textbf{NLP layer} --- understands\\ profile, amounts, corrections, negation};
+\node[engine, below=4.5pt of nlp] (eng)
+  {\textbf{TaxEngine} --- computes\\ both regimes, surcharge, marginal relief};
+\node[box, below=4.5pt of eng] (intel)
+  {\textbf{Intelligence} --- ranks\\ opportunities, plans, confidence (engine-priced)};
+\node[box, below=4.5pt of intel] (rep)
+  {\textbf{Report \& cards} --- shows\\ statement, evidence, fired rules, impact};
+\draw[arr] (u) -- (nlp);
+\draw[arr] (nlp) -- (eng);
+\draw[arr] (eng) -- (intel);
+\draw[arr] (intel) -- (rep);
+\end{tikzpicture}
+\caption{The pipeline. The calculator (dark) is the only component that
+computes a rupee; the language and intelligence layers pass meaning and
+intent around it, and every arrow obeys that contract.}
+\label{fig:arch}
+\end{figure}
 
 \section{Language Understanding}
 \subsection{Processing chain}
@@ -315,7 +364,18 @@ s_i \;=\; T_{\min}(x) - T_{\min}(x + \delta_i \cdot \mathbf{e}_i),
 where $T_{\min}$ is whichever regime's total tax is cheaper. Since
 both passes are the authoritative calculator, $s_i$ is not a guess
 about what the calculator would say. It is the calculator saying it
-twice.
+twice. The user sees this directly: the report renders both regimes
+side by side (Fig.~\ref{fig:report}), names the winner, and states the
+saving that the two passes produced.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_report.png}
+\caption{The shipped report, captured live. Both regimes are priced by
+the same engine; the recommendation, the effective rates and the
+saving figure are all recomputations, not estimates.}
+\label{fig:report}
+\end{figure}
 
 \subsection{Exact per-deduction impact}
 The final report also prices each booked deduction by leaving it out
@@ -429,6 +489,20 @@ mistakes are now pinned by regression tests. In the live end-to-end
 check, a session shows three recommendations (Sections 24B, 80C and
 80G, each at confidence 0.85), the user accepts one, and the funnel
 reports 3 shown, 1 accepted, rate 0.333, with per-head exact savings.
+The funnel is surfaced to the user as an adoption dashboard
+(Fig.~\ref{fig:adoption}); its headline metric, \emph{Accepted-Rupee},
+is the engine-priced sum of what users actually accepted, so adoption
+is measured in rupees rather than clicks.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_adoption.png}
+\caption{The adoption dashboard, captured live: shown recommendations,
+acceptances, the Accepted-Rupee total, and the calibration gate
+reporting honestly that it is 2/30 resolved events --- unmeasured, and
+saying so.}
+\label{fig:adoption}
+\end{figure}
 
 \subsection{Calibration and the standing gate}
 The confidence the system serves today is a constant: 0.85 when the
@@ -454,8 +528,10 @@ instrument. Twenty items per bin makes every bin's positive count an
 exact integer and the artifact disappears. The standing gate is then
 simple: no learned confidence ships until it measures ECE
 $\leq 0.05$ on at least 30 resolved events without hurting the
-acceptance rate. The store currently holds one resolved event, so the
-honest measurement today is ``unmeasured,'' and the anchor stays.
+acceptance rate. The store holds a handful of resolved events from
+live sessions (the adoption dashboard reports the count on every
+load), so the honest measurement today is still ``unmeasured,'' and
+the anchor stays.
 
 \section{Verification}
 Table~\ref{tab:ver} is the verification picture. Backend tests cover
@@ -465,9 +541,15 @@ and rate limits, the event store and its action endpoints, and the
 impact calculation's sign and new-regime behavior, that last pair
 pinned after the live session caught the defects. Continuous
 integration runs the backend suite, the frontend suite, and scripted
-browser end-to-end flows on every push. Two tagged releases went out
-through CI-gated pull requests, and I re-ran the full suite on the
-merged result both times.
+browser end-to-end flows on every push. Four tagged releases went out
+through CI-gated pipelines, and I re-ran the full suite on each merged
+result. The most recent addition is structural: the extraction
+certification gate, previously advisory, now \emph{binds} --- a red
+gate is a merge blocker, so a regression in understanding cannot land
+silently. Behind it sits a structured fresh-eyes review program (six
+specialist review waves over the whole tree, every finding fixed and
+regression-pinned, closing with an architect verdict of APPROVE), which
+is how the five defects above surfaced at all.
 
 \begin{table}[t]
 \caption{Verification summary of the shipped system.}
@@ -479,13 +561,13 @@ merged result both times.
 \rowcolor{black!6}
 \thead{Suite} & \thead{Result} \\
 \midrule
-Backend (pytest) & 1{,}166 passed / 0 failed \\
-Frontend (vitest + tsc) & 31 passed / clean \\
-End-to-end (Playwright) & 7 flows green \\
-Extraction gate & macro F1 1.000 (PASS) \\
+Backend (pytest) & 1{,}235 passed / 0 failed \\
+Frontend (vitest + tsc) & 44 passed / clean \\
+Parity fixture (FY 2024--25) & 300 scenarios byte-checked \\
+Extraction gate & macro F1 1.000 (BINDS in CI) \\
 Decision rules & P/R 1.0, savings MAE \Rs{}0.00 \\
 Calibration canary & ECE 0.0 (framework exact) \\
-CI & 3 jobs green per push \\
+CI & green on every push \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -536,7 +618,13 @@ business paths for anything real yet. FY~2025--26 is the only certified
 year, and a new fiscal year means adding a rules registry and
 re-certifying, which the design anticipates but which has not been
 exercised. The calibration gate is built and proven as an instrument
-but currently uninformative, since one resolved event is not a sample.
+but currently uninformative, since the resolved events from live
+sessions are still a handful, not a sample. A further limitation is
+honesty about property granularity: occupancy-aware 24(b) treats a
+mixed portfolio (a self-occupied loan plus an unrelated rental) wholly
+as let-out, which overstates the deduction versus the statute's
+property-by-property split; fixing that needs per-property inputs, a
+data-model change rather than a math patch.
 The explainable-CA direction in Section~VIII is a design intent, not a
 result; nothing in this paper should be read as claiming the fuzzy
 layer currently reasons like a CA. Personalization from acceptance
@@ -556,10 +644,16 @@ most valuable machine-learning artifact, it is a negative result with
 the mechanism written down; its most valuable gate is one that keeps a
 model out until the data exists to judge it.
 
-What comes next follows the evidence. An effectiveness dashboard over
-the acceptance funnel, with the Accepted-Rupee metric as the headline.
-One-click application of a recommendation through the calculator's own
-write path. And the neuro-fuzzy layer rebuilt toward the goal it was
+What comes next follows the evidence, and part of it has already
+shipped: the effectiveness dashboard over the acceptance funnel, with
+the Accepted-Rupee metric as the headline, and one-click application
+of a recommendation through the calculator's own write path both exist
+in the product today (Fig.~\ref{fig:adoption}). Still ahead: rule
+validation with a practicing chartered accountant, so the fuzzy layer
+is judged as a model of professional judgment; cohort benchmarks
+across sessions, privacy-first; per-property inputs for 24(b); and
+learned confidence once thirty real decisions accumulate. And the
+neuro-fuzzy layer rebuilt toward the goal it was
 always meant for: an explainable rule base that captures how a
 chartered accountant thinks about legal savings, validated against a
 practitioner's judgment, proposing full savings plans that the exact
