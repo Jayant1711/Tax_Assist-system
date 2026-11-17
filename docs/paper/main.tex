@@ -47,7 +47,7 @@
 % ── Airier text block: block paragraphs, no first-line indents ───────
 \linespread{1.045}
 \setlength{\parindent}{0pt}
-\setlength{\parskip}{3.2pt plus 0.8pt}
+\setlength{\parskip}{2.9pt plus 0.8pt}
 
 % ── Footer: running title + page number on a hairline ────────────────
 \pagestyle{fancy}
@@ -180,7 +180,7 @@ allows deductions under numbered sections of the Act (80C for
 investments up to Rs.~1.5 lakh, 80D for health insurance, 80E for
 education-loan interest, 24(b) for home-loan interest, and so on) but
 taxes income at higher slab rates; and the \emph{new regime}
-(Section~115BAC), which offers lower slab rates and a larger standard
+(Section~115BAC)~\cite{ita1961}, which offers lower slab rates and a larger standard
 deduction but discards almost all of those deductions. Second, each
 deduction section has a statutory cap, so every head has a remaining
 \emph{headroom} that a recommendation can fill. Third, the interaction
@@ -207,7 +207,8 @@ plainly rather than by their internal names. The rules engine is the
 only calculator in the system; anything that needs a number asks it.
 The whole system runs offline and deterministically, so the same
 session state produces the same numbers on any machine. Extraction
-from free text stays rule-based rather than learned, a decision the
+from free text stays rule-based rather than learned~\cite{chiticariu2013},
+a decision the
 evaluation numbers support. And every recommendation shown to a user
 is persisted as an event the user can later resolve with an action,
 which is what makes the feedback half of this paper possible.
@@ -319,7 +320,12 @@ matched the same section tokens as both TAX\_SECTION and
 DEDUCTION\_TYPE, so one span carried two gold labels and the encoder's
 later label silently overwrote the earlier one. With five entity
 types and clean gold, the same architecture measures 99.14\% token
-accuracy with a macro-F1 of 0.994. The corrected model remains
+accuracy with a macro-F1 of 0.994. The research track also probed the
+standard families on the same corpora --- attention-based seq2seq
+\cite{bahdanau2015, luong2015, sutskever2014}, embeddings from scratch
+\cite{mikolov2013, pennington2014}, and pretrained transformers
+\cite{devlin2019, vaswani2017} --- with every finding logged in the
+artifacts. The corrected model remains
 research-track only --- deterministic extraction still serves
 production --- but the episode sharpened a policy this paper keeps
 returning to: an evaluator is code, and code can be quietly wrong in
@@ -370,7 +376,7 @@ saving that the two passes produced.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/fig_report.png}
+\includegraphics[width=0.9\columnwidth]{figures/fig_report.png}
 \caption{The shipped report, captured live. Both regimes are priced by
 the same engine; the recommendation, the effective rates and the
 saving figure are all recomputations, not estimates.}
@@ -496,7 +502,7 @@ is measured in rupees rather than clicks.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/fig_adoption.png}
+\includegraphics[width=0.9\columnwidth]{figures/fig_adoption.png}
 \caption{The adoption dashboard, captured live: shown recommendations,
 acceptances, the Accepted-Rupee total, and the calibration gate
 reporting honestly that it is 2/30 resolved events --- unmeasured, and
@@ -509,7 +515,7 @@ The confidence the system serves today is a constant: 0.85 when the
 calculator verified the number, 0.30 for priced-no-benefit. A constant
 is defensible precisely because its meaning can be stated in one line.
 Whether a learned confidence could replace it is a question I chose to
-instrument rather than guess at. Expected Calibration Error over
+instrument rather than guess at~\cite{guo2017}. Expected Calibration Error over
 equal-width bins,
 \begin{equation}
 \mathrm{ECE} = \sum_{b=1}^{B} \frac{|B_b|}{N}
